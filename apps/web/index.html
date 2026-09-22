@@ -7,6 +7,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon-dark.svg" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" media="(prefers-color-scheme: light)" />
     <title>DSH Local Build</title>
+    <script>
+      // Older Chromium webviews lack Promise.withResolvers (Chrome 119+);
+      // the client bundle calls it at module top level, so polyfill first.
+      if (typeof Promise.withResolvers !== 'function') {
+        Promise.withResolvers = function withResolvers() {
+          var resolve, reject
+          var promise = new Promise(function (res, rej) { resolve = res; reject = rej })
+          return { promise: promise, resolve: resolve, reject: reject }
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
