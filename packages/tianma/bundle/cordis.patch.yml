@@ -11,6 +11,7 @@
 # (upstream default 16%), so long-task sessions retain more exact active
 # context instead of trusting the summary alone.
 - id: compaction-basic
+  name: '@tianma/dsh-compaction-summarize'
   config:
     retainRatio: 0.35
 

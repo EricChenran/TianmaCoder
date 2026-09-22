@@ -35,6 +35,21 @@ describe('@tianma/dsh-bundle', () => {
     expect(failures).toEqual([])
   })
 
+  it('swaps the compaction-basic row to the fidelity summarizer keeping retainRatio', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
+    const parsed = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as { id?: string; name?: string; config?: Record<string, number> }[]
+    const row = parsed.find(op => op.id === 'compaction-basic')
+    expect(row?.name).toBe('@tianma/dsh-compaction-summarize')
+    expect(row?.config).toEqual({ retainRatio: 0.35 })
+    expect(manifest.dependencies).toHaveProperty('@tianma/dsh-compaction-summarize')
+  })
+
   it('swaps the tool-result-pruner row to the recency clearer with policy config', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(
