@@ -4,6 +4,26 @@
 # owns. scripts/verify-profile-patches.ts fails CI when a referenced id drifts
 # upstream, so a stale override can never ship silently.
 #
-# PR-0 ships this file with the verifier and no overrides; subsequent PRs add
-# one row per capability so each stays independently revertible.
-[]
+# One row (or one insert) per capability, so each stays independently
+# revertible by deleting its entry.
+
+# PR-1: keep 35% of the window as verbatim recent tail across compaction
+# (upstream default 16%), so long-task sessions retain more exact active
+# context instead of trusting the summary alone.
+- id: compaction-basic
+  config:
+    retainRatio: 0.35
+
+# PR-1: raise the AGENTS.md chain budget from 64KB to 256KB so large-repo
+# engineering conventions are no longer silently dropped before the most
+# specific file truncates.
+- id: agent-instructions
+  config:
+    maxBytes: 262144
+
+# PR-1: ZCode-derived behavioral prompt sections (communication discipline,
+# autonomous-progress boundaries, comment discipline) as one named
+# system-prompt contribution ordered after the deployment persona prefix.
+- insert:
+    - id: tianma-behavioral-guidelines
+      name: '@tianma/dsh-behavioral-guidelines'

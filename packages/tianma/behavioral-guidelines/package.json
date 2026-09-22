@@ -1,12 +1,12 @@
 {
-  "name": "@tianma/dsh-bundle",
-  "description": "Tianma profile bundle: patch rows adopting ZCode-derived quality defaults and plugins over dsh-base",
+  "name": "@tianma/dsh-behavioral-guidelines",
+  "description": "ZCode-derived behavioral prompt sections registered as one named system-prompt contribution",
   "version": "0.1.0",
   "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/EricChenran/TianmaCoder.git",
-    "directory": "packages/tianma/bundle"
+    "directory": "packages/tianma/behavioral-guidelines"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -21,16 +21,15 @@
   },
   "files": [
     "lib/index.js",
-    "lib/types/**/*.d.ts",
-    "cordis.patch.yml"
+    "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-system-prompt": "workspace:^"
   },
-  "dependencies": {
-    "@tianma/dsh-behavioral-guidelines": "workspace:^"
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-system-prompt": "workspace:^"
   }
 }
