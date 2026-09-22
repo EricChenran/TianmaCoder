@@ -1,0 +1,45 @@
+version: 1
+
+# Tianma architecture policy: machine-checked module boundaries for the
+# packages/tianma group, in the spirit of zai-org/ZCode's architecture-policy.
+# scripts/verify-architecture.ts fails CI on any violation. Upstream
+# @deepseek-ai/dsh-* packages are never modified — interaction happens only
+# through the declared seams below.
+
+modules:
+  # The bundle is the composition root: it may depend on every Tianma plugin.
+  - id: tianma-bundle
+    roots: [packages/tianma/bundle/src]
+    requires: [tianma-behavioral-guidelines, tianma-recency-pruner, tianma-summarize, tianma-rehydrator, tianma-calibration, tianma-hooks-trust]
+    upstreamSeams: []
+    description: Patch-list carrier; inserts and overrides rows only.
+
+  - id: tianma-behavioral-guidelines
+    roots: [packages/tianma/behavioral-guidelines/src]
+    requires: []
+    upstreamSeams: [cordis, dsh-system-prompt]
+
+  - id: tianma-recency-pruner
+    roots: [packages/tianma/compaction-recency-pruner/src]
+    requires: []
+    upstreamSeams: [cordis, schemastery, dsh-llm, dsh-session, dsh-token-meter, dsh-compaction, dsh-util-values]
+
+  - id: tianma-summarize
+    roots: [packages/tianma/compaction-summarize/src]
+    requires: []
+    upstreamSeams: [cordis, dsh-llm, dsh-session, dsh-token-meter, dsh-compaction, dsh-compaction-basic, dsh-util-values, dsh-agent]
+
+  - id: tianma-rehydrator
+    roots: [packages/tianma/compaction-file-rehydrator/src]
+    requires: []
+    upstreamSeams: [cordis, dsh-agent, dsh-llm, dsh-session, dsh-system-prompt]
+
+  - id: tianma-calibration
+    roots: [packages/tianma/token-meter-calibration/src]
+    requires: []
+    upstreamSeams: [cordis, dsh-session]
+
+  - id: tianma-hooks-trust
+    roots: [packages/tianma/hooks-trust/src]
+    requires: []
+    upstreamSeams: [cordis]

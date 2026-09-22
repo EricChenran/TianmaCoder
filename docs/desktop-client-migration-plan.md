@@ -1,116 +1,117 @@
-# TianmaCoder 网页端 → Electron 客户端迁移设计方案（PR 文档）
+# TianmaCoder Web → Electron desktop client migration design (PR document)
 
-> 状态：设计评审稿（Draft PR）
-> 日期：2026-09-22
-> 范围：`apps/desktop`、`apps/desktop-host`、`apps/web`、`apps/cli`、根脚本与文档
-> 关联决策：`apps/desktop/README.md`（thin-wrapper、packaging & updates、primary-runtime 三项已归档决策）
+English | [中文](desktop-client-migration-plan.zh.md)
 
-## 1. 需求复述与目标
+> Status: design review draft (Draft PR); Date: 2026-09-22; Scope: `apps/desktop`, `apps/desktop-host`, `apps/web`, `apps/cli`, root scripts and docs; Related decisions: `apps/desktop/README.md` (thin-wrapper, packaging & updates, primary-runtime — three archived decisions)
 
-用户需求：将 TianmaCoder 从"浏览器访问 Web 服务"的使用形态，改造为"独立安装、独立窗口的 Electron 桌面客户端"形态，并要求先产出设计方案 PR 文档供评审。
+## 1. Requirement restatement and goals
 
-### 目标
+User requirement: reshape TianmaCoder from the "browser-accessed web service" form into an "independently installed, standalone-window Electron desktop client" form, and produce this design document as a PR for review first.
 
-1. **形态目标**：用户双击桌面图标即用，无需打开浏览器、无需手动启动 `dsh web` 服务；具备原生窗口、系统托盘语义（应用菜单）、自动更新、离线可安装。
-2. **复用目标**：不重写业务——Web 前端（`apps/web` 的 Vite 产物）与 Host 后端原样作为客户端的渲染层与服务层，Electron 只做"壳"。
-3. **安全目标**：渲染进程零 Node 能力、零任意 IPC；所有提权能力收敛在 preload 白名单桥 + 主进程。
-4. **质量目标**：Web 形态与桌面形态共享同一套前端与 Host 实现，任何功能改动两种形态同时生效，不出现形态分叉。
+### Goals
 
-### 非目标（明确不做）
+1. **Form goal**: users double-click a desktop icon and go — no browser, no manual `dsh web` startup; native window, system-tray semantics (application menu), auto-update, offline installability.
+2. **Reuse goal**: no business rewrite — the web frontend (the Vite build of `apps/web`) and the Host backend serve unchanged as the client's render and service layers; Electron is only the "shell".
+3. **Security goal**: zero Node capability and zero arbitrary IPC in the renderer; every privileged capability converges into the preload allowlist bridge plus the main process.
+4. **Quality goal**: web and desktop forms share one frontend and Host implementation, so any functional change lands in both forms at once with no form divergence.
 
-- 不为桌面形态单独开发一套 UI。
-- 不把 Host 后端重写为主进程内嵌服务（保持独立子进程，崩溃隔离不变）。
-- 本 PR 不做代码签名证书采购与商店上架（打包链路已预留 unsigned 通道）。
+### Non-goals (explicitly out of scope)
 
-## 2. 现状盘点（关键事实）
+- No separate UI built for the desktop form.
+- No rewrite of the Host backend as an embedded main-process service (it stays an independent subprocess; crash isolation is unchanged).
+- This PR does not purchase code-signing certificates or store listing (the packaging pipeline already reserves an unsigned channel).
 
-调研确认：仓库中 **Electron 桌面形态的基础设施已大体存在**，本方案不是从零搭建，而是"补齐、收口、验收"：
+## 2. Current state (key facts)
 
-| 资产 | 位置 | 现状 |
+Investigation confirms the **Electron desktop form's infrastructure largely exists** in the repository; this plan is not built from zero but "fills gaps, closes seams, and verifies":
+
+| Asset | Location | State |
 |---|---|---|
-| Electron 主进程 | `apps/desktop/src/` | 已有 main/preload 全套（窗口、单实例锁、更新、欢迎窗、强制更新、目录选择、麦克风权限、平台内嵌视图、Windows 标题栏布局等 40+ 模块） |
-| 私有 Host 进程 | `apps/desktop-host/` | RunAsNode 子进程拉起共享 profile runner |
-| Web 前端 | `apps/web/` | Vite 构建 `@deepseek-ai/dsh-web-frontend`，dist 被桌面壳以 `dsh-app://app/` 自定义协议加载 |
-| 打包与更新 | `apps/desktop/electron-builder.config.mjs` + 根 `package:desktop*` 脚本 | 支持 mac arm64/x64、win x64（含 unsigned）、`electron-updater` |
-| 独立运行时 | `scripts/primary-runtime/` | 桌面自带 Python/Node/pnpm 载荷，免系统依赖 |
-| Web 形态入口 | `apps/cli`（`dsh web`，端口 3080） | 保留，与桌面端口 19387 互不干扰 |
+| Electron main process | `apps/desktop/src/` | Full main/preload set (window, single-instance lock, updates, welcome window, force update, directory picker, microphone permission, in-platform webview view, Windows title-bar layout, and 40+ more modules) |
+| Private Host process | `apps/desktop-host/` | RunAsNode subprocess launching the shared profile runner |
+| Web frontend | `apps/web/` | Vite builds `@deepseek-ai/dsh-web-frontend`; the desktop shell loads the dist through the `dsh-app://app/` custom protocol |
+| Packaging and updates | `apps/desktop/electron-builder.config.mjs` + root `package:desktop*` scripts | mac arm64/x64, win x64 (unsigned included), `electron-updater` |
+| Standalone runtime | `scripts/primary-runtime/` | The desktop ships its own Python/Node/pnpm payload, free of system dependencies |
+| Web-form entry | `apps/cli` (`dsh web`, port 3080) | Retained; never conflicts with the desktop port 19387 |
 
-因此本方案的核心工作是四件事：**品牌与身份收口、体验差异收口、验证闭环、发布链路打通**。
+The core work of this plan is therefore four things: **close brand and identity, close experience gaps, close the verification loop, and open the release pipeline**.
 
-## 3. 总体架构
+## 3. Overall architecture
 
 ```
-┌─ Electron 主进程 (apps/desktop, main.ts) ─────────────────────┐
-│  单实例锁 → 拥有 $DSH_HOME/profiles/desktop                    │
-│  BrowserWindow 加载 dsh-app://app/（打包的 apps/web dist）      │
-│  dsh-app://shell/ → 本地更新/欢迎页资源（不经 Host）             │
-│  IPC 白名单桥（boot 注入/就绪/关闭/目录选择/更新确认）            │
-└──────────────┬───────────────────────────────────────────────┘
-               │ RunAsNode 子进程（ELECTRON_RUN_AS_NODE=1）
-┌─ 私有 Host (apps/desktop-host, 端口 19387) ───────────────────┐
-│  共享 profile runner + Web Host：鉴权 HTTP API + WebSocket     │
-│  桌面专属 profile：apps/desktop 依赖来自 app.asar/dsh，         │
-│  仅外部插件经共享 Plugin Manager + 内置 pnpm 安装               │
+┌─ Electron main process (apps/desktop, main.ts) ──────────────┐
+│  Single-instance lock → owns $DSH_HOME/profiles/desktop      │
+│  BrowserWindow loads dsh-app://app/ (packaged apps/web dist) │
+│  dsh-app://shell/ → local update/welcome assets (no Host)    │
+│  IPC allowlist bridge (boot injection/ready/shutdown/picker/ │
+│  update confirmation)                                        │
+└──────────────┬──────────────────────────────────────────────┘
+               │ RunAsNode subprocess (ELECTRON_RUN_AS_NODE=1)
+┌─ Private Host (apps/desktop-host, port 19387) ───────────────┐
+│  Shared profile runner + Web Host: authenticated HTTP API +  │
+│  WebSocket. Desktop-only profile: apps/desktop deps come     │
+│  from app.asar/dsh; only external plugins install through    │
+│  the shared Plugin Manager + bundled pnpm                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-关键原则（沿用既有决策，PR 中作为验收约束）：
+Key principles (carried over from existing decisions; acceptance constraints in this PR):
 
-1. **薄壳原则**：桌面壳不实现业务；共享 Web 行为 + 桌面适配器。
-2. **单一版本原则**：Electron 壳与 `@deepseek-ai/dsh` 同版本发布，一个升级单元，杜绝壳/内核版本漂移。
-3. **进程所有权原则**：桌面独占 `profiles/desktop`，CLI/Web 与桌面共享产品数据但不共享可执行包、插件激活与 lockfile，两进程不竞争同一 profile。
-4. **传输复用原则**：加载打包 Web 静态资源（自定义协议），鉴权 API/WS 走同一 Host 实现。
+1. **Thin shell**: the desktop shell implements no business logic; shared web behavior plus desktop adapters.
+2. **Single version**: the Electron shell releases at the same version as `@deepseek-ai/dsh` — one upgrade unit — so shell/kernel version drift is impossible.
+3. **Process ownership**: desktop exclusively owns `profiles/desktop`; CLI/Web and desktop share product data but not executable packages, plugin activation, or lockfiles, and the two processes never race one profile.
+4. **Transport reuse**: load the packaged web static assets through the custom protocol; authenticated API/WS run through the same Host implementation.
 
-## 4. 改造工作分解
+## 4. Work breakdown
 
-### P0 — 品牌与身份收口（本 PR 主体新增工作）
+### P0 — Brand and identity closure (the main new work of this PR)
 
-品牌已切换为 TianmaCoder（见 `brand/`、`packages/client/ui-primitives` 的 TianmaLogo），但桌面壳内仍残留 "DeepSeek Harness" 身份，需收口：
+The brand is already TianmaCoder (see `brand/` and the TianmaLogo in `packages/client/ui-primitives`), but "DeepSeek Harness" identity remains inside the desktop shell; close it:
 
-1. `apps/desktop` 产品名、About 面板、应用菜单文案、welcome/更新对话框文案：DeepSeek Harness → TianmaCoder（en/zh 双语，过 `verify-client-ui-i18n` 门禁）。
-2. 图标：`resources/icon.png/svg` 及平台变体替换为 `brand/assets/` 的信号波标导出物（Windows ICO 多尺寸、macOS ICNS 内缩圆角 1024px、安装器侧边 BMP 164×314），遵循 `apps/desktop/README.md` 的图标规范。
-3. `electron-builder` 的 `productName`/`appId`/更新 feed 元数据与安装器文案同步品牌。
-4. 更新通道与 `x-client-platform` 映射保留机制不变，仅改对外显示名。
+1. `apps/desktop` product name, About panel, application menu copy, welcome/update dialog copy: DeepSeek Harness → TianmaCoder (en/zh, passing the `verify-client-ui-i18n` gate).
+2. Icons: replace `resources/icon.png/svg` and platform variants with exports of the signal-wave mark from `brand/assets/` (Windows multi-size ICO, macOS inset-rounded 1024px ICNS, installer side BMP 164×314), following the icon conventions in `apps/desktop/README.md`.
+3. `electron-builder` `productName`/`appId`/update-feed metadata and installer copy move to the brand in lockstep.
+4. Update channel and `x-client-platform` mapping mechanics are unchanged; only the displayed names change.
 
-### P1 — 体验差异收口
+### P1 — Experience gap closure
 
-1. **窗口与标题栏**：Windows 40-DIP 原生标题栏配色取自应用调色板——确认取色源为 TianmaCoder 主题 token 而非旧品牌色。
-2. **加载页**：共享加载页品牌化（logo/文案），等待 Host boot 注入后原地启动 client，不跳转新文档。
-3. **首次运行**：welcome 窗流程核对（语言 zh_CN/en_US、更新说明），文案品牌化。
-4. **深度链接/文件关联**：如产品需要（如 `tianmacoder://`），列为后续 PR，本期不做。
+1. **Window and title bar**: the Windows 40-DIP native title-bar tint sources from the app palette — confirm the source is the TianmaCoder theme tokens, not legacy brand colors.
+2. **Loading page**: brand the shared loading page (logo/copy); start the client in place after the Host boot injection, with no document jump.
+3. **First run**: verify the welcome-window flow (language zh_CN/en_US, update notes) and brand the copy.
+4. **Deep links/file associations**: if the product needs them (e.g. `tianmacoder://`), filed as a later PR — not this one.
 
-### P2 — 验证闭环（评审通过后执行）
+### P2 — Verification loop (executed after review approval)
 
-1. `pnpm build:lib && pnpm build:web && pnpm dev:desktop` 开发态冒烟：窗口加载、登录、会话、插件页、目录选择、F12 DevTools。
-2. `pnpm package:desktop:win:x64:unsigned` 本机出包 + `check:package`；安装/启动/卸载冒烟。
-3. 更新链路本地验证：`pnpm --filter @deepseek-ai/dsh-desktop run test:updates:local`。
-4. 既有测试面：`apps/desktop/tests`、`apps/desktop-host`、web 前端 vitest 全绿；i18n 门禁通过。
-5. 双形态回归：`apps/cli` 的 `dsh web`（端口 3080）与桌面（19387）并行启动互不干扰，profile 互不污染。
+1. `pnpm build:lib && pnpm build:web && pnpm dev:desktop` developer smoke: window loads, sign-in, sessions, plugin pages, directory picker, F12 DevTools.
+2. `pnpm package:desktop:win:x64:unsigned` local package + `check:package`; install/launch/uninstall smoke.
+3. Local update-chain verification: `pnpm --filter @deepseek-ai/dsh-desktop run test:updates:local`.
+4. Existing test surfaces: `apps/desktop/tests`, `apps/desktop-host`, web frontend vitest all green; i18n gate passes.
+5. Dual-form regression: `apps/cli` `dsh web` (port 3080) and desktop (19387) run in parallel without interference; profiles never cross-contaminate.
 
-### P3 — 发布链路（后续 PR）
+### P3 — Release pipeline (later PR)
 
-签名（Windows 硬件 token 流程已在打包脚本中实现，需要证书）、macOS 公证、更新 feed 上线。本期仅产出 unsigned 包用于内测。
+Signing (the Windows hardware-token flow is already implemented in the packaging scripts; a certificate is needed), macOS notarization, update-feed go-live. This phase only produces unsigned packages for internal testing.
 
-## 5. 风险与对策
+## 5. Risks and mitigations
 
-| 风险 | 对策 |
+| Risk | Mitigation |
 |---|---|
-| 品牌替换触碰大量 i18n 断言，门禁失败 | 逐包替换并跑 `verify-client-ui-i18n`；快照用 vitest -u 统一更新 |
-| Windows 打包 PE 扫描/签名流程在 unsigned 下的行为差异 | 内测统一走 `package:desktop:win:x64:unsigned`，签名流程留到 P3 专项验证 |
-| Web 与桌面共用前端，改动可能破坏 `dsh web` 形态 | 双形态并行回归纳入验收清单（P2.5） |
-| `profiles/desktop` 内旧版本残留（原 DeepSeek 命名时期的 profile） | 启动时 runtime descriptor 校验已兜底不兼容；必要时在升级说明中提示重置 profile |
+| Brand replacement touches many i18n assertions and fails gates | Replace per package and run `verify-client-ui-i18n`; update snapshots uniformly with vitest -u |
+| Windows packaging PE scan/signing behavior differs when unsigned | Internal testing standardizes on `package:desktop:win:x64:unsigned`; the signing flow gets dedicated P3 verification |
+| Web and desktop share a frontend, so changes may break the `dsh web` form | Dual-form parallel regression is on the acceptance checklist (P2.5) |
+| Stale leftovers in `profiles/desktop` (profiles from the original DeepSeek naming era) | Startup runtime-descriptor validation already refuses incompatible payloads; upgrade notes mention a profile reset when needed |
 
-## 6. 验收标准
+## 6. Acceptance criteria
 
-1. Windows x64 unsigned 安装包可安装、启动、完成一次完整对话，全程无需浏览器与系统 Node/Python。
-2. 应用图标、名称、About、菜单、加载页均为 TianmaCoder 品牌；中英文随 shell locale 切换。
-3. `apps/desktop`、`apps/desktop-host`、`apps/web` 测试全绿，i18n 门禁通过。
-4. 桌面与 Web 形态功能一致：同一功能改动在 `dsh web` 下行为不变。
-5. 本地更新链路冒烟通过（test:updates:local）。
+1. The Windows x64 unsigned package installs, launches, and completes one full conversation with no browser and no system Node/Python anywhere.
+2. App icon, name, About, menus, and loading page are all TianmaCoder brand; en/zh follows the shell locale.
+3. `apps/desktop`, `apps/desktop-host`, and `apps/web` tests all green; the i18n gate passes.
+4. Desktop and web forms are functionally identical: the same functional change behaves identically under `dsh web`.
+5. The local update-chain smoke passes (test:updates:local).
 
-## 7. 实施顺序与提交切分
+## 7. Implementation order and commit split
 
-1. `feat(desktop): rebrand shell identity to TianmaCoder`（P0.1–P0.3，含图标资产）
-2. `feat(desktop): polish loading/welcome experience under new brand`（P1）
-3. `chore(desktop): migration verification checklist and docs`（P2 结果记录 + 本文档定稿）
-4. P3 签名/公证/发布另行 PR。
+1. `feat(desktop): rebrand shell identity to TianmaCoder` (P0.1–P0.3, including icon assets)
+2. `feat(desktop): polish loading/welcome experience under new brand` (P1)
+3. `chore(desktop): migration verification checklist and docs` (P2 results + this document finalized)
+4. P3 signing/notarization/release ships as a separate PR.

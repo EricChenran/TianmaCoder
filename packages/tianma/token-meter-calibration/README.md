@@ -65,7 +65,7 @@ No invariant companion is published because the package owns no mutable relation
 <a id="model-experience"></a>
 ## Model Experience
 
-None, as v1 ships pure measurement cores and mounts nothing.
+None, as the cores and the calibration service add no model-visible surface; consumers read the factor and correct their own estimates.
 
 #### KV Cache effect
 

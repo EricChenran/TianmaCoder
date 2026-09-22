@@ -66,6 +66,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentLoop: 'core.md',
   agentDefaultModel: 'core.md',
   agentPresets: 'core.md',
+  tianmaHookTrust: 'tianma.md',
   agents: 'core.md',
   approval: 'approval.md',
   officeToPdf: 'office-to-pdf.md',

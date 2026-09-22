@@ -10,4 +10,12 @@
   config:
     provider: deepseek-official
     model: deepseek-flash
-    reasoningEffort: off
+    reasoningEffort: high
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    preference: system
+- id: locale
+  name: "@deepseek-ai/dsh-client-locale"
+  config:
+    preference: zh

@@ -31,6 +31,8 @@ kind: "package-group"
 | [`compaction-recency-pruner/`](compaction-recency-pruner/README.zh.md) | 近因保全的工具结果清理，替换头/中/尾裁剪器 |
 | [`compaction-summarize/`](compaction-summarize/README.zh.md) | 高保真压缩总结器，子类化文档声明的 `summarize()` 钩子 |
 | [`token-meter-calibration/`](token-meter-calibration/README.zh.md) | 中文感知密度估算与 usage 驱动的校准因子 |
+| [`compaction-file-rehydrator/`](compaction-file-rehydrator/README.zh.md) | 压缩后从 append-only 日志重建已读文件账本，注入为作用域提示节 |
+| [`hooks-trust/`](hooks-trust/README.zh.md) | 第三方 workspace hook 的内容哈希信任账本 |
 
 <a id="composition"></a>
 ## 组合
