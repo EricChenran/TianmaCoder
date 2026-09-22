@@ -15,6 +15,7 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsDescribeFace } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
+import { providerLabel } from './provider-labels.ts'
 
 /**
  * Any route key walks a dict schema to the same profile node, so the lookup
@@ -47,7 +48,7 @@ export function joinProviderDirectory(
   const declared = new Set(directory.map(entry => entry.provider))
   const rows: ProviderDirectoryEntry[] = directory.map(entry => ({
     provider: entry.provider,
-    displayName: entry.displayName,
+    displayName: providerLabel(entry.provider, entry.displayName),
     settingsNs: entry.settingsNs,
     settingsPath: [...entry.settingsPath],
     active: active.has(entry.provider),

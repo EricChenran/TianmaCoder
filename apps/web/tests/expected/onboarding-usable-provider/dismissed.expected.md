@@ -17,7 +17,7 @@
   - tablist "添加方式":
     - tab "第三方模型提供商" [selected]
     - tab "自定义模型 API"
-  - paragraph: 从内置目录中选择 OpenAI、Anthropic、Kimi 等提供商，填入其 API 密钥即可使用。
+  - paragraph: 从内置目录中选择 智谱 GLM、OpenAI、Anthropic、Kimi 等提供商，填入其 API 密钥即可使用。
   - tabpanel "第三方模型提供商":
     - text: 提供商
     - combobox "提供商":
@@ -58,8 +58,8 @@
       - option "xiaomi-token-plan-ams"
       - option "xiaomi-token-plan-cn"
       - option "xiaomi-token-plan-sgp"
-      - option "zai"
-      - option "zai-coding-cn"
+      - option "Z.AI（智谱国际）"
+      - option "智谱 GLM Coding Plan"
     - text: API 密钥
     - textbox "API 密钥":
       - /placeholder: 输入 API 密钥，或留空使用环境认证

@@ -16,9 +16,9 @@
       - button "删除 openrouter": 删除
       - alert: "llm-pi-ai: provider \"openrouter\" model \"111\" needs an api; the installed catalog does not describe it, so set the route's api to the wire protocol its endpoint speaks"
     - listitem:
-      - text: zai
-      - button "编辑 zai": 编辑
-      - button "删除 zai": 删除
+      - text: Z.AI（智谱国际）
+      - button "编辑 Z.AI（智谱国际）": 编辑
+      - button "删除 Z.AI（智谱国际）": 删除
     - listitem:
       - text: acme-gateway 自定义
       - button "编辑 acme-gateway": 编辑
