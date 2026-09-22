@@ -43,6 +43,8 @@ const IMMUTABLE_LANGUAGE_TOKENS = new Set([
   'M',
   'MB',
   'Symbol',
+  /* Registered product names are brand artwork, never translated copy. */
+  'TianmaCoder',
   'false',
   'function()',
   'n',

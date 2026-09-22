@@ -135,15 +135,28 @@ describe('FishLogo', () => {
   })
 })
 
+describe('TianmaLogo', () => {
+  it('renders the signal-M strokes in currentColor at the native ratio', () => {
+    const { container } = render(<primitives.TianmaLogo />)
+    const svg = container.querySelector('svg')!
+    expect(svg.getAttribute('width')).toBe('24')
+    expect(Number(svg.getAttribute('height'))).toBeCloseTo(17.63, 1)
+    expect(svg.getAttribute('viewBox')).toBe('0 0 128 94')
+    expect(container.querySelectorAll('path')).toHaveLength(2)
+    expect(container.innerHTML).toContain('currentColor')
+  })
+})
+
 describe('BrandWordmark', () => {
   it('can render the name artwork with or without its leading mark', () => {
     const view = render(<primitives.BrandWordmark />)
     const svg = view.container.querySelector('svg')!
-    expect(svg.getAttribute('width')).toBe('182')
-    expect(svg.getAttribute('viewBox')).toBe('0 0 182 24')
+    expect(svg.getAttribute('width')).toBe('132')
+    expect(svg.getAttribute('viewBox')).toBe('0 0 132 24')
+    expect(view.container.textContent).toContain('TianmaCoder')
 
     view.rerender(<primitives.BrandWordmark includeMark={false} />)
-    expect(svg.getAttribute('width')).toBe('156')
-    expect(svg.getAttribute('viewBox')).toBe('26 0 156 24')
+    expect(svg.getAttribute('width')).toBe('106')
+    expect(svg.getAttribute('viewBox')).toBe('26 0 106 24')
   })
 })

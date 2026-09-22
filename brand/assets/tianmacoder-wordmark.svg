@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="32" viewBox="0 0 176 32" fill="none" role="img" aria-label="TianmaCoder">
+  <!-- Horizontal lockup: mark keeps brand green; wordmark text inherits currentColor.
+       consumers that inline this file (website/.vitepress/config.ts) rely on currentColor
+       so the text follows light/dark themes. Keep geometry unchanged. -->
+  <g transform="translate(2 -3) scale(0.295)">
+    <path d="M12 96L40 32L55 96L83 32L97 96" stroke="#86E100" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M106 32L116 68" stroke="#86E100" stroke-width="15" stroke-linecap="round"/>
+  </g>
+  <text x="46" y="23" font-family="'Segoe UI','PingFang SC','Noto Sans SC','Helvetica Neue',Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.4" fill="currentColor">TianmaCoder</text>
+</svg>

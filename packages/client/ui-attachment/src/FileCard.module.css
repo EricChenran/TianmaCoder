@@ -145,7 +145,7 @@
   width: 35%;
   height: 100%;
   border-radius: inherit;
-  background: var(--dsw-alias-brand-primary, #4d6bfe);
+  background: var(--dsw-alias-brand-primary, rgb(74, 128, 0));
   animation: file-card-progress 1.2s ease-in-out infinite alternate;
 }
 
