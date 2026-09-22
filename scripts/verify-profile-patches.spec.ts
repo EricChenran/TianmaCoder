@@ -33,7 +33,7 @@ describe('verifyPatches', () => {
   config:
     retainRatio: 0.35
 `)
-    expect(verifyPatches(base, [patch])).toEqual([])
+    expect(verifyPatches([base], [patch])).toEqual([])
   })
 
   it('rejects an override of an id the base layer never inserts', () => {
@@ -43,7 +43,7 @@ describe('verifyPatches', () => {
   config:
     retainRatio: 0.35
 `)
-    const failures = verifyPatches(base, [patch])
+    const failures = verifyPatches([base], [patch])
     expect(failures).toHaveLength(1)
     expect(failures[0]!.reason).toContain('compaction-basic-v2')
     expect(failures[0]!.reason).toContain('drift')
@@ -59,14 +59,14 @@ describe('verifyPatches', () => {
   config:
     maxBytes: 2
 `)
-    const failures = verifyPatches(base, [patch])
+    const failures = verifyPatches([base], [patch])
     expect(failures.some(f => f.reason.includes('duplicate'))).toBe(true)
   })
 
   it('reports invalid YAML as a failure instead of throwing', () => {
     const base = fixture('base.yml', BASE_PATCH)
     const patch = fixture('broken.yml', '\t- id: not: valid: yaml')
-    const failures = verifyPatches(base, [patch])
+    const failures = verifyPatches([base], [patch])
     expect(failures).toHaveLength(1)
     expect(failures[0]!.patchPath).toBe(patch)
   })
@@ -78,6 +78,6 @@ describe('verifyPatches', () => {
     - id: tianma-new-row
       name: '@tianma/dsh-example'
 `)
-    expect(verifyPatches(base, [patch])).toEqual([])
+    expect(verifyPatches([base], [patch])).toEqual([])
   })
 })

@@ -64,16 +64,20 @@ function parsePatch(path: string): PatchOp[] {
 }
 
 /**
- * Verify every Tianma patch's overridden ids against the base layer.
- * @param basePatchPath - path to the dsh-base cordis.patch.yml.
+ * Verify every Tianma patch's overridden ids against the upstream layers.
+ * @param basePatchPaths - paths whose inserts form the upstream row universe
+ *   (the dsh-base patch, the mode bundle patches, and their preset patches).
  * @param patchPaths - paths to Tianma bundle patch files.
  * @returns failures; an empty array means the verification passed.
  */
 export function verifyPatches(
-  basePatchPath: string,
+  basePatchPaths: readonly string[],
   patchPaths: readonly string[],
 ): VerificationFailure[] {
-  const baseIds = insertedIds(parsePatch(basePatchPath))
+  const baseIds: string[] = []
+  for (const basePatchPath of basePatchPaths) {
+    baseIds.push(...insertedIds(parsePatch(basePatchPath)))
+  }
   const failures: VerificationFailure[] = []
   for (const patchPath of patchPaths) {
     let ops: PatchOp[]
@@ -93,12 +97,12 @@ export function verifyPatches(
       if (occurrences === 0) {
         failures.push({
           patchPath,
-          reason: `overrides row id "${id}" which the base layer does not insert — upstream id drift or typo`,
+          reason: `overrides row id "${id}" which no upstream layer inserts — upstream id drift or typo`,
         })
       } else if (occurrences > 1) {
         failures.push({
           patchPath,
-          reason: `row id "${id}" is ambiguous: inserted ${occurrences} times in the base layer`,
+          reason: `row id "${id}" is ambiguous: inserted ${occurrences} times across upstream layers`,
         })
       }
     }
@@ -108,17 +112,18 @@ export function verifyPatches(
 
 /** CLI entry: `tsx scripts/verify-profile-patches.ts <base> <patch...>`. */
 function main(argv: readonly string[]): number {
-  const [base, ...patches] = argv
-  if (base === undefined || patches.length === 0) {
-    process.stderr.write('usage: verify-profile-patches <base-patch.yml> <patch.yml> [...]\n')
+  if (argv.length < 2) {
+    process.stderr.write('usage: verify-profile-patches <upstream-layer.yml> [...] <tianma-patch.yml>\n')
     return 2
   }
-  const failures = verifyPatches(base, patches)
+  const patchPaths = argv.slice(-1)
+  const basePatchPaths = argv.slice(0, -1)
+  const failures = verifyPatches(basePatchPaths, patchPaths)
   for (const failure of failures) {
     process.stderr.write(`verify-profile-patches: ${failure.patchPath}: ${failure.reason}\n`)
   }
   if (failures.length > 0) return 1
-  process.stdout.write(`verify-profile-patches: ${patches.length} patch file(s) reference intact base row ids\n`)
+  process.stdout.write(`verify-profile-patches: ${patchPaths.length} patch file(s) reference intact upstream row ids\n`)
   return 0
 }
 

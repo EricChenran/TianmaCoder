@@ -8,6 +8,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+interface NestedRow {
+  id?: string
+  name?: string
+  config?: unknown
+  plugins?: NestedRow[]
+}
 import * as yaml from 'js-yaml'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 
@@ -29,13 +36,17 @@ describe('@tianma/dsh-bundle', () => {
     const { verifyPatches } = await import('../../../../scripts/verify-profile-patches.ts')
     const root = fileURLToPath(new URL('..', import.meta.url))
     const failures = verifyPatches(
-      resolve(root, '../../bundle/base/cordis.patch.yml'),
+      [
+        resolve(root, '../../bundle/base/cordis.patch.yml'),
+        resolve(root, '../../bundle/web-app/cordis.patch.yml'),
+        resolve(root, '../../bundle/web-app/presets/standard.patch.yml'),
+      ],
       [resolve(root, 'cordis.patch.yml')],
     )
     expect(failures).toEqual([])
   })
 
-  it('swaps the compaction-basic row to the fidelity summarizer keeping retainRatio', () => {
+  it('restates the standard preset with the fidelity summarizer and recency clearer', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(
       readFileSync(resolve(root, 'package.json'), 'utf8'),
@@ -43,29 +54,25 @@ describe('@tianma/dsh-bundle', () => {
     const parsed = yaml.load(
       readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
       { schema: entryListSchema },
-    ) as { id?: string; name?: string; config?: Record<string, number> }[]
-    const row = parsed.find(op => op.id === 'compaction-basic')
-    expect(row?.name).toBe('@tianma/dsh-compaction-summarize')
-    expect(row?.config).toEqual({ retainRatio: 0.35 })
-    expect(manifest.dependencies).toHaveProperty('@tianma/dsh-compaction-summarize')
-  })
-
-  it('swaps the tool-result-pruner row to the recency clearer with policy config', () => {
-    const root = fileURLToPath(new URL('..', import.meta.url))
-    const manifest = JSON.parse(
-      readFileSync(resolve(root, 'package.json'), 'utf8'),
-    ) as { dependencies?: Record<string, string> }
-    const parsed = yaml.load(
-      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
-      { schema: entryListSchema },
-    ) as { id?: string; name?: string; config?: Record<string, number> }[]
-    const row = parsed.find(op => op.id === 'tool-result-pruner')
-    expect(row?.name).toBe('@tianma/dsh-compaction-recency-pruner')
-    expect(row?.config).toEqual({
+    ) as { id?: string; name?: string; config?: { plugins?: NestedRow[] } }[]
+    const preset = parsed.find(op => op.id === 'preset-standard')
+    expect(preset?.name).toBe('@deepseek-ai/dsh-agent-preset')
+    const compaction = preset?.config?.plugins
+      ?.find(plugin => plugin.id === 'compaction')?.config as NestedRow[] ?? []
+    const summarize = compaction.find(row => row.id === 'compaction-basic')
+    expect(summarize?.name).toBe('@tianma/dsh-compaction-summarize')
+    expect(summarize?.config).toEqual({ retainRatio: 0.35 })
+    const pruner = compaction.find(row => row.id === 'tool-result-pruner')
+    expect(pruner?.name).toBe('@tianma/dsh-compaction-recency-pruner')
+    expect(pruner?.config).toEqual({
       keepRecentResults: 5,
       thresholdChars: 8192,
       minCharsSaved: 1024,
     })
+    const instructions = preset?.config?.plugins
+      ?.find(plugin => plugin.id === 'agent-instructions')?.config
+    expect(instructions).toEqual({ maxBytes: 262144 })
+    expect(manifest.dependencies).toHaveProperty('@tianma/dsh-compaction-summarize')
     expect(manifest.dependencies).toHaveProperty('@tianma/dsh-compaction-recency-pruner')
   })
 

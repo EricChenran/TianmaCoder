@@ -1,0 +1,12 @@
+packages:
+  - .
+  - ../../../vendor/*
+  - ../../../packages/*/*
+  - ../../../native/system
+  - ../../../native/system/packages/*
+  - ../../../apps/*
+  - ../../../benchmarks
+  - ../../../website
+  - ../../../python/sdk-runtime
+nodeLinker: hoisted
+autoInstallPeers: false
