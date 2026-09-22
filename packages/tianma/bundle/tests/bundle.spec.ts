@@ -25,12 +25,28 @@ describe('@tianma/dsh-bundle', () => {
     expect(Array.isArray(parsed)).toBe(true)
   })
 
-  it('ships an empty patch list in PR-0 so each later PR lands one row', () => {
+  it('overrides only ids the dsh-base layer inserts exactly once', async () => {
+    const { verifyPatches } = await import('../../../../scripts/verify-profile-patches.ts')
     const root = fileURLToPath(new URL('..', import.meta.url))
+    const failures = verifyPatches(
+      resolve(root, '../../bundle/base/cordis.patch.yml'),
+      [resolve(root, 'cordis.patch.yml')],
+    )
+    expect(failures).toEqual([])
+  })
+
+  it('inserts the behavioral-guidelines row declared as a dependency', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
     const parsed = yaml.load(
       readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
       { schema: entryListSchema },
-    ) as unknown[]
-    expect(parsed).toEqual([])
+    ) as { insert?: { id?: string; name?: string }[] }[]
+    const inserted = parsed.flatMap(op => op.insert ?? [])
+    expect(inserted.find(row => row.id === 'tianma-behavioral-guidelines')?.name)
+      .toBe('@tianma/dsh-behavioral-guidelines')
+    expect(manifest.dependencies).toHaveProperty('@tianma/dsh-behavioral-guidelines')
   })
 })
