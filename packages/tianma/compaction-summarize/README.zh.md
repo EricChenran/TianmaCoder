@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 摘要
+## 概述
 
 `dsh-compaction-summarize` 是只覆盖一个点的 `BasicCompactionEngine`：文档声明的 `summarize()` 定制钩子。辅助调用的请求信封与上游完全一致——回放前缀、同一组工具 schema、指令作为最后一条 user message——因此 provider 的 KV 前缀缓存照常复用。改变的是指令本身，移植自 ZCode 手工调优的压缩提示词：九个固定段落、**全部用户消息忠实列出且安全约束逐字保留**（每代压缩都从原文重锚定意图，抑制链式衰减）、强制 `<analysis>` 先于 `<summary>` 的输出形状、以及守护纯文本回合的 NO_TOOLS 前后缀。`<analysis>` 草稿被丢弃；只有提取出的 `<summary>` 落为检查点，未打标签的输出按容错回退原样通过。
 
@@ -15,6 +15,10 @@ kind: "package-reference"
 
 - [使用本包](#use-this-package)
 - [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -44,5 +48,54 @@ kind: "package-reference"
 ### 不变式归属
 
 No invariant companion is published because 子类不新增任何 session 变更：所有持久化效果都流经继承的上游事务。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+- [compaction-basic](../../compaction/compaction-basic/README.zh.md) — 本子类扩展的引擎
+- [compaction 契约](../../compaction/compaction/README.zh.md) — 本包落库所用的检查点框架
+- [上游 pruner](../../compaction/compaction-tool-result-pruner/README.zh.md) — 总结之前的第一级缓解
+
+-----
+
+<a id="model-experience"></a>
+## 模型体验
+
+### 压缩指令
+
+#### 模型看到什么
+
+总结器收到回放的对话加一条携带 `FIDELITY_INSTRUCTION` 的最终 user message：NO_TOOLS 前后缀包住九个固定段落，全部用户消息列出、安全约束逐字保留。落库的检查点只保留标准 `<compacted-summary>` 框架内提取出的 `<summary>` 文本；`<analysis>` 草稿绝不进入模型可见历史。
+
+#### Token 影响
+
+指令是辅助调用上的一次性最终消息；落库检查点受 `maxTokens` 约束。
+
+#### KV 缓存影响
+
+请求信封与最后一次路由请求一致（相同前缀、相同工具 schema），辅助调用复用 provider 的热前缀缓存。
+
+## 已知限制与延期工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+这些局限定义高保真引擎尚未覆盖的部分。它们是当前的包约束，不是任务清单。
+
+- **无按模型策略覆盖** — `summarize()` 目标解析为配置 → 路由 → agent 选项；`modelPolicies` 条目在 v1 不会到达高保真调用。
+- **重试行为是继承的，非 ZCode 的** — 溢出重试来自上游引擎；ZCode 的连续失败熔断没有重复实现。
+- **未打标签的输出原样通过** — 忽略标签形状的 provider 仍会落库检查点，但缺九段结构。
+- **指令为英文** — 提示词工艺没有本地化变体。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文 — 点击展开</summary>
+
+提示词移植自 ZCode 的 `prompt.ts`；PR-5（文件再水合）将消费本包的检查点语义。
 
 </details>

@@ -330,6 +330,7 @@
       "@tianma/dsh-behavioral-guidelines": ["./packages/tianma/behavioral-guidelines/src/index.ts"],
       "@tianma/dsh-compaction-recency-pruner": ["./packages/tianma/compaction-recency-pruner/src/index.ts"],
       "@tianma/dsh-compaction-summarize": ["./packages/tianma/compaction-summarize/src/index.ts"],
+      "@tianma/dsh-token-meter-calibration": ["./packages/tianma/token-meter-calibration/src/index.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],

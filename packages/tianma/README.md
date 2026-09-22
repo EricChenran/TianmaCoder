@@ -9,6 +9,8 @@ English | [中文](README.zh.md)
 
 ## Summary
 
+Subsystem reference: [`docs/subsystems/tianma.md`](../../docs/subsystems/tianma.md)
+
 The `tianma/` group carries the TianmaCoder secondary-development surface for DeepSeek Harness: plugins porting ZCode's context-compaction quality mechanisms (recency-preserving pruning, fidelity summarization, token-meter calibration) plus the bundle that mounts them. Packages register only through upstream seams (`ctx.*`); upstream `@deepseek-ai/dsh-*` internals are never imported except through each package's documented public extension point. Every mount happens as a profile patch row replacement, so each capability rolls back by removing one row.
 
 ## Table of Contents
@@ -35,6 +37,7 @@ The `tianma/` group carries the TianmaCoder secondary-development surface for De
 
 Add the Tianma bundle after `dsh-base` (and any mode bundle) in a profile's bundle list. Its `cordis.patch.yml` overrides dsh-base rows by id; `scripts/verify-profile-patches.ts` fails CI when an upstream id drifts so a stale override can never ship silently. Each replaced row keeps the plugin's own config block, so a deployment can retune or disable (`disabled: true`) any single capability without touching code.
 
+<a id="dev-note"></a>
 ## Dev Note
 
 <details>

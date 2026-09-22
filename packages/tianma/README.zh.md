@@ -9,13 +9,15 @@ kind: "package-group"
 
 ## 摘要
 
+子系统参考：[`docs/subsystems/tianma.zh.md`](../../docs/subsystems/tianma.zh.md)
+
 `tianma/` 组承载 TianmaCoder 对 DeepSeek Harness 的二次开发面：移植 ZCode 上下文压缩质量机制的插件（近因保全裁剪、高保真总结、token 计量校准）以及挂载它们的 bundle。包只通过上游 seam（`ctx.*`）注册；除各包文档声明的公开扩展点外，绝不 import 上游 `@deepseek-ai/dsh-*` 内部模块。所有挂载都是 profile patch 行替换，回滚任一能力只需移除一行。
 
 ## 目录
 
 - [包](#packages)
 - [组合](#composition)
-- [开发说明](#dev-note)
+- [开发备注](#dev-note)
 
 -----
 
@@ -28,14 +30,15 @@ kind: "package-group"
 | [`behavioral-guidelines/`](behavioral-guidelines/README.zh.md) | 移植自 ZCode 的行为提示词节，以具名 system-prompt contribution 注册 |
 | [`compaction-recency-pruner/`](compaction-recency-pruner/README.zh.md) | 近因保全的工具结果清理，替换头/中/尾裁剪器 |
 | [`compaction-summarize/`](compaction-summarize/README.zh.md) | 高保真压缩总结器，子类化文档声明的 `summarize()` 钩子 |
-| [`token-meter-calibration/`](token-meter-calibration/README.md) | 中文感知密度估算与 usage 驱动的校准因子 |
+| [`token-meter-calibration/`](token-meter-calibration/README.zh.md) | 中文感知密度估算与 usage 驱动的校准因子 |
 
 <a id="composition"></a>
 ## 组合
 
 在 profile 的 bundle 列表中，把 Tianma bundle 放在 `dsh-base`（以及任一模式 bundle）之后。其 `cordis.patch.yml` 按 id 覆盖 dsh-base 行；`scripts/verify-profile-patches.ts` 在上游 id 漂移时让 CI 失败，杜绝过期覆盖静默上线。每个被替换的行保留插件自己的配置块，部署方可独立调参或禁用（`disabled: true`）任一能力，无需改代码。
 
-## 开发说明
+<a id="dev-note"></a>
+## 开发备注
 
 <details>
 <summary>为什么用 patch 而不是改上游默认值</summary>
