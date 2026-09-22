@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/README.md
-README.md: 205f0819cf3320a1b470c2225e52e1284d573700
-README.zh.md: 3ca5f464bb5e4fd8a99b8c00c4e884a4a1706d45
+README.md: 93afa6b2d679afd86999b28e82dd0889a6c28746
+README.zh.md: e135207099b229a89d37c325059d0cc8d3e09e8a

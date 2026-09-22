@@ -4082,6 +4082,44 @@ export interface Config {
 
 来源： [`packages/deliverables/workspace-changes/src/index.ts:36`](../packages/deliverables/workspace-changes/src/index.ts)
 
+<a id="tianmadsh-compaction-recency-pruner"></a>
+
+## `@tianma/dsh-compaction-recency-pruner`
+
+需要： `tokenMeter`
+
+```ts config-catalog
+/** Recency policy for tool-result clearing. */
+export interface RecencyPruneConfig {
+  /**
+   * Tool results this recent (in surface order) are never cleared, regardless
+   * of size. ZCode's microcompact keeps five groups; here the unit is the
+   * tool-result event. Defaults to `5`.
+   */
+  keepRecentResults?: number
+  /**
+   * Clear an older tool result only when its text exceeds this many Unicode
+   * code points; smaller results are not worth the context dance. Defaults
+   * to `8192` (mirrors the upstream pruner's threshold).
+   */
+  thresholdChars?: number
+  /**
+   * Skip a candidate whose replacement would save fewer Unicode code points.
+   * ZCode gates at 256 tokens; at the harness's 4-chars-per-token heuristic
+   * that is 1024 code points, which is the default here.
+   */
+  minCharsSaved?: number
+  /**
+   * Tool names eligible for clearing; an empty list means every tool. The
+   * default lists the volume-heavy read/search/shell tools and leaves
+   * everything else untouched.
+   */
+  compactableTools?: string[]
+}
+```
+
+来源： [`packages/tianma/compaction-recency-pruner/src/types.ts:5`](../packages/tianma/compaction-recency-pruner/src/types.ts)
+
 ## 无配置的可加载插件
 
 这些插件通过 `cordis.yml` 中不含 `config:` 块的条目加载；它们未声明任何配置接口。
@@ -4183,6 +4221,8 @@ export interface Config {
 - `@deepseek-ai/dsh-user-questions`（[`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts)）
 - `@deepseek-ai/dsh-webhook` — 需要 `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry`（[`packages/webhook/webhook/src/index.ts`](../packages/webhook/webhook/src/index.ts)）
 - `@deepseek-ai/dsh-workspace` — 需要 `storageDomain` · `sessionPersistence`（[`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts)）
+- `@tianma/dsh-behavioral-guidelines`（[`packages/tianma/behavioral-guidelines/src/index.ts`](../packages/tianma/behavioral-guidelines/src/index.ts)）
+- `@tianma/dsh-compaction-summarize`（[`packages/tianma/compaction-summarize/src/index.ts`](../packages/tianma/compaction-summarize/src/index.ts)）
 
 ## Seam 包（不可直接加载）
 
@@ -4264,3 +4304,5 @@ export interface Config {
 - `@deepseek-ai/dsh-util-values`（[`packages/util/values/src/index.ts`](../packages/util/values/src/index.ts)）
 - `@deepseek-ai/dsh-util-workspace-path`（[`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts)）
 - `@deepseek-ai/dsh-win32-process`（[`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts)）
+- `@tianma/dsh-bundle`（[`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts)）
+- `@tianma/dsh-token-meter-calibration`（[`packages/tianma/token-meter-calibration/src/index.ts`](../packages/tianma/token-meter-calibration/src/index.ts)）

@@ -15,6 +15,10 @@ English | [中文](README.zh.md)
 
 - [Use this package](#use-this-package)
 - [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
 -----
 
@@ -51,5 +55,54 @@ Mount this plugin **instead of** `dsh-compaction-tool-result-pruner` (the Tianma
 ### Invariant ownership
 
 No invariant companion is published because every mutation flows through `Session.append`'s canonical surface-contract validation; the plugin owns no separate mutable relation.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [upstream tool-result pruner](../../compaction/compaction-tool-result-pruner/README.md) — the head/middle/tail behavior this replaces
+- [compaction-basic](../../compaction/compaction-basic/README.md) — the trigger pipeline calling this seam
+- [spill family](../../spill/README.md) — out-of-context storage with retrieval, a stricter alternative for huge outputs
+
+-----
+
+<a id="model-experience"></a>
+## Model Experience
+
+### Cleared old tool result
+
+#### What the model sees
+
+Older oversized whitelisted results become exactly one text line: `[Old tool result content cleared]`. The most recent `keepRecentResults` results — and every below-threshold or non-whitelisted result — stay byte-identical, including rich blocks.
+
+#### Token effect
+
+Each cleared result drops from its full text size to 33 code points; the shadow-price event keeps replay accounting exact.
+
+#### KV Cache effect
+
+Surface replacement rewrites existing history nodes, invalidating the KV prefix from the first replaced node onward — the same effect the upstream pruner's replacements have.
+
+## Known Limitations and Deferred Work
+
+<a id="known-limitations-and-deferred-work"></a>
+
+These limits define when to keep the upstream pruner instead. They are current package constraints, not a task backlog.
+
+- **Event-level recency, not round grouping** — the window counts tool-result events, not ZCode's assistant-round groups; interleaved turns can keep slightly more than the group equivalent.
+- **No idle-time trigger** — ZCode's 60-minute idle clearing is out of scope; clearing runs only from the compaction trigger pipeline.
+- **Whitelist is name-exact** — custom or renamed tools need explicit `compactableTools` entries; an empty list clears every tool's old results.
+- **Cleared means re-readable, not recoverable in-context** — the model must re-read a cleared file to see it again; the append-only log keeps the original for replay and audit only.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+Semantics port from ZCode's `microcompact.ts` (keep-recent-5, 256-token savings gate); the char-based translation at 4 chars/token is documented in the config table.
 
 </details>

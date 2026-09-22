@@ -7,7 +7,7 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-## 摘要
+## 概述
 
 `dsh-compaction-recency-pruner` 注册与上游裁剪器相同的 `ctx.toolResultPruner` seam，语义取自 ZCode microcompact：最近 `keepRecentResults` 条工具结果无论多大都不动；更早的、来自白名单大流量工具（`read`、`grep`、`bash` 等）的超限结果整体清空为一行 `[Old tool result content cleared]` 标记。退化形状是"新上下文完好、旧上下文归零"——绝不是"全部部分截断"，后者正是上游方案在代码任务上的失效模式（目标区域恰在新读取内容的中段）。
 
@@ -15,6 +15,10 @@ kind: "package-reference"
 
 - [使用本包](#use-this-package)
 - [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
@@ -51,5 +55,54 @@ kind: "package-reference"
 ### 不变式归属
 
 No invariant companion is published because 所有变更都流经 `Session.append` 的规范 surface 契约校验；本插件不拥有独立的可变关系。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+- [上游 tool-result pruner](../../compaction/compaction-tool-result-pruner/README.zh.md) — 被本包替换的头/中/尾行为
+- [compaction-basic](../../compaction/compaction-basic/README.zh.md) — 调用本 seam 的触发管线
+- [spill 家族](../../spill/README.zh.md) — 带检索的上下文外存储，超大输出的更严格替代
+
+-----
+
+<a id="model-experience"></a>
+## 模型体验
+
+### 被清理的旧工具结果
+
+#### 模型看到什么
+
+较早的超限白名单结果变成恰好一行文本：`[Old tool result content cleared]`。最近 `keepRecentResults` 条结果——以及所有低于阈值或非白名单的结果——保持逐字节一致，富块亦然。
+
+#### Token 影响
+
+每条被清理结果从完整文本大小降到 33 个码点；影子价格事件保证回放核算精确。
+
+#### KV 缓存影响
+
+surface 替换改写既有历史节点，从第一个被替换节点起使 KV 前缀失效——与上游裁剪器的替换影响相同。
+
+## 已知限制与延期工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+这些局限说明何时应保留上游裁剪器。它们是当前的包约束，不是任务清单。
+
+- **事件级近因，非回合分组** — 窗口按工具结果事件计数，而非 ZCode 的 assistant 回合组；交错回合可能比组等价物多保留一点。
+- **无空闲触发** — ZCode 的 60 分钟空闲清理不在范围；清理只随压缩触发管线运行。
+- **白名单按名字精确匹配** — 自定义或改名的工具需要显式 `compactableTools` 条目；空列表会清理所有工具的旧结果。
+- **清理意味着可重读，而非上下文内可恢复** — 模型需要重新读取被清理的文件；append-only 日志仅为回放与审计保留原文。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文 — 点击展开</summary>
+
+语义移植自 ZCode 的 `microcompact.ts`（保最近 5、256 token 节省门槛）；按 4 字符/token 的折算记录在配置表中。
 
 </details>

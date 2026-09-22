@@ -17,6 +17,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 
 export const name = 'tianma-behavioral-guidelines'
 
+/** The stable contribution name the section registers under. */
 export const SECTION_NAME = 'tianma:behavioral-guidelines'
 
 /** Sorts after DEPLOYMENT_PERSONA_PREFIX (0), before PLAN_POLICY (500). */
@@ -54,7 +55,9 @@ Write code that reads like the surrounding code: match its comment density, nami
 
 Only write a code comment to state a constraint the code itself can't show — never to say where it came from, what the next line does, or why your change is correct; that's you talking to the reviewer, not the next reader, and it's noise the moment the PR merges.`
 
-/** The full contributed section text, exported for snapshot tests. */
+/** The full contributed section text, exported for snapshot tests.
+ * @returns the exact text registered through the system-prompt seam.
+ */
 export function sectionText(): string {
   return [
     COMMUNICATING_WITH_THE_USER,
