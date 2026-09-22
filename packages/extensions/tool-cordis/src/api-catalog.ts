@@ -3037,6 +3037,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [],
   },
   {
+    key: 'tianmaTokenCalibration',
+    summary: 'The calibration service: rolling factor plus file persistence.',
+    description: 'The calibration service: rolling factor plus file persistence. Pure state container + explicit I/O — no hidden timers, no background work.',
+    methods: [
+      {
+        signature: 'estimateSession(session: Session): DensityPrices',
+        description: 'Both density prices over one session\'s current model-visible surface.',
+        parameters: [{ name: 'session', description: 'session whose derived history to price.' }],
+        returns: 'the CJK-split and fixed-density totals.',
+      },
+      {
+        signature: 'sessionMultiplier(session: Session): number',
+        description: 'The correction the token meter applies to one session\'s measurement: the session\'s own density ratio times the rolling residual factor.',
+        parameters: [{ name: 'session', description: 'session whose surface is being measured.' }],
+        returns: '1 when the surface is non-CJK and no sample has been recorded.',
+      },
+      {
+        signature: 'record(estimatedTokens: number, reportedTokens: number): void',
+        description: 'Record one heuristic-vs-reported pair from a routed request.',
+        parameters: [{ name: 'estimatedTokens', description: 'the heuristic estimate for the request surface.' }, { name: 'reportedTokens', description: 'the provider-reported total for the same request.' }],
+      },
+      {
+        signature: 'recordSession(session: Session, estimateTokens: (index: number) => number): number',
+        description: 'Scan one session for reported usage samples and record each against the given heuristic estimate of the same request surface.',
+        parameters: [{ name: 'session', description: 'the session whose log to scan.' }, { name: 'estimateTokens', description: 'heuristic estimate per sampled request.' }],
+        returns: 'how many samples were recorded.',
+      },
+      {
+        signature: 'persist(): void',
+        description: 'Write the current factor snapshot to the state file.',
+        parameters: [],
+      },
+    ],
+  },
+  {
     key: 'timer',
     summary: 'Disposable timer helpers mixed into Cordis contexts.',
     description: 'Disposable timer helpers mixed into Cordis contexts.',
@@ -4780,6 +4815,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DeepSeekLlmApiJson',
     declaration: 'export type DeepSeekLlmApiJson = null | boolean | number | string | DeepSeekLlmApiJson[] | {\n    [key: string]: DeepSeekLlmApiJson;\n};',
+  },
+  {
+    name: 'DensityPrices',
+    declaration: 'export interface DensityPrices {\n    readonly calibratedTokens: number;\n    readonly flatTokens: number;\n}',
   },
   {
     name: 'DeveloperMessage',

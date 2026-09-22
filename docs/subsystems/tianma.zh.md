@@ -15,7 +15,7 @@
 - **近因保全清理**（`@tianma/dsh-compaction-recency-pruner`）以 ZCode microcompact 语义注册同一个 `ctx.toolResultPruner` seam：最近的结果逐字节不动；更早的超限白名单结果整体清空为一行标记。见[包 README](../../packages/tianma/compaction-recency-pruner)。
 - **高保真总结**（`@tianma/dsh-compaction-summarize`）子类化文档声明的 `summarize()` 钩子，保持 KV 前缀对齐的信封，同时换入 ZCode 的九段式提示词：全部用户消息列出、安全约束逐字、analysis 先于 summary 输出。见[包 README](../../packages/tianma/compaction-summarize)。
 - **行为准则**（`@tianma/dsh-behavioral-guidelines`）注册一个承载 ZCode 沟通与自主推进纪律的静态 system-prompt 节。见[包 README](../../packages/tianma/behavioral-guidelines)。
-- **token 计量校准**（`@tianma/dsh-token-meter-calibration`）交付中文感知分密度估算器与滚动 usage 因子核心；装配另行落地。见[包 README](../../packages/tianma/token-meter-calibration)。
+- **token 计量校准**（`@tianma/dsh-token-meter-calibration`）修正 compaction 读取的压力测量：会话表面的 CJK 密度比值乘以持久化的报告/估算滚动因子，作用在 meter 自身的测量结果上。见[包 README](../../packages/tianma/token-meter-calibration)。
 
 ## 组合与校验
 
@@ -36,4 +36,50 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 The Cordis service registered under `ctx.tianmaHookTrust`.
 
 Source: [`packages/tianma/hooks-trust/src/index.ts`](../../packages/tianma/hooks-trust/src/index.ts)
+
+<a id="ctxtianmatokencalibration--usagecalibrator"></a>
+
+### `ctx.tianmaTokenCalibration` — `UsageCalibrator`
+
+The calibration service: rolling factor plus file persistence. Pure state container + explicit I/O — no hidden timers, no background work.
+
+```ts cordis-catalog
+/**
+ * Both density prices over one session's current model-visible surface.
+ * @param session - session whose derived history to price.
+ * @returns the CJK-split and fixed-density totals.
+ */
+estimateSession(session: Session): DensityPrices
+
+/**
+ * The correction the token meter applies to one session's measurement: the
+ * session's own density ratio times the rolling residual factor.
+ * @param session - session whose surface is being measured.
+ * @returns 1 when the surface is non-CJK and no sample has been recorded.
+ */
+sessionMultiplier(session: Session): number
+
+/**
+ * Record one heuristic-vs-reported pair from a routed request.
+ * @param estimatedTokens - the heuristic estimate for the request surface.
+ * @param reportedTokens - the provider-reported total for the same request.
+ */
+record(estimatedTokens: number, reportedTokens: number): void
+
+/**
+ * Scan one session for reported usage samples and record each against the
+ * given heuristic estimate of the same request surface.
+ * @param session - the session whose log to scan.
+ * @param estimateTokens - heuristic estimate per sampled request.
+ * @returns how many samples were recorded.
+ */
+recordSession(session: Session, estimateTokens: (index: number) => number): number
+
+/** Write the current factor snapshot to the state file. */
+persist(): void
+```
+
+Types: [Session](session.zh.md)
+
+Source: [`packages/tianma/token-meter-calibration/src/service.ts`](../../packages/tianma/token-meter-calibration/src/service.ts)
 <!-- END GENERATED cordis-surface -->

@@ -4149,6 +4149,24 @@ export interface Config {
 
 来源： [`packages/tianma/hooks-trust/src/index.ts:25`](../packages/tianma/hooks-trust/src/index.ts)
 
+<a id="tianmadsh-token-meter-calibration"></a>
+
+## `@tianma/dsh-token-meter-calibration`
+
+需要： `tokenMeter`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Calibration state file path (default `<harness home>/tianma-calibration.json`). */
+  statePath?: string
+  /** Rolling reported/estimated sample window (default {@link DEFAULT_WINDOW}). */
+  window?: number
+}
+```
+
+来源： [`packages/tianma/token-meter-calibration/src/index.ts:57`](../packages/tianma/token-meter-calibration/src/index.ts)
+
 ## 无配置的可加载插件
 
 这些插件通过 `cordis.yml` 中不含 `config:` 块的条目加载；它们未声明任何配置接口。
@@ -4334,4 +4352,3 @@ export interface Config {
 - `@deepseek-ai/dsh-util-workspace-path`（[`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts)）
 - `@deepseek-ai/dsh-win32-process`（[`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts)）
 - `@tianma/dsh-bundle`（[`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts)）
-- `@tianma/dsh-token-meter-calibration`（[`packages/tianma/token-meter-calibration/src/index.ts`](../packages/tianma/token-meter-calibration/src/index.ts)）

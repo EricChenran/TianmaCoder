@@ -23,6 +23,8 @@ describe('scanSessionUsages', () => {
   it('finds usage chunks in assistant streams and skips the rest', () => {
     const events = [
       { type: 'user/message', data: {} },
+      { type: 'assistant/message', data: {} },
+      { type: 'assistant/message', data: { message: {} } },
       { type: 'assistant/message', data: { message: { stream: [
         { type: 'text-delta', text: 'hi' },
         { type: 'usage', usage: { inputTokens: 100, outputTokens: 20 } },

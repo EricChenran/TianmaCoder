@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/token-meter-calibration/README.md
-README.md: 2a3b4eaeec3acc9e29d1dd6c366547ae3e2cdf05
-README.zh.md: 96140d973dda53e7fd5c4406a2fbcc46816af8fb
+README.md: 9851d326558c425962a0e120656a028da4d696f9
+README.zh.md: 909f495057a0a42ead3a7bc8ecc959a92d9f1762

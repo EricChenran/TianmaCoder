@@ -31,8 +31,9 @@
     - id: tianma-compaction-file-rehydrator
       name: '@tianma/dsh-compaction-file-rehydrator'
 
-# PR-4b: usage-driven calibration service — persists the reported/heuristic
-# factor under the harness home and exposes it at ctx.tianmaTokenCalibration.
+# PR-4b: usage-driven calibration — corrects the token-meter measurement
+# compaction reads (CJK density plus a persisted reported/estimated residual)
+# and exposes the factor at ctx.tianmaTokenCalibration.
 - insert:
     - id: tianma-token-calibration
       name: '@tianma/dsh-token-meter-calibration'

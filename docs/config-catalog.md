@@ -4146,6 +4146,24 @@ export interface Config {
 
 Source: [`packages/tianma/hooks-trust/src/index.ts:25`](../packages/tianma/hooks-trust/src/index.ts)
 
+<a id="tianmadsh-token-meter-calibration"></a>
+
+## `@tianma/dsh-token-meter-calibration`
+
+Requires: `tokenMeter`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Calibration state file path (default `<harness home>/tianma-calibration.json`). */
+  statePath?: string
+  /** Rolling reported/estimated sample window (default {@link DEFAULT_WINDOW}). */
+  window?: number
+}
+```
+
+Source: [`packages/tianma/token-meter-calibration/src/index.ts:57`](../packages/tianma/token-meter-calibration/src/index.ts)
+
 ## Loadable plugins with no config
 
 These load from a `cordis.yml` entry with no `config:` block; they declare no configuration API.
@@ -4331,4 +4349,3 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-util-workspace-path` ([`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts))
 - `@deepseek-ai/dsh-win32-process` ([`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts))
 - `@tianma/dsh-bundle` ([`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts))
-- `@tianma/dsh-token-meter-calibration` ([`packages/tianma/token-meter-calibration/src/index.ts`](../packages/tianma/token-meter-calibration/src/index.ts))

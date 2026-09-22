@@ -108,6 +108,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Ledger of hook command approvals: unchanged hashes pass, any change re-opens review, denials persist. Registered by the Tianma hooks-trust package.',
   },
   {
+    key: 'tianmaTokenCalibration',
+    pkg: 'token-meter-calibration',
+    title: 'CJK-aware correction of the token-meter pressure measurement',
+    mode: 'core',
+    consumers: [],
+    note: 'Maintains the session density ratio and the rolling reported/estimated factor, corrects ctx.tokenMeter.measure, and persists the factor under the harness home. Registered by the Tianma token-meter-calibration package.',
+  },
+  {
     key: 'hmr',
     pkg: 'hmr',
     title: 'Serialized module and configuration reloads',

@@ -62,6 +62,9 @@ export class CalibrationFactor {
     const sorted = [...this.ratios].sort((a, b) => a - b)
     const middle = Math.floor(sorted.length / 2)
     const low = sorted[middle - 1] ?? 0
+    // `middle` is below `sorted.length` for every non-empty window, so the
+    // fallback is unreachable; it satisfies indexed-access typing only.
+    /* v8 ignore next -- unreachable fallback for indexed access on a non-empty window */
     const high = sorted[middle] ?? low
     return sorted.length % 2 === 1 ? high : (low + high) / 2
   }

@@ -19,9 +19,3 @@
   name: "@deepseek-ai/dsh-client-locale"
   config:
     preference: zh
-
-
-# Dev-instance switch: the calibration service row is mounted but disabled
-# here while its loader import is investigated; the cores remain merged.
-- id: tianma-token-calibration
-  disabled: true

@@ -15,7 +15,7 @@ The upstream harness trades model-visible context quality for token cost in thre
 - **Recency-preserving clearing** (`@tianma/dsh-compaction-recency-pruner`) registers the same `ctx.toolResultPruner` seam with ZCode microcompact semantics: the most recent results stay byte-identical; older oversized whitelisted results clear wholesale to one marker line. See the [package README](../../packages/tianma/compaction-recency-pruner).
 - **Fidelity summarization** (`@tianma/dsh-compaction-summarize`) subclasses the documented `summarize()` hook, keeping the KV-prefix-preserving envelope while replacing the instruction with ZCode's nine-section prompt: all user messages listed, security constraints verbatim, analysis-then-summary output. See the [package README](../../packages/tianma/compaction-summarize).
 - **Behavioral guidelines** (`@tianma/dsh-behavioral-guidelines`) registers one static system-prompt section carrying ZCode's communication and autonomy discipline. See the [package README](../../packages/tianma/behavioral-guidelines).
-- **Token-meter calibration** (`@tianma/dsh-token-meter-calibration`) ships the CJK-aware split-density estimator and rolling usage factor cores; wiring lands separately. See the [package README](../../packages/tianma/token-meter-calibration).
+- **Token-meter calibration** (`@tianma/dsh-token-meter-calibration`) corrects the pressure measurement compaction reads: the session surface's CJK density ratio times a persisted rolling reported/estimated factor, applied to the meter's own measurement. See the [package README](../../packages/tianma/token-meter-calibration).
 
 ## Composition and verification
 
@@ -36,4 +36,50 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 The Cordis service registered under `ctx.tianmaHookTrust`.
 
 Source: [`packages/tianma/hooks-trust/src/index.ts`](../../packages/tianma/hooks-trust/src/index.ts)
+
+<a id="ctxtianmatokencalibration--usagecalibrator"></a>
+
+### `ctx.tianmaTokenCalibration` — `UsageCalibrator`
+
+The calibration service: rolling factor plus file persistence. Pure state container + explicit I/O — no hidden timers, no background work.
+
+```ts cordis-catalog
+/**
+ * Both density prices over one session's current model-visible surface.
+ * @param session - session whose derived history to price.
+ * @returns the CJK-split and fixed-density totals.
+ */
+estimateSession(session: Session): DensityPrices
+
+/**
+ * The correction the token meter applies to one session's measurement: the
+ * session's own density ratio times the rolling residual factor.
+ * @param session - session whose surface is being measured.
+ * @returns 1 when the surface is non-CJK and no sample has been recorded.
+ */
+sessionMultiplier(session: Session): number
+
+/**
+ * Record one heuristic-vs-reported pair from a routed request.
+ * @param estimatedTokens - the heuristic estimate for the request surface.
+ * @param reportedTokens - the provider-reported total for the same request.
+ */
+record(estimatedTokens: number, reportedTokens: number): void
+
+/**
+ * Scan one session for reported usage samples and record each against the
+ * given heuristic estimate of the same request surface.
+ * @param session - the session whose log to scan.
+ * @param estimateTokens - heuristic estimate per sampled request.
+ * @returns how many samples were recorded.
+ */
+recordSession(session: Session, estimateTokens: (index: number) => number): number
+
+/** Write the current factor snapshot to the state file. */
+persist(): void
+```
+
+Types: [Session](session.md)
+
+Source: [`packages/tianma/token-meter-calibration/src/service.ts`](../../packages/tianma/token-meter-calibration/src/service.ts)
 <!-- END GENERATED cordis-surface -->

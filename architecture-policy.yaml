@@ -37,7 +37,7 @@ modules:
   - id: tianma-calibration
     roots: [packages/tianma/token-meter-calibration/src]
     requires: []
-    upstreamSeams: [cordis, dsh-session]
+    upstreamSeams: [cordis, dsh-session, dsh-llm, dsh-token-meter, dsh-util-values]
 
   - id: tianma-hooks-trust
     roots: [packages/tianma/hooks-trust/src]

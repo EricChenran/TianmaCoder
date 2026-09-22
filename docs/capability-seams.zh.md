@@ -11,6 +11,8 @@
 flowchart LR
   pkg_hooks_trust["hooks-trust"]
   svc_tianmaHookTrust["ctx.tianmaHookTrust<br/>Content-hash trust admission for third-party workspace hooks"]
+  pkg_token_meter_calibration["token-meter-calibration"]
+  svc_tianmaTokenCalibration["ctx.tianmaTokenCalibration<br/>CJK-aware correction of the token-meter pressure measurement"]
   pkg_hmr["hmr"]
   svc_hmr["ctx.hmr<br/>Serialized module and configuration reloads"]
   pkg_app_boot["app-boot"]
@@ -402,6 +404,7 @@ flowchart LR
   pkg_terminal --> svc_terminals
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
+  pkg_token_meter_calibration --> svc_tianmaTokenCalibration
   pkg_tool_subagent --> svc_subagentModelSelection
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
@@ -569,6 +572,7 @@ flowchart LR
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `ctx.tianmaHookTrust` | `core` | `hooks-trust` | - | - | - | 内容哈希信任准入账本：未变化的哈希放行，任何变更重开审查，拒绝跨重启持久化。由 Tianma hooks-trust 包注册。 |
+| `ctx.tianmaTokenCalibration` | `core` | `token-meter-calibration` | - | - | - | 维护会话密度比值与报告/估算滚动因子，修正 ctx.tokenMeter.measure，并把因子持久化到 harness home。由 Tianma token-meter-calibration 包注册。 |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | 负责模块和精确配置监听；应用修改共用其队列，自动重载等待应用文件锁。 |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | 与 CLI 共享 profile 包操作，并向 Web 和 Agent 调用方分别报告持久状态与运行状态。 |
 | `ctx.profileContext` | `core` | [`app-boot`](../packages/boot/app-boot) | - | [`plugin-manager`](../packages/boot/plugin-manager) | - | dsh launcher 提供纯数据形式的 profile 位置与组合输入；重载调度由 dsh-hmr 负责。 |

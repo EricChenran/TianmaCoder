@@ -14,6 +14,8 @@ import { homedir } from 'node:os'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { CalibrationFactor } from './factor.ts'
 import type { CalibrationFactorSnapshot } from './factor.ts'
+import { densityRatio, priceSession } from './surface.ts'
+import type { DensityPrices } from './surface.ts'
 
 export { CalibrationFactor } from './factor.ts'
 export type { CalibrationFactorSnapshot } from './factor.ts'
@@ -89,6 +91,30 @@ export class UsageCalibrator {
   /** Current multiplier (1 before any sample). */
   get factorValue(): number {
     return this.factor.factor
+  }
+
+  /** Retained sample count behind the current multiplier. */
+  get sampleCount(): number {
+    return this.factor.sampleCount
+  }
+
+  /**
+   * Both density prices over one session's current model-visible surface.
+   * @param session - session whose derived history to price.
+   * @returns the CJK-split and fixed-density totals.
+   */
+  estimateSession(session: Session): DensityPrices {
+    return priceSession(session)
+  }
+
+  /**
+   * The correction the token meter applies to one session's measurement: the
+   * session's own density ratio times the rolling residual factor.
+   * @param session - session whose surface is being measured.
+   * @returns 1 when the surface is non-CJK and no sample has been recorded.
+   */
+  sessionMultiplier(session: Session): number {
+    return densityRatio(session) * this.factor.factor
   }
 
   /**

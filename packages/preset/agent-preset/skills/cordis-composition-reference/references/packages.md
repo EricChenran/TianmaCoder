@@ -465,6 +465,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@tianma/dsh-compaction-recency-pruner` | yes | Recency-preserving tool-result clearing: the most recent results stay byte-identical, older oversized results are cleared wholesale |
 | `@tianma/dsh-compaction-summarize` | no | Fidelity compaction summarizer subclassing the documented summarize() hook with ZCode's verbatim-preservation prompt craft |
 | `@tianma/dsh-hooks-trust` | yes | Content-hash trust ledger for third-party workspace hooks: unchanged approvals pass, any change re-opens review, denials persist |
+| `@tianma/dsh-token-meter-calibration` | yes | CJK-aware density pricing and rolling usage-calibration factor cores for the token meter |
 
 ## todo
 
