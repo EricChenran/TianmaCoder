@@ -1,0 +1,43 @@
+# The Tianma bundle patch: applied after dsh-base (and any mode bundle) in a
+# profile's bundle list. Rows below override dsh-base rows by id; a patch
+# replaces the targeted row's whole config, so each row restates every key it
+# owns. scripts/verify-profile-patches.ts fails CI when a referenced id drifts
+# upstream, so a stale override can never ship silently.
+#
+# One row (or one insert) per capability, so each stays independently
+# revertible by deleting its entry.
+
+# PR-1: keep 35% of the window as verbatim recent tail across compaction
+# (upstream default 16%), so long-task sessions retain more exact active
+# context instead of trusting the summary alone.
+- id: compaction-basic
+  name: '@tianma/dsh-compaction-summarize'
+  config:
+    retainRatio: 0.35
+
+# PR-1: raise the AGENTS.md chain budget from 64KB to 256KB so large-repo
+# engineering conventions are no longer silently dropped before the most
+# specific file truncates.
+- id: agent-instructions
+  config:
+    maxBytes: 262144
+
+# PR-1: ZCode-derived behavioral prompt sections (communication discipline,
+# autonomous-progress boundaries, comment discipline) as one named
+# system-prompt contribution ordered after the deployment persona prefix.
+- insert:
+    - id: tianma-behavioral-guidelines
+      name: '@tianma/dsh-behavioral-guidelines'
+
+# PR-2: swap the head/middle/tail pruner for the recency-preserving clearer.
+# The active window (most recent results) stays byte-identical; older
+# oversized results from volume-heavy tools clear wholesale to one marker
+# line. The code task's load-bearing span is the middle of a fresh read, so
+# partial truncation of EVERY result — including the one in hand — is the
+# failure mode this row removes.
+- id: tool-result-pruner
+  name: '@tianma/dsh-compaction-recency-pruner'
+  config:
+    keepRecentResults: 5
+    thresholdChars: 8192
+    minCharsSaved: 1024

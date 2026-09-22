@@ -456,6 +456,14 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 |---|---|---|
 | `@deepseek-ai/dsh-llm-replay` | yes | Replay LLM plugin: short-circuits llm/stream with model chunks reconstructed from a recorded session JSONL (keyless snapshot tests) |
 
+## tianma
+
+| Package | Config | Description |
+|---|---|---|
+| `@tianma/dsh-behavioral-guidelines` | no | ZCode-derived behavioral prompt sections registered as one named system-prompt contribution |
+| `@tianma/dsh-compaction-recency-pruner` | yes | Recency-preserving tool-result clearing: the most recent results stay byte-identical, older oversized results are cleared wholesale |
+| `@tianma/dsh-compaction-summarize` | no | Fidelity compaction summarizer subclassing the documented summarize() hook with ZCode's verbatim-preservation prompt craft |
+
 ## todo
 
 | Package | Config | Description |

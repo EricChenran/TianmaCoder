@@ -324,6 +324,13 @@
       "@deepseek-ai/dsh-compaction-image-offload/projection": ["./packages/compaction/compaction-image-offload/src/projection.ts"],
       "@deepseek-ai/dsh-session-format-catalog/message-projections": ["./packages/session/session-format-catalog/src/message-projections.ts"],
       "@deepseek-ai/dsh-native-command/types": ["./packages/util/native-command/src/types.ts"],
+      // Tianma integration packages (hand-written: the generator only expands
+      // the @deepseek-ai/dsh- prefix; these live outside its marked region).
+      "@tianma/dsh-bundle": ["./packages/tianma/bundle/src/index.ts"],
+      "@tianma/dsh-behavioral-guidelines": ["./packages/tianma/behavioral-guidelines/src/index.ts"],
+      "@tianma/dsh-compaction-recency-pruner": ["./packages/tianma/compaction-recency-pruner/src/index.ts"],
+      "@tianma/dsh-compaction-summarize": ["./packages/tianma/compaction-summarize/src/index.ts"],
+      "@tianma/dsh-token-meter-calibration": ["./packages/tianma/token-meter-calibration/src/index.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],

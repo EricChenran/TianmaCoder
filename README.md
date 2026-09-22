@@ -1,19 +1,24 @@
 # TianmaCoder
 
-基于 DeepSeek Harness (dsh) 的二次开发仓库:将 ZCode 的优势(token 计量、近因保全压缩、总结保真、提示词工艺)融入 dsh 的 Cordis 插件架构。
+English | [中文](README.zh.md)
 
-**开发主体为 dsh 完整源码**;上游更新通过 `dsh-upstream` 远程拉取合并。
+A secondary-development repository over DeepSeek Harness (dsh): porting ZCode's strengths (token accounting, recency-preserving compaction, summary fidelity, prompt craft) into dsh's Cordis plugin architecture.
 
-## 文档
+**The development base is the full dsh source**; upstream updates merge in through the `dsh-upstream` remote.
 
-- [docs-integration-plan.md](docs-integration-plan.md) — ZCode → dsh 整合方案(P0 质量急救 / P1 连续性 / P2 治理 / 验证协议)
+## Docs
 
-## 上游
+- [docs-integration-plan.md](docs-integration-plan.md) — the ZCode → dsh integration plan (P0 quality fixes / P1 continuity / P2 governance / verification protocol)
+- [docs-integration-pr-roadmap.md](docs-integration-pr-roadmap.md) — the PR breakdown, milestones, and A/B verification protocol
+
+## Upstream
 
 - Base: https://github.com/deepseek-ai/deepseek-harness (master)
-- 参考分析: https://github.com/zai-org/ZCode
+- Reference analysis: https://github.com/zai-org/ZCode
 
-## 开发
+## Development
+
+<a id="run"></a>
 
 ```sh
 pnpm install
@@ -21,7 +26,9 @@ pnpm run build
 pnpm dsh web --no-open
 ```
 
-## 同步上游
+<a id="run-from-source"></a>
+
+## Sync upstream
 
 ```sh
 git fetch dsh-upstream
