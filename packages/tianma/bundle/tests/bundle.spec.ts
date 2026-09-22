@@ -40,6 +40,9 @@ describe('@tianma/dsh-bundle', () => {
         resolve(root, '../../bundle/base/cordis.patch.yml'),
         resolve(root, '../../bundle/web-app/cordis.patch.yml'),
         resolve(root, '../../bundle/web-app/presets/standard.patch.yml'),
+        resolve(root, '../../bundle/web-app/presets/ptc.patch.yml'),
+        resolve(root, '../../bundle/web-app/presets/minimal.patch.yml'),
+        resolve(root, '../../bundle/web-app/presets/cordis.patch.yml'),
       ],
       [resolve(root, 'cordis.patch.yml')],
     )
