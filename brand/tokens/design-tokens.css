@@ -1,0 +1,50 @@
+/* TianmaCoder design tokens — generated from brand/BRAND_GUIDELINES.md v1.0
+   Source of truth: brand/tokens/design-tokens.json. Keep both in sync. */
+:root {
+  /* Brand green ramp — 500 is the LOGO-sampled primary (#86E100).
+     White-ground text must use 700/800/900; 500 is graphics & dark-surface only. */
+  --tc-green-50: #f7ffe8;
+  --tc-green-100: #f4ffdc;
+  --tc-green-200: #e3fa9f;
+  --tc-green-300: #ccf366;
+  --tc-green-400: #abea2f;
+  --tc-green-500: #86e100;
+  --tc-green-600: #6fbb00;
+  --tc-green-700: #4a8000;
+  --tc-green-800: #3a6600;
+  --tc-green-900: #2f5500;
+  --tc-green-950: #1a3000;
+
+  /* Ink (green-tinted neutrals) */
+  --tc-ink-900: #0d1405;
+  --tc-ink-700: #333d28;
+  --tc-ink-500: #5f6955;
+  --tc-ink-300: #c4ccb4;
+  --tc-ink-100: #e8eed9;
+
+  /* Surfaces */
+  --tc-surface-paper: #ffffff;
+  --tc-surface-tint: #f4ffdc;
+  --tc-surface-soft: #fafdf4;
+  --tc-surface-border: #e4efd2;
+  --tc-surface-dark: #101a04;
+  --tc-surface-dark-elevated: #16230a;
+
+  /* Functional (AA on paper) */
+  --tc-success: #3a6600;
+  --tc-warning: #b45309;
+  --tc-danger: #b91c1c;
+  --tc-info: #1d4ed8;
+
+  /* Semantic aliases */
+  --tc-text-primary: var(--tc-ink-900);
+  --tc-text-secondary: var(--tc-ink-500);
+  --tc-accent: var(--tc-green-500);
+  --tc-accent-text: var(--tc-green-700);
+  --tc-accent-on-accent: var(--tc-ink-900);
+
+  /* Typography */
+  --tc-font-heading: 'Manrope', 'Inter', 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --tc-font-body: 'Inter', 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --tc-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+}

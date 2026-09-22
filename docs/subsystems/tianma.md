@@ -20,3 +20,20 @@ The upstream harness trades model-visible context quality for token cost in thre
 ## Composition and verification
 
 The [bundle](../../packages/tianma/bundle) applies row overrides after `dsh-base`: two retuned defaults (`retainRatio` 0.35, AGENTS.md budget 256KB) and two row swaps. The static patch verifier asserts every overridden id exists exactly once in the base layer, so upstream drift fails closed. The roadmap and verification protocol live in [`docs-integration-pr-roadmap.md`](../../docs-integration-pr-roadmap.md).
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxtianmahooktrust--tianmahooktrust"></a>
+
+### `ctx.tianmaHookTrust` — `TianmaHookTrust`
+
+The Cordis service registered under `ctx.tianmaHookTrust`.
+
+Source: [`packages/tianma/hooks-trust/src/index.ts`](../../packages/tianma/hooks-trust/src/index.ts)
+<!-- END GENERATED cordis-surface -->

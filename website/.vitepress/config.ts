@@ -176,13 +176,14 @@ const base = process.env.DOCS_BASE ?? '/'
 
 /** Site identity shared by the VitePress configuration and the llms.txt index. */
 const siteIdentity = {
-  title: 'DeepSeek Harness',
-  description: '用于构建 Agent Harness 的插件化 SDK',
+  title: 'TianmaCoder',
+  description: '宜春天码信息集团旗下软件工程前沿开发工具 · 官方 Harness',
 }
 
 /**
- * The DeepSeek wordmark, inlined so its `currentColor` fills follow the active
- * theme. An `<img>` would freeze the mark at the colors the file declares.
+ * The TianmaCoder wordmark (brand/BRAND_GUIDELINES.md), inlined so its
+ * `currentColor` fills follow the active theme. An `<img>` would freeze the
+ * mark at the colors the file declares.
  */
 const wordmark = readFileSync(resolve(import.meta.dirname, '../public/wordmark.svg'), 'utf8')
   .trim()
@@ -252,7 +253,7 @@ const scrollbarScript = `
 `
 
 /**
- * Navigation-bar title: the DeepSeek wordmark and the release-stage tag.
+ * Navigation-bar title: the TianmaCoder wordmark and the release-stage tag.
  * VitePress renders `siteTitle` as HTML.
  *
  * @param previewTag - Localized release-stage label.

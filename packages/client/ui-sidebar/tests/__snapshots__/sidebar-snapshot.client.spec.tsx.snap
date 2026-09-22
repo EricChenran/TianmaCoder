@@ -112,10 +112,10 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
             >
               <svg
                 aria-hidden="true"
-                data-content="965fe321"
+                data-content="c16814e2"
                 fill="none"
-                height="17.6580310880829"
-                viewBox="0 0 23.16 17.04"
+                height="17.625"
+                viewBox="0 0 128 94"
                 width="24"
               />
             </div>
@@ -133,7 +133,7 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
                 <span
                   class="localBuildTitle"
                 >
-                  DSH Local Build
+                  TianmaCoder Local Build
                 </span>
                 <span
                   class="buildVersion"
@@ -243,10 +243,10 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
           >
             <svg
               aria-hidden="true"
-              data-content="965fe321"
+              data-content="c16814e2"
               fill="none"
-              height="17.6580310880829"
-              viewBox="0 0 23.16 17.04"
+              height="17.625"
+              viewBox="0 0 128 94"
               width="24"
             />
           </div>
@@ -346,10 +346,10 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
             >
               <svg
                 aria-hidden="true"
-                data-content="965fe321"
+                data-content="c16814e2"
                 fill="none"
-                height="17.6580310880829"
-                viewBox="0 0 23.16 17.04"
+                height="17.625"
+                viewBox="0 0 128 94"
                 width="24"
               />
             </div>
@@ -367,7 +367,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
                 <span
                   class="localBuildTitle"
                 >
-                  DSH Local Build
+                  TianmaCoder Local Build
                 </span>
                 <span
                   class="buildVersion"
@@ -480,10 +480,10 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
             >
               <svg
                 aria-hidden="true"
-                data-content="965fe321"
+                data-content="c16814e2"
                 fill="none"
-                height="17.6580310880829"
-                viewBox="0 0 23.16 17.04"
+                height="17.625"
+                viewBox="0 0 128 94"
                 width="24"
               />
             </div>
@@ -501,7 +501,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
                 <span
                   class="localBuildTitle"
                 >
-                  DSH 本地构建
+                  TianmaCoder 本地构建
                 </span>
                 <span
                   class="buildVersion"

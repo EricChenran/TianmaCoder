@@ -14,6 +14,11 @@
  */
 
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+// The upstream default one-shot summarizer. `super.summarize` cannot serve as
+// the fallback: the base engine dispatches its hook back to `this.summarize`
+// (summarize is bound dynamically at index.ts), which would re-enter the
+// fidelity override. The plain function IS the upstream behavior.
+import { summarizeWithLlm } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
 import type { ResolvedConfig } from '@deepseek-ai/dsh-compaction-basic'
 import type {
   SummarizationInput,
@@ -33,9 +38,25 @@ import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { FIDELITY_INSTRUCTION } from './instruction.ts'
 import { extractSummaryBlocks } from './extract.ts'
+import {
+  FIDELITY_RETRY_LIMIT,
+  SummarizeBreaker,
+  estimatePrefixTokens,
+  fallbackCheckpoint,
+  isPromptTooLong,
+  truncatePrefix,
+} from './resilience.ts'
 
 export { FIDELITY_INSTRUCTION, FIDELITY_SECTION_HEADERS } from './instruction.ts'
 export { extractSummaryBlocks } from './extract.ts'
+export {
+  FIDELITY_BREAKER_LIMIT,
+  FIDELITY_RETRY_LIMIT,
+  SummarizeBreaker,
+  fallbackCheckpoint,
+  isPromptTooLong,
+  truncatePrefix,
+} from './resilience.ts'
 
 /** Resolve the summarization target: configured, else routed, else agent options. */
 function fidelityTarget(
@@ -71,7 +92,104 @@ function finishError(finish: FinishReason): Error | undefined {
 
 /** Fidelity compaction engine: upstream replay and durability, fidelity prompt. */
 export class FidelityCompactionEngine extends BasicCompactionEngine {
+  private readonly breaker = new SummarizeBreaker()
+
+  /**
+   * Public pass-through to the resilience-wrapped summarizer for embedding
+   * callers and tests (the hook itself stays protected like upstream).
+   * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
+   * @param agent - supplies routed-model history, fallback model, and session id.
+   * @param signal - optional cancellation forwarded to the adapter.
+   * @returns safe text summary blocks and the exact call envelope and output.
+   */
+  runSummarize(
+    input: SummarizationInput,
+    agent: Agent,
+    signal?: AbortSignal,
+  ): Promise<SummaryResult> {
+    return this.summarize(input, agent, signal)
+  }
+
   protected override async summarize(
+    input: SummarizationInput,
+    agent: Agent,
+    signal?: AbortSignal,
+  ): Promise<SummaryResult> {
+    // Circuit breaker: after FIDELITY_BREAKER_LIMIT consecutive failures the
+    // engine falls back to the upstream one-shot instruction until a call
+    // succeeds again, so a poisoned route degrades instead of compounding.
+    if (this.breaker.open) {
+      const result = await this.upstreamSummarize(input, agent, signal)
+      this.breaker.recordSuccess()
+      return result
+    }
+    let attemptInput = input
+    let lastError: unknown
+    for (let attempt = 0; attempt <= FIDELITY_RETRY_LIMIT; attempt += 1) {
+      try {
+        const result = await this.summarizeOnce(attemptInput, agent, signal)
+        this.breaker.recordSuccess()
+        return result
+      } catch (error) {
+        lastError = error
+        if (isPromptTooLong(error) && attempt < FIDELITY_RETRY_LIMIT
+          && estimatePrefixTokens(attemptInput.messages) > 0) {
+          // Retryable over-window rejections are progress, not poison: they
+          // must not count toward the breaker.
+          attemptInput = { ...attemptInput, messages: truncatePrefix(attemptInput.messages) }
+          continue
+        }
+        const open = this.breaker.recordFailure()
+        if (open) {
+          const result = await this.upstreamSummarize(input, agent, signal)
+          this.breaker.recordSuccess()
+          return result
+        }
+        // Final squeeze: land a deterministic fallback checkpoint instead of
+        // erroring the compaction turn (roadmap willRetrigger clause).
+        if ((error as { code?: string } | null)?.code === 'MAX_TOKENS'
+          || isPromptTooLong(error)) {
+          const target = fidelityTarget(agent, this.config)
+          if (target !== undefined) {
+            const summary = [{ type: 'text' as const, text: fallbackCheckpoint(input.messages) }]
+            return {
+              summary,
+              rawOutput: summary,
+              provider: target.provider,
+              model: target.model,
+              maxTokens: this.config.maxTokens,
+            }
+          }
+        }
+        throw error
+      }
+    }
+    throw lastError
+  }
+
+  /**
+   * One fidelity summarization attempt without resilience wrapping.
+   * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
+   * @param agent - supplies routed-model history, fallback model, and session id.
+   * @param signal - optional cancellation forwarded to the adapter.
+   * @returns safe text summary blocks and the exact call envelope and output.
+   */
+  /**
+   * The upstream default one-shot summarizer, used as the breaker fallback.
+   * @param input - replayed conversation prefix to condense.
+   * @param agent - supplies routed-model history, fallback model, and session id.
+   * @param signal - optional cancellation forwarded to the adapter.
+   * @returns safe text summary blocks and the exact call envelope and output.
+   */
+  private upstreamSummarize(
+    input: SummarizationInput,
+    agent: Agent,
+    signal?: AbortSignal,
+  ): Promise<SummaryResult> {
+    return summarizeWithLlm(this.ctx, this.config, input, agent, signal)
+  }
+
+  private async summarizeOnce(
     input: SummarizationInput,
     agent: Agent,
     signal?: AbortSignal,

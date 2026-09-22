@@ -4080,6 +4080,20 @@ export interface Config {
 
 Source: [`packages/deliverables/workspace-changes/src/index.ts:33`](../packages/deliverables/workspace-changes/src/index.ts)
 
+<a id="tianmadsh-compaction-file-rehydrator"></a>
+
+## `@tianma/dsh-compaction-file-rehydrator`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Upper bound for the rendered section (default `4096` chars). */
+  maxChars?: number
+}
+```
+
+Source: [`packages/tianma/compaction-file-rehydrator/src/index.ts:31`](../packages/tianma/compaction-file-rehydrator/src/index.ts)
+
 <a id="tianmadsh-compaction-recency-pruner"></a>
 
 ## `@tianma/dsh-compaction-recency-pruner`
@@ -4117,6 +4131,20 @@ export interface RecencyPruneConfig {
 ```
 
 Source: [`packages/tianma/compaction-recency-pruner/src/types.ts:5`](../packages/tianma/compaction-recency-pruner/src/types.ts)
+
+<a id="tianmadsh-hooks-trust"></a>
+
+## `@tianma/dsh-hooks-trust`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Ledger file path (default `<home>/.dsh/tianma-hook-trust.json`). */
+  ledgerPath?: string
+}
+```
+
+Source: [`packages/tianma/hooks-trust/src/index.ts:25`](../packages/tianma/hooks-trust/src/index.ts)
 
 ## Loadable plugins with no config
 

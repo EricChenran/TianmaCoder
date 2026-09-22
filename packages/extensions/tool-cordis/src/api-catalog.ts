@@ -3031,6 +3031,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'tianmaHookTrust',
+    summary: 'The Cordis service registered under `ctx.tianmaHookTrust`.',
+    description: 'The Cordis service registered under `ctx.tianmaHookTrust`.',
+    methods: [],
+  },
+  {
     key: 'timer',
     summary: 'Disposable timer helpers mixed into Cordis contexts.',
     description: 'Disposable timer helpers mixed into Cordis contexts.',

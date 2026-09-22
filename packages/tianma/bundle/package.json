@@ -33,6 +33,9 @@
   "dependencies": {
     "@tianma/dsh-behavioral-guidelines": "workspace:^",
     "@tianma/dsh-compaction-recency-pruner": "workspace:^",
-    "@tianma/dsh-compaction-summarize": "workspace:^"
+    "@tianma/dsh-compaction-summarize": "workspace:^",
+    "@tianma/dsh-compaction-file-rehydrator": "workspace:^",
+    "@tianma/dsh-token-meter-calibration": "workspace:^",
+    "@tianma/dsh-hooks-trust": "workspace:^"
   }
 }

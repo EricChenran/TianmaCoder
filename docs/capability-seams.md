@@ -7,6 +7,8 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
+  pkg_hooks_trust["hooks-trust"]
+  svc_tianmaHookTrust["ctx.tianmaHookTrust<br/>Content-hash trust admission for third-party workspace hooks"]
   pkg_hmr["hmr"]
   svc_hmr["ctx.hmr<br/>Serialized module and configuration reloads"]
   pkg_app_boot["app-boot"]
@@ -325,6 +327,7 @@ flowchart LR
   pkg_fs_ssh --> svc_fs
   pkg_goal --> svc_goals
   pkg_hmr --> svc_hmr
+  pkg_hooks_trust --> svc_tianmaHookTrust
   pkg_host_directory_picker --> svc_directoryPicker
   pkg_host_directory_picker_browse --> svc_directoryPicker
   pkg_host_directory_picker_native --> svc_directoryPicker
@@ -563,6 +566,7 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.tianmaHookTrust` | `core` | `hooks-trust` | - | - | - | Ledger of hook command approvals: unchanged hashes pass, any change re-opens review, denials persist. Registered by the Tianma hooks-trust package. |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock. |
 | `ctx.pluginManager` | `core` | [`plugin-manager`](../packages/boot/plugin-manager) | - | [`plugin-manager`](../packages/boot/plugin-manager), `ui-settings-plugin-inventory` | - | Shares profile package operations with the CLI and reports persisted and running state to Web and agent callers. |
 | `ctx.profileContext` | `core` | [`app-boot`](../packages/boot/app-boot) | - | [`plugin-manager`](../packages/boot/plugin-manager) | - | The dsh launcher supplies data-only profile locations and composition inputs; reload scheduling belongs to dsh-hmr. |

@@ -24,6 +24,25 @@
     - id: tianma-behavioral-guidelines
       name: '@tianma/dsh-behavioral-guidelines'
 
+# PR-5: post-compaction file-state rehydration — an agent-scoped context that
+# rebuilds the read-file ledger from the append-only log, so post-compaction
+# requests know which files are fresh and which are STALE.
+- insert:
+    - id: tianma-compaction-file-rehydrator
+      name: '@tianma/dsh-compaction-file-rehydrator'
+
+# PR-4b: usage-driven calibration service — persists the reported/heuristic
+# factor under the harness home and exposes it at ctx.tianmaTokenCalibration.
+- insert:
+    - id: tianma-token-calibration
+      name: '@tianma/dsh-token-meter-calibration'
+
+# PR-7: hook trust admission — content-hash ledger at ctx.tianmaHookTrust for
+# hook runners to gate first execution and re-open review on change.
+- insert:
+    - id: tianma-hooks-trust
+      name: '@tianma/dsh-hooks-trust'
+
 # Preset restates: same plugin lists as upstream, Tianma swaps applied.
 - id: preset-standard
   name: '@deepseek-ai/dsh-agent-preset'

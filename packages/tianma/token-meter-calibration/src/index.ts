@@ -16,3 +16,5 @@ export {
 } from './density.ts'
 export { CalibrationFactor } from './factor.ts'
 export type { CalibrationFactorSnapshot } from './factor.ts'
+export { UsageCalibrator, defaultStatePath, scanSessionUsages } from './service.ts'
+export type { CalibrationPersisted, UsageSample } from './service.ts'

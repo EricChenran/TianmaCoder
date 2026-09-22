@@ -1,0 +1,87 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "brand": {
+    "name": "TianmaCoder",
+    "nameZh": "天码",
+    "group": "宜春天码信息集团",
+    "positioning": "集团旗下软件工程前沿开发工具 · 官方 Harness · 外包领域最前沿、最标准化的规范能力",
+    "primaryGreen": "#86E100",
+    "source": "LOGO 主色采样（2026-09-22，占位 2099 像素簇）"
+  },
+  "color": {
+    "green": {
+      "50": "#F7FFE8",
+      "100": "#F4FFDC",
+      "200": "#E3FA9F",
+      "300": "#CCF366",
+      "400": "#ABEA2F",
+      "500": "#86E100",
+      "600": "#6FBB00",
+      "700": "#4A8000",
+      "800": "#3A6600",
+      "900": "#2F5500",
+      "950": "#1A3000"
+    },
+    "ink": {
+      "900": "#0D1405",
+      "700": "#333D28",
+      "500": "#5F6955",
+      "300": "#C4CCB4",
+      "100": "#E8EED9"
+    },
+    "surface": {
+      "paper": "#FFFFFF",
+      "tint": "#F4FFDC",
+      "soft": "#FAFDF4",
+      "border": "#E4EFD2",
+      "dark": "#101A04",
+      "darkElevated": "#16230A"
+    },
+    "functional": {
+      "success": "#3A6600",
+      "warning": "#B45309",
+      "danger": "#B91C1C",
+      "info": "#1D4ED8"
+    }
+  },
+  "contrast": {
+    "notes": "WCAG 2.1 实测（2026-09-22）：green-500 于白底 1.64:1，仅限图形/装饰/深色面；白底正文用 green-700 4.80:1 (AA) 或 green-900 8.68:1 (AAA)；green-500 于 dark 10.91:1；green-500 底上必须用 ink-900 12.78:1，禁止白字 (1.64:1)。",
+    "green500OnWhite": 1.64,
+    "green700OnWhite": 4.8,
+    "green900OnWhite": 8.68,
+    "green500OnDark": 10.91,
+    "inkOnGreen500": 12.78
+  },
+  "typography": {
+    "fontHeading": "'Manrope', 'Inter', 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
+    "fontBody": "'Inter', 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif",
+    "fontMono": "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
+    "scale": {
+      "h1": { "weight": 700, "size": "40px", "lineHeight": "48px" },
+      "h2": { "weight": 700, "size": "32px", "lineHeight": "40px" },
+      "h3": { "weight": 600, "size": "24px", "lineHeight": "32px" },
+      "h4": { "weight": 600, "size": "20px", "lineHeight": "28px" },
+      "body": { "weight": 400, "size": "16px", "lineHeight": "26px" },
+      "small": { "weight": 400, "size": "14px", "lineHeight": "22px" },
+      "caption": { "weight": 400, "size": "12px", "lineHeight": "18px" }
+    }
+  },
+  "logo": {
+    "clearSpace": "0.25 × 标志高度",
+    "minSizeIconPx": 24,
+    "minSizeLockupHeightPx": 22,
+    "approvedColors": ["green-500 #86E100", "ink-900 #0D1405", "#FFFFFF"],
+    "assets": [
+      "assets/tianmacoder-logo.svg",
+      "assets/tianmacoder-logo-mono-black.svg",
+      "assets/tianmacoder-logo-mono-white.svg",
+      "assets/tianmacoder-wordmark.svg",
+      "assets/tianmacoder-favicon.svg"
+    ]
+  },
+  "terminal": {
+    "truecolor": "38;2;134;225;0",
+    "xterm256Fallback": 148,
+    "ansiNamedFallback": "bright-green"
+  }
+}

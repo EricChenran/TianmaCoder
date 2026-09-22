@@ -31,6 +31,8 @@ The `tianma/` group carries the TianmaCoder secondary-development surface for De
 | [`compaction-recency-pruner/`](compaction-recency-pruner/README.md) | Recency-preserving tool-result clearing replacing the head/middle/tail pruner |
 | [`compaction-summarize/`](compaction-summarize/README.md) | Fidelity compaction summarizer subclassing the documented `summarize()` hook |
 | [`token-meter-calibration/`](token-meter-calibration/README.md) | CJK-aware density estimation and usage-driven calibration factors |
+| [`compaction-file-rehydrator/`](compaction-file-rehydrator/README.md) | Post-compaction read-file ledger rebuilt from the append-only log, injected as a scoped prompt section |
+| [`hooks-trust/`](hooks-trust/README.md) | Content-hash trust ledger for third-party workspace hooks |
 
 <a id="composition"></a>
 ## Composition

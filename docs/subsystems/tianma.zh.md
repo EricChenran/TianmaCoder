@@ -20,3 +20,20 @@
 ## 组合与校验
 
 [bundle](../../packages/tianma/bundle) 在 `dsh-base` 之后应用行覆盖：两个调优默认值（`retainRatio` 0.35、AGENTS.md 预算 256KB）与两个行替换。静态补丁校验器断言每个被覆盖 id 在基础层恰好出现一次，上游漂移按 fail-closed 处理。路线图与验证协议见 [`docs-integration-pr-roadmap.md`](../../docs-integration-pr-roadmap.md)。
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxtianmahooktrust--tianmahooktrust"></a>
+
+### `ctx.tianmaHookTrust` — `TianmaHookTrust`
+
+The Cordis service registered under `ctx.tianmaHookTrust`.
+
+Source: [`packages/tianma/hooks-trust/src/index.ts`](../../packages/tianma/hooks-trust/src/index.ts)
+<!-- END GENERATED cordis-surface -->

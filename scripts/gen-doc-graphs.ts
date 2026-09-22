@@ -100,6 +100,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'tianmaHookTrust',
+    pkg: 'hooks-trust',
+    title: 'Content-hash trust admission for third-party workspace hooks',
+    mode: 'core',
+    consumers: [],
+    note: 'Ledger of hook command approvals: unchanged hashes pass, any change re-opens review, denials persist. Registered by the Tianma hooks-trust package.',
+  },
+  {
     key: 'hmr',
     pkg: 'hmr',
     title: 'Serialized module and configuration reloads',
