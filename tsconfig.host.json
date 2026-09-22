@@ -385,6 +385,7 @@
     { "path": "./packages/tianma/behavioral-guidelines" },
     { "path": "./packages/tianma/compaction-recency-pruner" },
     { "path": "./packages/tianma/compaction-summarize" },
+    { "path": "./packages/tianma/token-meter-calibration" },
     { "path": "./packages/bundle/headless" },
     { "path": "./packages/bundle/sdk-app" },
     { "path": "./packages/bundle/sdk-minimal" },

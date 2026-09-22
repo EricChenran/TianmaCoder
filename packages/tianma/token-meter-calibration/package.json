@@ -1,0 +1,27 @@
+{
+  "name": "@tianma/dsh-token-meter-calibration",
+  "description": "CJK-aware density pricing and rolling usage-calibration factor cores for the token meter",
+  "version": "0.1.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EricChenran/TianmaCoder.git",
+    "directory": "packages/tianma/token-meter-calibration"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT"
+}
