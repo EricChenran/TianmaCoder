@@ -1,6 +1,8 @@
 # ZCode 优势融入 dsh：PR 拆解、路线图与验证机制
 
 版本：v1（2026-09-22）
+
+> **状态（2026-09-22）**：PR-0~PR-4 已提交评审——[#6](https://github.com/EricChenran/TianmaCoder/pull/6) scaffold、[#7](https://github.com/EricChenran/TianmaCoder/pull/7) 配置与行为准则、[#8](https://github.com/EricChenran/TianmaCoder/pull/8) 近因裁剪器、[#9](https://github.com/EricChenran/TianmaCoder/pull/9) 高保真总结器、[#10](https://github.com/EricChenran/TianmaCoder/pull/10) 计量校准核心。栈顶 doc-sync 42 门禁全绿；PR-5~PR-7 待后续。
 上游文档：[docs-integration-plan.md](docs-integration-plan.md)（总方案）、[docs/architecture.md](docs/architecture.md)、[docs/capability-seams.md](docs/capability-seams.md)
 交付形态：全部以独立插件包 + profile patch（cordis.patch.yml）交付，不 fork、不改 vendor/。
 
