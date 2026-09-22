@@ -328,6 +328,7 @@
       // the @deepseek-ai/dsh- prefix; these live outside its marked region).
       "@tianma/dsh-bundle": ["./packages/tianma/bundle/src/index.ts"],
       "@tianma/dsh-behavioral-guidelines": ["./packages/tianma/behavioral-guidelines/src/index.ts"],
+      "@tianma/dsh-compaction-recency-pruner": ["./packages/tianma/compaction-recency-pruner/src/index.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],

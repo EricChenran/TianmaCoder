@@ -27,3 +27,16 @@
 - insert:
     - id: tianma-behavioral-guidelines
       name: '@tianma/dsh-behavioral-guidelines'
+
+# PR-2: swap the head/middle/tail pruner for the recency-preserving clearer.
+# The active window (most recent results) stays byte-identical; older
+# oversized results from volume-heavy tools clear wholesale to one marker
+# line. The code task's load-bearing span is the middle of a fresh read, so
+# partial truncation of EVERY result — including the one in hand — is the
+# failure mode this row removes.
+- id: tool-result-pruner
+  name: '@tianma/dsh-compaction-recency-pruner'
+  config:
+    keepRecentResults: 5
+    thresholdChars: 8192
+    minCharsSaved: 1024

@@ -35,6 +35,25 @@ describe('@tianma/dsh-bundle', () => {
     expect(failures).toEqual([])
   })
 
+  it('swaps the tool-result-pruner row to the recency clearer with policy config', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
+    const parsed = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as { id?: string; name?: string; config?: Record<string, number> }[]
+    const row = parsed.find(op => op.id === 'tool-result-pruner')
+    expect(row?.name).toBe('@tianma/dsh-compaction-recency-pruner')
+    expect(row?.config).toEqual({
+      keepRecentResults: 5,
+      thresholdChars: 8192,
+      minCharsSaved: 1024,
+    })
+    expect(manifest.dependencies).toHaveProperty('@tianma/dsh-compaction-recency-pruner')
+  })
+
   it('inserts the behavioral-guidelines row declared as a dependency', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(
