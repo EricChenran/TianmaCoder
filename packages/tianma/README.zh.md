@@ -26,7 +26,7 @@ kind: "package-group"
 |---|---|
 | [`bundle/`](bundle/README.zh.md) | Tianma bundle：替换 dsh-base 行以采纳 Tianma 默认值与插件的 profile patch |
 | [`behavioral-guidelines/`](behavioral-guidelines/README.zh.md) | 移植自 ZCode 的行为提示词节，以具名 system-prompt contribution 注册 |
-| [`compaction-recency-pruner/`](compaction-recency-pruner/README.md) | 近因保全的工具结果清理，替换头/中/尾裁剪器 |
+| [`compaction-recency-pruner/`](compaction-recency-pruner/README.zh.md) | 近因保全的工具结果清理，替换头/中/尾裁剪器 |
 | [`compaction-summarize/`](compaction-summarize/README.md) | 高保真压缩总结器，子类化文档声明的 `summarize()` 钩子 |
 | [`token-meter-calibration/`](token-meter-calibration/README.md) | 中文感知密度估算与 usage 驱动的校准因子 |
 
