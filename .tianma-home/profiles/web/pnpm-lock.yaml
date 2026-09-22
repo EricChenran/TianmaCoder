@@ -8,9 +8,27 @@ importers:
 
   .:
     dependencies:
+      '@tianma/dsh-behavioral-guidelines':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/behavioral-guidelines
       '@tianma/dsh-bundle':
         specifier: workspace:*
         version: link:../../../packages/tianma/bundle
+      '@tianma/dsh-compaction-file-rehydrator':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/compaction-file-rehydrator
+      '@tianma/dsh-compaction-recency-pruner':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/compaction-recency-pruner
+      '@tianma/dsh-compaction-summarize':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/compaction-summarize
+      '@tianma/dsh-hooks-trust':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/hooks-trust
+      '@tianma/dsh-token-meter-calibration':
+        specifier: workspace:*
+        version: link:../../../packages/tianma/token-meter-calibration
 
   ../../../apps/cli:
     dependencies:
@@ -12513,12 +12531,39 @@ importers:
       '@tianma/dsh-behavioral-guidelines':
         specifier: workspace:^
         version: link:../behavioral-guidelines
+      '@tianma/dsh-compaction-file-rehydrator':
+        specifier: workspace:^
+        version: link:../compaction-file-rehydrator
       '@tianma/dsh-compaction-recency-pruner':
         specifier: workspace:^
         version: link:../compaction-recency-pruner
       '@tianma/dsh-compaction-summarize':
         specifier: workspace:^
         version: link:../compaction-summarize
+      '@tianma/dsh-hooks-trust':
+        specifier: workspace:^
+        version: link:../hooks-trust
+      '@tianma/dsh-token-meter-calibration':
+        specifier: workspace:^
+        version: link:../token-meter-calibration
+
+  ../../../packages/tianma/compaction-file-rehydrator:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
 
   ../../../packages/tianma/compaction-recency-pruner:
     devDependencies:
@@ -12583,7 +12628,20 @@ importers:
         specifier: workspace:^
         version: link:../../util/values
 
-  ../../../packages/tianma/token-meter-calibration: {}
+  ../../../packages/tianma/hooks-trust:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+
+  ../../../packages/tianma/token-meter-calibration:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
 
   ../../../packages/todo/tool-todo:
     dependencies:
@@ -19482,7 +19540,7 @@ packages:
     engines: {node: '>=20'}
 
   xlsx@https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz:
-    resolution: {integrity: sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==, tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}
+    resolution: {tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}
     version: 0.20.3
     engines: {node: '>=0.8'}
     hasBin: true
