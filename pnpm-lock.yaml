@@ -12671,6 +12671,8 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
 
+  packages/tianma/bundle: {}
+
   packages/todo/tool-todo:
     dependencies:
       '@deepseek-ai/schemastery':

@@ -1,0 +1,9 @@
+# The Tianma bundle patch: applied after dsh-base (and any mode bundle) in a
+# profile's bundle list. Rows below override dsh-base rows by id; a patch
+# replaces the targeted row's whole config, so each row restates every key it
+# owns. scripts/verify-profile-patches.ts fails CI when a referenced id drifts
+# upstream, so a stale override can never ship silently.
+#
+# PR-0 ships this file with the verifier and no overrides; subsequent PRs add
+# one row per capability so each stays independently revertible.
+[]
