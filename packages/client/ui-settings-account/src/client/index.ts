@@ -6,8 +6,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { AccountView, AccountDetails } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { PlatformBridge } from './PlatformOverlay.tsx'
-import { Config, CONTACT_CONFIG_GLOBAL } from '../contact-config.ts'
-import { contactUrl } from './contact-url.ts'
 import { AccountOnboarding } from './AccountOnboarding.tsx'
 import { AccountMenu } from './AccountMenu.tsx'
 import { AccountSection, type AccountSnapshot, type AccountSectionInjected } from './AccountSection.tsx'
@@ -27,8 +25,6 @@ export function apply(ctx: Context): void {
   if (!('dshDesktop' in globalThis)) return
   ctx.effect(() => ctx.locale.register('settings.account', { en, zh }), 'account: dictionaries')
   const t = ctx.locale.bind('settings.account')
-  const page = globalThis as Partial<Record<typeof CONTACT_CONFIG_GLOBAL, unknown>>
-  const config = Config(page[CONTACT_CONFIG_GLOBAL] ?? {})
   let snapshot: AccountSnapshot = { view: undefined, details: undefined, failed: false, loginVisible: false }
   const listeners = new Set<() => void>()
   const publish = (value: AccountSnapshot) => { snapshot = value; for (const listener of listeners) listener() }
@@ -80,16 +76,6 @@ export function apply(ctx: Context): void {
   const operations: AccountSectionInjected = {
     ...nativePlatform === undefined ? {} : { platform: nativePlatform },
     refresh,
-    contactUs() {
-      const profile = snapshot.details?.profile
-      const url = contactUrl(config, {
-        uid: profile?.status === 'ready' ? profile.value.id : null,
-        version: process.env.DSH_CLIENT_VERSION,
-        locale: ctx.locale.getSnapshot().active === 'zh' ? 'zh-CN' : 'en',
-        width: window.screen.width, height: window.screen.height, pixelRatio: window.devicePixelRatio,
-      })
-      window.open(url, '_blank', 'noopener,noreferrer')
-    },
     showLogin(visible) { publish({ ...snapshot, loginVisible: visible }) },
     setOnboarding(active) { publish({ ...snapshot, onboarding: active }) },
     hooks: { account: {

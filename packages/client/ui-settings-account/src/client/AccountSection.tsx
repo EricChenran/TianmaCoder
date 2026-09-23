@@ -34,8 +34,6 @@ export interface AccountSectionInjected {
   hooks: { account: HostObservable<AccountSnapshot> }
   /** @returns after account details are refreshed; concurrent refreshes share a request. */
   refresh: () => Promise<void>
-  /** Open the external support questionnaire with the current account and environment. */
-  contactUs: () => void
   /** Open or dismiss the login dialog. */
   showLogin: (visible: boolean) => void
   /** Claim dialog ownership for the onboarding step. */

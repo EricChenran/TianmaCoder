@@ -22,7 +22,7 @@ it('claims onboarding while loading, offers API key fallback, and completes afte
     complete: vi.fn(), useApiKey: vi.fn(), setOnboarding: vi.fn(), showLogin: vi.fn(),
     useAccount: <T,>(select: (snapshot: AccountSnapshot) => T) => select(account),
     start: vi.fn(async () => {}), cancel: vi.fn(async () => {}), signOut: vi.fn(async () => {}),
-    refresh: vi.fn(async () => {}), contactUs: vi.fn(), t: makeTranslate(en),
+    refresh: vi.fn(async () => {}), t: makeTranslate(en),
   }
   const view = render(<AccountOnboarding {...props} />)
   expect(props.setOnboarding).toHaveBeenCalledExactlyOnceWith(true)

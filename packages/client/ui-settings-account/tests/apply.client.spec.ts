@@ -7,7 +7,7 @@ import { createClientTest, type TestClient, webApp } from '@deepseek-ai/dsh-clie
 import type { AccountDetails, AccountView, AccountUserId, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AccountSectionInjected } from '../src/client/AccountSection.tsx'
-import { CONTACT_CONFIG_GLOBAL } from '../src/contact-config.ts'
+import { apply as hostApply } from '../src/index.ts'
 
 const it = createClientTest({ roster: webApp })
 const SELF = '@deepseek-ai/dsh-client-ui-settings-account'
@@ -19,6 +19,10 @@ function operations(c: TestClient): AccountSectionInjected {
   return injected as AccountSectionInjected
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+it('keeps the host loader entry inert', () => {
+  expect(() => hostApply()).not.toThrow()
+})
 
 it('keeps account UI and account RPC inactive in a plain browser, including after reload', async ({ start, mock }) => {
   const c = await start()
@@ -33,9 +37,7 @@ it('keeps account UI and account RPC inactive in a plain browser, including afte
   }
 }, 60_000)
 
-it('shares account actions across seats, publishes dialog ownership, and opens contextual support', async ({ start }) => {
-  vi.stubGlobal(CONTACT_CONFIG_GLOBAL, { contactFormUrl: 'https://example.test/form/', contactSource: 'harness' })
-  const open = vi.spyOn(window, 'open').mockReturnValue(null)
+it('shares account actions across seats and publishes dialog ownership', async ({ start }) => {
   vi.stubGlobal('dshDesktop', {})
   const c = await start()
   const actions = operations(c)
@@ -51,19 +53,12 @@ it('shares account actions across seats, publishes dialog ownership, and opens c
   off()
   actions.showLogin(false)
   expect(listener).toHaveBeenCalledTimes(2)
-  actions.contactUs()
-  expect(new URL(String(open.mock.calls.at(-1)![0])).searchParams.has('prefill_uid')).toBe(false)
   c.mock.remote.account.getProfile.mockResolvedValue(ok(profile))
   c.mock.streams.push('account/watch', stored)
   await vi.waitFor(() => { expect(actions.hooks.account.getSnapshot().details?.profile).toEqual(profile) })
   const entry = c.ctx.slots.entries('settings.section').find(entry => entry.options.id === 'account')!
   expect(entry.inject!()).toBe(actions)
   expect(resolveSlotLabel(entry.options.label)).toBe('Account')
-  vi.spyOn(c.ctx.locale, 'getSnapshot').mockReturnValue({ ...c.ctx.locale.getSnapshot(), active: 'zh' })
-  actions.contactUs()
-  const support = new URL(String(open.mock.calls.at(-1)![0]))
-  expect(support.searchParams.get('prefill_uid')).toBe('account-user')
-  expect(support.searchParams.get('prefill_app_locale')).toBe('zh-CN')
   await c.unload(SELF)
   expect(c.ctx.slots.entries('settings.launcher')).toHaveLength(0)
 }, 60_000)

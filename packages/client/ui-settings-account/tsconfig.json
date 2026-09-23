@@ -34,12 +34,6 @@
     },
     {
       "path": "../ui-settings-models"
-    },
-    {
-      "path": "../../host/webserver"
-    },
-    {
-      "path": "../../../vendor/schemastery"
     }
   ]
 }
