@@ -35,6 +35,8 @@
     "presets/ptc.patch.yml",
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
+    "presets/department-tech.patch.yml",
+    "presets/department-business.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
@@ -45,7 +47,9 @@
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
-        "./presets/cordis.patch.yml"
+        "./presets/cordis.patch.yml",
+        "./presets/department-tech.patch.yml",
+        "./presets/department-business.patch.yml"
       ]
     }
   },
@@ -172,7 +176,8 @@
     "commander": "^15.0.0",
     "open": "^11.0.0",
     "@deepseek-ai/dsh-api-account-controller": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-settings-account": "workspace:^"
+    "@deepseek-ai/dsh-client-ui-settings-account": "workspace:^",
+    "@tianma/dsh-department-prompts": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

@@ -15,6 +15,7 @@
 - **近因保全清理**（`@tianma/dsh-compaction-recency-pruner`）以 ZCode microcompact 语义注册同一个 `ctx.toolResultPruner` seam：最近的结果逐字节不动；更早的超限白名单结果整体清空为一行标记。见[包 README](../../packages/tianma/compaction-recency-pruner)。
 - **高保真总结**（`@tianma/dsh-compaction-summarize`）子类化文档声明的 `summarize()` 钩子，保持 KV 前缀对齐的信封，同时换入 ZCode 的九段式提示词：全部用户消息列出、安全约束逐字、analysis 先于 summary 输出。见[包 README](../../packages/tianma/compaction-summarize)。
 - **行为准则**（`@tianma/dsh-behavioral-guidelines`）注册一个承载 ZCode 沟通与自主推进纪律的静态 system-prompt 节。见[包 README](../../packages/tianma/behavioral-guidelines)。
+- **部门规则**（`@tianma/dsh-department-prompts`）支撑随发行版交付的技术部与商务部模式：每个部门一条字面 system-prompt 节，外加发布到私有目录、模型只以 `DSH_DEPARTMENT_TOOLS` 变量触达的商务部文档工具箱。见[包 README](../../packages/tianma/department-prompts)。
 - **token 计量校准**（`@tianma/dsh-token-meter-calibration`）修正 compaction 读取的压力测量：会话表面的 CJK 密度比值乘以持久化的报告/估算滚动因子，作用在 meter 自身的测量结果上。见[包 README](../../packages/tianma/token-meter-calibration)。
 
 ## 组合与校验
