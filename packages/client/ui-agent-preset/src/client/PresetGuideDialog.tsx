@@ -20,6 +20,8 @@ const guides = new Map<string, PresetGuide>([
   ['ptc', { name: 'presetPtcName', intro: 'guidePtcIntro', explanation: 'guidePtcExplanation', usage: 'guidePtcUsage' }],
   ['minimal', { name: 'presetMinimalName', intro: 'guideMinimalIntro', explanation: 'guideMinimalExplanation', usage: 'guideMinimalUsage' }],
   ['cordis', { name: 'presetCordisName', intro: 'guideCordisIntro', explanation: 'guideCordisExplanation', usage: 'guideCordisUsage' }],
+  ['tech', { name: 'presetTechName', intro: 'guideTechIntro', explanation: 'guideTechExplanation', usage: 'guideTechUsage' }],
+  ['business', { name: 'presetBusinessName', intro: 'guideBusinessIntro', explanation: 'guideBusinessExplanation', usage: 'guideBusinessUsage' }],
 ])
 
 /**

@@ -71,6 +71,36 @@ export const guideEn = {
     '> Create a “Code review” mode based on Standard mode. Have it prioritize potential bugs and test gaps, cite file paths and lines, and ask before modifying files. Save it as a selectable preset.',
     'Expected output: a custom preset for new tasks. These review instructions guide the agent; permission settings determine which actions it can execute.',
   ].join('\n\n'),
+  guideTechIntro: 'Choose Engineering mode when starting a new task. State the target system, its constraints, and how the finished work will be checked.',
+  guideTechExplanation: [
+    '### What it adds',
+    'Everything Standard mode provides, plus one system-prompt section carrying the department standard: layering, typed errors, database changes, authentication, logging, caching, uploads, realtime delivery, and production hardening for backend work; design tokens, mobile-first layout, motion, and accessibility for frontend work; and installation, certificates, backups, monitoring, and failure triage for server operations.',
+    '### When to choose it',
+    'When the work should follow the department standard without restating it, or when the delivery checks should run as part of the task.',
+  ].join('\n\n'),
+  guideTechUsage: [
+    '### Ship a small API',
+    '> Build a ticket API with SQLite: create, list, and close a ticket. Follow the department standard for layering and errors, add tests, and give me the commands to run it and check the result.',
+    'Expected output: the service, its migrations, tests, and the commands that verify it.',
+    '### Review a page before delivery',
+    '> Check this page against the department frontend standard: layout at both required widths, contrast and focus states, and the empty and error states. List what fails with file and line, then fix it.',
+    'Expected output: a list of concrete failures and the fixes, or a statement that the page already passes.',
+  ].join('\n\n'),
+  guideBusinessIntro: 'Choose Business mode when starting a new task. Provide the requirement text, the total amount, and the schedule, or let the agent ask for whichever is missing.',
+  guideBusinessExplanation: [
+    '### What it adds',
+    'Everything Standard mode provides, plus one system-prompt section carrying the department standard: requirement documents, quotations, and case retrieval, together with the shared commercial rules — customer-facing wording, no technical terms in delivered documents, and no invented prices, schedules, or links.',
+    '### Document scripts',
+    'The document generators ship with the mode and stay off the workspace. Documents keep the fixed layout, the watermark, and the quotation total check, so the agent fills one input file and runs the scripts.',
+  ].join('\n\n'),
+  guideBusinessUsage: [
+    '### Draft a requirement document',
+    '> Here is what the client described: a community group-buying mini program. Turn it into a requirement document I can send them, with roles, modules, and the main flows.',
+    'Expected output: a Word document and PDF in a folder named after the system, with the fixed layout and watermark.',
+    '### Quote a project',
+    '> Quote this requirement at 86,000 yuan over 60 working days. Split the modules by phase and keep the totals exact.',
+    'Expected output: a quotation whose module amounts add up to the total, plus the PDF copy.',
+  ].join('\n\n'),
 }
 
 /** Keys merged into the feature’s ordinary locale seat. */
@@ -148,5 +178,35 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '### 创建自己的模式',
     '> 基于标准模式创建「代码审查」模式，优先检查潜在错误和测试缺口，指出文件与行号，修改文件前先询问我。保存成可选择的预设。',
     '预期产出：可在新任务中选择的自定义模式。审查要求用于指导 Agent，实际可执行的操作仍由权限设置决定。',
+  ].join('\n\n'),
+  guideTechIntro: '新建任务时选择「技术部」，说明目标系统、约束条件，以及完成后怎样验收。',
+  guideTechExplanation: [
+    '### 多了什么',
+    '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：后端的分层、类型化错误、数据库变更、认证鉴权、日志、缓存、上传、实时推送与生产加固；前端的设计 token、移动优先布局、动效与无障碍；运维的安装、证书、备份、监控与故障排查。',
+    '### 什么时候选',
+    '当工作要按部门规范执行、又不想每次重复交代时；或者希望交付自检清单随任务一起跑。',
+  ].join('\n\n'),
+  guideTechUsage: [
+    '### 交付一个小接口',
+    '> 用 SQLite 做一个工单接口：创建、列表、关闭。按部门规范做分层与错误处理，补测试，并给我运行和验收的命令。',
+    '预期产出：服务、迁移、测试，以及可复核的命令与结果。',
+    '### 上线前检查页面',
+    '> 按部门前端规范检查这个页面：规定两档宽度下的布局、对比度与聚焦态，以及空状态和错误状态。逐条列出不达标项（含文件与行号），然后修好。',
+    '预期产出：具体的不达标清单与修复，或说明页面已达标。',
+  ].join('\n\n'),
+  guideBusinessIntro: '新建任务时选择「商务部」，提供需求文字、总金额与工期；缺哪一项就让 Agent 先问。',
+  guideBusinessExplanation: [
+    '### 多了什么',
+    '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：需求文档、报价单、案例检索，以及共通商务红线——面向客户的语言、对外文件不出现技术栈词汇、不编造价格、工期与链接。',
+    '### 文档脚本',
+    '文档生成脚本随模式交付，不落在工作区里。文档沿用固定版式、水印与报价合计校验，因此 Agent 只需填一份输入再跑脚本。',
+  ].join('\n\n'),
+  guideBusinessUsage: [
+    '### 整理需求文档',
+    '> 客户是这么说的：做一个社区团购小程序。整理成可以直接发给客户的《需求文档》，包含角色、功能模块和主要流程。',
+    '预期产出：以系统名命名的文件夹，内含固定版式与带水印的 Word 文档和 PDF。',
+    '### 出一份报价单',
+    '> 按 86000 元、60 个工作日给这份需求报价，按阶段拆分模块，合计要精确。',
+    '预期产出：模块金额合计等于总金额的报价单，以及同目录的 PDF。',
   ].join('\n\n'),
 }
