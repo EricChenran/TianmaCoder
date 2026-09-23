@@ -40,6 +40,9 @@
 !define INSTALLER_GUIDE_BUTTON_Y 490
 !define INSTALLER_GUIDE_BUTTON_WIDTH 120
 !define INSTALLER_GUIDE_BUTTON_HEIGHT 44
+; SetCtlColors takes compile-time colors only; these are the two page backgrounds.
+!define INSTALLER_BACKGROUND_LIGHT FFFFFF
+!define INSTALLER_BACKGROUND_DARK 151517
 ; GDI+ ARGB values; GDI text uses COLORREF below.
 !define INSTALLER_PRIMARY 0xFF0F1115
 !define INSTALLER_PRIMARY_HOVER 0xFF2D3135
@@ -65,19 +68,20 @@ Var InstallerBorder
 ; SetCtlColors accepts only compile-time colors; choose between the two native palettes.
 !macro InstallerControlColors HANDLE
     ${If} $InstallerTheme == "dark"
-        SetCtlColors ${HANDLE} FFFFFF 151517
+        SetCtlColors ${HANDLE} FFFFFF ${INSTALLER_BACKGROUND_DARK}
     ${Else}
-        SetCtlColors ${HANDLE} 0F1115 FFFFFF
+        SetCtlColors ${HANDLE} 0F1115 ${INSTALLER_BACKGROUND_LIGHT}
     ${EndIf}
 !macroend
 
-; A muted caption keeps the page's two-tone palette; the dialog behind it
-; paints its own background, so the label's own is transparent.
-!macro InstallerCaptionColors HANDLE
+; A muted caption keeps the page's two-tone palette. A transparent background lets the
+; dialog behind it show through for text that never changes; text the page rewrites
+; passes its background so the previous wording cannot leave glyphs in the label.
+!macro InstallerCaptionColors HANDLE LIGHT_BACKGROUND DARK_BACKGROUND
     ${If} $InstallerTheme == "dark"
-        SetCtlColors ${HANDLE} A0A4AB transparent
+        SetCtlColors ${HANDLE} A0A4AB ${DARK_BACKGROUND}
     ${Else}
-        SetCtlColors ${HANDLE} 8A9099 transparent
+        SetCtlColors ${HANDLE} 8A9099 ${LIGHT_BACKGROUND}
     ${EndIf}
 !macroend
 

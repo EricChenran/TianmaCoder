@@ -53,6 +53,7 @@ Var InstallerGuideNext
 !macroend
 
 ; Body lines stack from the first slot; $R0 keeps the calculated offset off the caller's registers.
+; Each step rewrites these lines, so they paint the page background over the previous step.
 !macro InstallerGuideLine HANDLE INDEX
     ${NSD_CreateLabel} 0 0 0 0 ""
     Pop ${HANDLE}
@@ -62,7 +63,7 @@ Var InstallerGuideNext
     !insertmacro InstallerPlace ${HANDLE} ${INSTALLER_GUIDE_TEXT_X} $R0 ${INSTALLER_GUIDE_TEXT_WIDTH} ${INSTALLER_GUIDE_BODY_HEIGHT}
     ${NSD_AddStyle} ${HANDLE} ${SS_CENTER}|${SS_CENTERIMAGE}
     SendMessage ${HANDLE} ${WM_SETFONT} $InstallerSmallFont 1
-    !insertmacro InstallerCaptionColors ${HANDLE}
+    !insertmacro InstallerCaptionColors ${HANDLE} ${INSTALLER_BACKGROUND_LIGHT} ${INSTALLER_BACKGROUND_DARK}
 !macroend
 
 ; Every page of the frameless window shares the drag area, title buttons, brand bitmap and caption.
@@ -123,7 +124,7 @@ Function InstallerCreateShell
     !insertmacro InstallerPlace $4 ${INSTALLER_COPYRIGHT_X} ${INSTALLER_COPYRIGHT_Y} ${INSTALLER_COPYRIGHT_WIDTH} ${INSTALLER_COPYRIGHT_HEIGHT}
     ${NSD_AddStyle} $4 ${SS_CENTER}|${SS_CENTERIMAGE}
     SendMessage $4 ${WM_SETFONT} $InstallerSmallFont 1
-    !insertmacro InstallerCaptionColors $4
+    !insertmacro InstallerCaptionColors $4 transparent transparent
 FunctionEnd
 
 Function InstallerDestroyShell
@@ -160,7 +161,7 @@ Function InstallerGuide
     !insertmacro InstallerPlace $InstallerGuideCaption ${INSTALLER_GUIDE_TEXT_X} ${INSTALLER_GUIDE_CAPTION_Y} ${INSTALLER_GUIDE_TEXT_WIDTH} ${INSTALLER_GUIDE_CAPTION_HEIGHT}
     ${NSD_AddStyle} $InstallerGuideCaption ${SS_CENTER}|${SS_CENTERIMAGE}
     SendMessage $InstallerGuideCaption ${WM_SETFONT} $InstallerSmallFont 1
-    !insertmacro InstallerCaptionColors $InstallerGuideCaption
+    !insertmacro InstallerCaptionColors $InstallerGuideCaption ${INSTALLER_BACKGROUND_LIGHT} ${INSTALLER_BACKGROUND_DARK}
 
     ${NSD_CreateLabel} 0 0 0 0 ""
     Pop $InstallerGuideTitle
