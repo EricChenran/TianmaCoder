@@ -39,3 +39,5 @@ LangString INSTALLER_DISK_SPACE ${LANG_ENGLISH} "There is not enough free disk s
 LangString INSTALLER_DISK_SPACE ${LANG_SIMPCHINESE} "此磁盘的可用空间不足，请选择其他位置。"
 LangString INSTALLER_PER_USER ${LANG_ENGLISH} "This installer supports the current user only. Uninstall the existing all-users installation first."
 LangString INSTALLER_PER_USER ${LANG_SIMPCHINESE} "此安装程序仅支持当前用户。请先卸载已有的所有用户安装版本。"
+LangString INSTALLER_COPYRIGHT ${LANG_ENGLISH} "© Yichun Tianma Information Group · Powered by DeepSeek Harness"
+LangString INSTALLER_COPYRIGHT ${LANG_SIMPCHINESE} "© 宜春天码信息集团 · 由 DeepSeek Harness 驱动"

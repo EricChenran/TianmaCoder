@@ -8,7 +8,6 @@ Var InstallerPhase
 Var InstallerDpi
 Var InstallerSize
 Var InstallerImage
-Var InstallerEnterpriseImage
 Var InstallerButton
 Var InstallerStatus
 Var InstallerFont
@@ -82,17 +81,17 @@ Function InstallerCreate
         ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5-2x.bmp" $InstallerImage
     ${EndIf}
 
-    ${NSD_CreateBitmap} 0 0 0 0 ""
+    ${NSD_CreateLabel} 0 0 0 0 "$(INSTALLER_COPYRIGHT)"
     Pop $4
-    !insertmacro InstallerPlace $4 ${INSTALLER_ENTERPRISE_X} ${INSTALLER_ENTERPRISE_Y} ${INSTALLER_ENTERPRISE_WIDTH} ${INSTALLER_ENTERPRISE_HEIGHT}
-    StrCpy $5 "enterprise-logo"
+    !insertmacro InstallerPlace $4 ${INSTALLER_COPYRIGHT_X} ${INSTALLER_COPYRIGHT_Y} ${INSTALLER_COPYRIGHT_WIDTH} ${INSTALLER_COPYRIGHT_HEIGHT}
+    ${NSD_AddStyle} $4 ${SS_CENTER}|${SS_CENTERIMAGE}
+    SendMessage $4 ${WM_SETFONT} $InstallerSmallFont 1
+    ; A muted caption keeps the page's two-tone palette; the dialog behind it
+    ; paints its own background, so the label's own is transparent.
     ${If} $InstallerTheme == "dark"
-        StrCpy $5 "enterprise-logo-dark"
-    ${EndIf}
-    ${If} $InstallerDpi <= 96
-        ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5.bmp" $InstallerEnterpriseImage
+        SetCtlColors $4 A0A4AB transparent
     ${Else}
-        ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5-2x.bmp" $InstallerEnterpriseImage
+        SetCtlColors $4 8A9099 transparent
     ${EndIf}
 
     ${NSD_CreateLabel} 0 0 0 0 ""
@@ -187,7 +186,6 @@ Function InstallerCreate
     nsDialogs::Show
     ${NSD_KillTimer} InstallerValidateEditedPath
     ${NSD_FreeImage} $InstallerImage
-    ${NSD_FreeImage} $InstallerEnterpriseImage
     ${NSD_FreeImage} $InstallerEditFrameBitmap
     System::Call 'gdiplus::GdiplusShutdown(p $InstallerGdiToken)'
     System::Call 'gdi32::DeleteObject(p $InstallerFont)'
@@ -280,7 +278,7 @@ Function InstallerValidateEditedPath
     ${NSD_GetText} $InstallerEdit $InstallerPath
     Call InstallerValidatePath
     ${NSD_SetText} $InstallerStatus "$InstallerError"
-    !insertmacro InstallerPlace $InstallerStatus 48 542 504 42
+    !insertmacro InstallerPlace $InstallerStatus 48 538 504 38
     ShowWindow $InstallerStatus 5
 FunctionEnd
 

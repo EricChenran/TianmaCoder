@@ -61,10 +61,6 @@ ManifestDPIAware true
   File "/oname=$PLUGINSDIR\brand-2x.bmp" "${INSTALLER_BUILD_DIR}\brand-2x.bmp"
   File "/oname=$PLUGINSDIR\brand-dark.bmp" "${INSTALLER_BUILD_DIR}\brand-dark.bmp"
   File "/oname=$PLUGINSDIR\brand-dark-2x.bmp" "${INSTALLER_BUILD_DIR}\brand-dark-2x.bmp"
-  File "/oname=$PLUGINSDIR\enterprise-logo.bmp" "${INSTALLER_BUILD_DIR}\enterprise-logo.bmp"
-  File "/oname=$PLUGINSDIR\enterprise-logo-2x.bmp" "${INSTALLER_BUILD_DIR}\enterprise-logo-2x.bmp"
-  File "/oname=$PLUGINSDIR\enterprise-logo-dark.bmp" "${INSTALLER_BUILD_DIR}\enterprise-logo-dark.bmp"
-  File "/oname=$PLUGINSDIR\enterprise-logo-dark-2x.bmp" "${INSTALLER_BUILD_DIR}\enterprise-logo-dark-2x.bmp"
   File "/oname=$PLUGINSDIR\window-frame.dll" "${INSTALLER_BUILD_DIR}\window-frame.dll"
   ${If} ${Silent}
     Call InstallerPreflight
