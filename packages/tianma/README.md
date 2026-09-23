@@ -28,6 +28,7 @@ The `tianma/` group carries the TianmaCoder secondary-development surface for De
 |---|---|
 | [`bundle/`](bundle/README.md) | The Tianma bundle: profile patch replacing dsh-base rows to adopt Tianma defaults and plugins |
 | [`behavioral-guidelines/`](behavioral-guidelines/README.md) | ZCode-derived behavioral prompt sections registered as a named system-prompt contribution |
+| [`department-prompts/`](department-prompts/README.md) | Department operating rules for the shipped 技术部 / 商务部 modes, plus the 商务部 document toolbox |
 | [`compaction-recency-pruner/`](compaction-recency-pruner/README.md) | Recency-preserving tool-result clearing replacing the head/middle/tail pruner |
 | [`compaction-summarize/`](compaction-summarize/README.md) | Fidelity compaction summarizer subclassing the documented `summarize()` hook |
 | [`token-meter-calibration/`](token-meter-calibration/README.md) | CJK-aware density estimation and usage-driven calibration factors |

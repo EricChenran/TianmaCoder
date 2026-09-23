@@ -4135,6 +4135,33 @@ export interface RecencyPruneConfig {
 
 来源： [`packages/tianma/compaction-recency-pruner/src/types.ts:5`](../packages/tianma/compaction-recency-pruner/src/types.ts)
 
+<a id="tianmadsh-department-prompts"></a>
+
+## `@tianma/dsh-department-prompts`
+
+需要： `systemPrompt`
+
+```ts config-catalog
+/** Plugin config: the department whose rules this row contributes. */
+export interface Config extends BusinessToolboxOptions {
+  /** Department identifier; also the preset it belongs to. */
+  department: Department
+}
+
+/** Where the toolbox scripts are published, and where they are read from. */
+export interface BusinessToolboxOptions {
+  /** Packaged script directory; defaults to this package's `assets/business/`. */
+  assetRoot?: string
+  /** Published script directory; defaults to `<harness home>/department/business-tools`. */
+  toolsDir?: string
+}
+
+/** Department identifier a preset selects. */
+export type Department = 'tech' | 'business'
+```
+
+来源： [`packages/tianma/department-prompts/src/index.ts:43`](../packages/tianma/department-prompts/src/index.ts)
+
 <a id="tianmadsh-hooks-trust"></a>
 
 ## `@tianma/dsh-hooks-trust`

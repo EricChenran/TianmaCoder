@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -120,6 +120,10 @@ async function bootWeb(
     ...extra,
   ]
   const home = profileHome
+  // Department modes publish their toolbox under the harness home. Pin it to
+  // this boot's temporary root so an assertion about a mode cannot write into
+  // the developer's own `~/.dsh/department/`.
+  process.env.DSH_HOME = home
   const profileDir = join(home, 'profiles', 'spec')
   await mkdir(profileDir, { recursive: true })
   if (profileBundles === undefined) initProfile(profileDir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
@@ -242,12 +246,57 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies every shipped preset, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['business', 'cordis', 'minimal', 'ptc', 'standard', 'tech'])
     expect(listed.every(preset => !('path' in preset))).toBe(true)
+    // Shipped presets publish no name: the locale dictionaries own their copy,
+    // which is what keeps them in the built-in group of the roster.
+    expect(listed.every(preset => preset.name === undefined)).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
+  })
+
+  it('composes each department mode with its own rules and nothing else changed', async () => {
+    const headings = { tech: '# 技术部工作规范', business: '# 商务部工作规范' }
+    for (const [department, heading] of Object.entries(headings)) {
+      const handle = await ctx.agents.create({
+        sessionId: SessionId(`preset-${department}`),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, department).then(() => undefined),
+      })
+      try {
+        const sections = (await ctx.systemPrompt.assemble({ scope: handle.agent })).sections
+        const rules = sections.find(section => section.name === 'tianma:department')
+        expect(rules?.text).toContain(heading)
+        expect(rules?.text).not.toContain('SKILL.md')
+        // The mode extends `standard`: the full coding catalog still composes.
+        expect(toolNames(ctx, handle.agent).filter(name => name !== 'glob' && name !== 'grep').length)
+          .toBeGreaterThan(20)
+      } finally {
+        await handle.dispose()
+      }
+    }
+  })
+
+  it('advertises the 商务部 toolbox directory only as a managed variable', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-business-toolbox'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'business').then(() => undefined),
+    })
+    try {
+      const declared = ctx.shellEnv.list().find(variable => variable.key === 'DSH_DEPARTMENT_TOOLS')
+      expect(declared?.contributor).toBe('tianma-department-prompts')
+      expect(declared?.description.length).toBeGreaterThan(0)
+      const published = join(process.env.DSH_HOME ?? '', 'department', 'business-tools')
+      expect(readdirSync(published).sort())
+        .toEqual(['add_watermark.py', 'gen_doc.py', 'gen_quote.py', 'open_folder.py', 'to_pdf.py'])
+      const rules = (await ctx.systemPrompt.assemble({ scope: handle.agent })).sections
+        .find(section => section.name === 'tianma:department')?.text ?? ''
+      expect(rules).toContain('DSH_DEPARTMENT_TOOLS')
+      expect(rules).not.toContain(published)
+    } finally {
+      await handle.dispose()
+    }
   })
 
   it('composes the full agent from `standard`', async () => {

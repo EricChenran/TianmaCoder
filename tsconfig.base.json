@@ -328,6 +328,7 @@
       // the @deepseek-ai/dsh- prefix; these live outside its marked region).
       "@tianma/dsh-bundle": ["./packages/tianma/bundle/src/index.ts"],
       "@tianma/dsh-behavioral-guidelines": ["./packages/tianma/behavioral-guidelines/src/index.ts"],
+      "@tianma/dsh-department-prompts": ["./packages/tianma/department-prompts/src/index.ts"],
       "@tianma/dsh-compaction-recency-pruner": ["./packages/tianma/compaction-recency-pruner/src/index.ts"],
       "@tianma/dsh-compaction-summarize": ["./packages/tianma/compaction-summarize/src/index.ts"],
       "@tianma/dsh-compaction-file-rehydrator": ["./packages/tianma/compaction-file-rehydrator/src/index.ts"],

@@ -43,3 +43,8 @@ modules:
     roots: [packages/tianma/hooks-trust/src]
     requires: []
     upstreamSeams: [cordis]
+
+  - id: tianma-department-prompts
+    roots: [packages/tianma/department-prompts/src]
+    requires: []
+    upstreamSeams: [cordis, schemastery, dsh-home-paths, dsh-shell-env, dsh-system-prompt]

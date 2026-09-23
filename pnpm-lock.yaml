@@ -2640,6 +2640,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@tianma/dsh-department-prompts':
+        specifier: workspace:^
+        version: link:../../tianma/department-prompts
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -12796,6 +12799,25 @@ importers:
       '@deepseek-ai/dsh-util-values':
         specifier: workspace:^
         version: link:../../util/values
+
+  packages/tianma/department-prompts:
+    dependencies:
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-shell-env':
+        specifier: workspace:^
+        version: link:../../shell/shell-env
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
 
   packages/tianma/hooks-trust:
     devDependencies:

@@ -20,6 +20,10 @@ export type AgentPresetSettingsKey =
   | 'presetMinimalDescription'
   | 'presetCordisName'
   | 'presetCordisDescription'
+  | 'presetTechName'
+  | 'presetTechDescription'
+  | 'presetBusinessName'
+  | 'presetBusinessDescription'
   | 'inUse'
   | 'selectionOffDefault'
   | 'noDescription'
@@ -57,6 +61,12 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
+  presetTechName: 'Engineering mode',
+  presetTechDescription:
+    'A fixed team mode for engineering work. Keeps Standard mode capabilities and adds the department standard for backend, frontend, and server operations, including its delivery checks.',
+  presetBusinessName: 'Business mode',
+  presetBusinessDescription:
+    'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, and case retrieval, with its own document scripts.',
 
   inUse: 'New task default',
   selectionOffDefault: 'Application default',
@@ -98,6 +108,10 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalDescription: 'Agent 仅使用终端工具完成任务，适合测试和对比其基础表现。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
+  presetTechName: '技术部',
+  presetTechDescription: '固定技术团队模式。保留标准模式的能力，并加入技术部规范：后端、前端、运维三类工程纪律与交付自检。',
+  presetBusinessName: '商务部',
+  presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索，自带文档生成脚本。',
 
   inUse: '新任务默认',
   selectionOffDefault: '应用默认',
