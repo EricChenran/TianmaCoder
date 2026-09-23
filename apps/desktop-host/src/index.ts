@@ -12,6 +12,7 @@ import * as desktopOffice from './office.ts'
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+import { desktopWebPort } from './web-port.ts'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -24,7 +25,7 @@ async function main(): Promise<void> {
     profile: 'desktop',
     resolvedProfile: { profile, installAnchor },
     patchFiles: [],
-    args: ['--no-open', '--port', '19387'],
+    args: ['--no-open', '--port', desktopWebPort(process.env.DSH_DESKTOP_WEB_PORT)],
     ...(process.argv[5] === undefined ? {} : {
       packageManager: {
         command: process.execPath,
