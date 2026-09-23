@@ -42,10 +42,18 @@ import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { rankByName } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: pulls the SlotRegistry service merge (ctx.slots).
+// Type-only: the SlotRegistry service merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: the root `main` keyed slot the page registers into, declared by
+// ui-layout with the panel id brand, and the `sidebar.panellist` list the
+// entry registers into, declared by ui-sidebar.
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { SkillRow } from './SkillRow.tsx'
 import { en, NS, zh, type SkillKey } from './locales.ts'
+import { SkillsPanel } from './SkillsPanel.tsx'
+import { SkillsPanelIcon } from './SkillsPanelIcon.tsx'
+import { SkillsPageController, type SkillsPageFace } from './skills-page.ts'
 
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
   interface SessionReferenceSourceMap {
@@ -69,11 +77,15 @@ interface CatalogFetch {
   settled?: readonly SkillEntry[]
 }
 
-/** Required services: reference source faces plus the tool-row and locale registries. */
-export const inject = ['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills', 'sidebarRight']
+/** Required services: reference source faces plus the tool-row, page, and locale registries. */
+export const inject = ['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills', 'sidebarRight', 'configForms']
+
+/** The id shared by the sidebar entry and the main panel it opens. */
+export const PANEL_ID = 'skills' as MainPanelId
 
 /**
- * Client plugin body: register the '/' source, dictionaries, and keyed tool row.
+ * Client plugin body: register the '/' source, dictionaries, keyed tool row,
+ * and the sidebar's Skills entry with the management page it opens.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -82,6 +94,36 @@ export function apply(ctx: ClientContext): void {
     { name: 'tool.call.toolview', key: 'skill', locale: NS },
     SkillRow,
   ))
+
+  // The page is a global panel: it follows the main column's Session for its
+  // catalog, while the switches it writes are the profile-wide registry
+  // setting, so a switched-off skill stays off in every session.
+  const page = new SkillsPageController(ctx, {
+    loadCatalog: sessionId => fetchCatalog(sessionId).promise,
+    invalidateCatalog: (sessionId) => { invalidate(sessionId) },
+    openSkillFile: (sessionId, path) => {
+      const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
+      ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path))
+    },
+  })
+  const pageFace = (): SkillsPageFace => ({
+    hooks: { skillsPage: page.store },
+    ensure: () => { page.ensure() },
+    refresh: () => { page.refresh() },
+    setEnabled: (name, enabled) => { page.setEnabled(name, enabled) },
+    openFile: (name) => { page.openFile(name) },
+  })
+  ctx.slots.inject('main', () => ctx.slots.register(
+    { name: 'main', key: PANEL_ID, locale: NS, inject: pageFace },
+    SkillsPanel,
+  ))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist',
+    id: PANEL_ID,
+    order: 10,
+    label: () => t('panel'),
+    locale: NS,
+  }, SkillsPanelIcon))
 
   const skills = ctx.remote.skills
   const sessions = ctx.sessions

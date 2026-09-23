@@ -33,7 +33,7 @@ Use `dsh-skill` when agents should load skills from more than one source through
 
 ### Mount and configure
 
-Load the plugin like any Cordis plugin. The only configuration limits how many completed provider catalogs are kept in memory; everything else is provider behavior.
+Load the plugin like any Cordis plugin. Configuration limits how many completed provider catalogs are kept in memory and which names stay withheld from every surface; everything else is provider behavior.
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
@@ -42,6 +42,7 @@ Load the plugin like any Cordis plugin. The only configuration limits how many c
 | Field | Default | Meaning |
 |---|---|---|
 | `collectCacheMaxEntries` | `128` | Completed cwd/provider catalogs kept in memory |
+| `disabled` | `[]` | Skill names that stay installed but leave every catalog and lookup; a live field the Web client's Skills page writes |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-skill) is the exhaustive source for every accepted field.
 
@@ -100,7 +101,7 @@ A read (`list`/`snapshot`) collects each layer's candidates: runtime skills firs
 
 ### Invalidation
 
-The registry has no TTL: only a provider calling its registration-scoped `invalidate()`, or a runtime registration or disposal, clears completed catalogs. Each invalidation bumps a revision, clears the cache, and emits the unfiltered `skills/change` event; consumers refetch with their own lookup options. `invalidate()` takes effect only while the exact registration that received it is still active, so a late callback cannot disturb a replacement provider with the same name.
+The registry has no TTL: only a provider calling its registration-scoped `invalidate()`, or a runtime registration or disposal, clears completed catalogs. Each invalidation bumps a revision, clears the cache, and emits the unfiltered `skills/change` event; consumers refetch with their own lookup options. `invalidate()` takes effect only while the exact registration that received it is still active, so a late callback cannot disturb a replacement provider with the same name. A moved `disabled` list clears the catalogs the same way: the field is a live reference the Loader commits in place, and the registry compares the snapshot it filtered against on the next read.
 
 </details>
 

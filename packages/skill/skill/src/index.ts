@@ -10,13 +10,12 @@
  * @module @deepseek-ai/dsh-skill
  */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context, Service, type Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const DEFAULT_COLLECT_CACHE_ENTRIES = 128
@@ -278,6 +277,12 @@ export interface SkillProviderControl {
 export interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills that stay installed but leave every catalog and lookup.
+   * A live reference rather than a startup value, so the Web client's Skills
+   * page switches a skill off without restarting the Host.
+   */
+  readonly disabled?: Volatile<string[]>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -354,11 +359,14 @@ class SkillLayer implements ScopeLayer {
  * on demand.
  */
 export class SkillRegistry extends Service {
-  static Config: Schema<Config> = z.object({
+  static Config = z.object({
     collectCacheMaxEntries: z.number().default(DEFAULT_COLLECT_CACHE_ENTRIES),
+    disabled: z.array(z.string()).default([]).volatile(),
   })
 
   private readonly collectCacheMaxEntries: number
+  /** Disabled-names snapshot the collected catalogs were filtered against. */
+  private disabledSnapshot: readonly string[] | undefined
   private readonly layers = new ScopedLayers<SkillLayer>(
     scope => new SkillLayer(scope),
     () => { this.invalidateCache() },
@@ -370,10 +378,24 @@ export class SkillRegistry extends Service {
   private readonly scopeIds = new WeakMap<ScopeKey, number>()
   private nextScopeId = 1
 
-  constructor(ctx: Context, config: Config = {}) {
+  constructor(ctx: Context, private readonly config: Config = {}) {
     super(ctx, 'skills')
     this.collectCacheMaxEntries = config.collectCacheMaxEntries ?? DEFAULT_COLLECT_CACHE_ENTRIES
     assertPositiveInteger('collectCacheMaxEntries', this.collectCacheMaxEntries)
+    this.disabledSnapshot = config.disabled?.get()
+  }
+
+  /**
+   * Drop collected catalogs when the live disabled list moved. A volatile
+   * commit replaces the reference the Loader writes into the running instance,
+   * so reference equality is the whole change signal and a moved list reaches
+   * the next read through the registry's own invalidation.
+   */
+  private syncDisabled(): void {
+    const current = this.config.disabled?.get()
+    if (current === this.disabledSnapshot) return
+    this.disabledSnapshot = current
+    this.invalidateCache()
   }
 
   /**
@@ -518,6 +540,7 @@ export class SkillRegistry extends Service {
 
   private async collect(options: SkillViewOptions): Promise<CollectResult> {
     throwIfAborted(options.signal)
+    this.syncDisabled()
     let attempt = 1
     while (true) {
       const revision = this.revision
@@ -561,6 +584,10 @@ export class SkillRegistry extends Service {
       if (!collected.cacheable) cacheable = false
       for (const entry of collected.entries) merged.set(entry.candidate.name, entry)
     }
+    // A disabled name leaves the collected catalog, so `list()`, `snapshot()`,
+    // and `get()` all stop offering it to the model and to the human composer
+    // from the one place discovery is merged.
+    for (const name of this.config.disabled?.get() ?? []) merged.delete(name)
     return { entries: merged, cacheable }
   }
 

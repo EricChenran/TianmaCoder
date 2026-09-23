@@ -1269,4 +1269,40 @@ describe('SkillRegistry scoped layers', () => {
     expect(await ctx.skills.list({ scope })).toEqual([])
     await preset.dispose()
   })
+
+  it('withholds disabled names from every catalog read', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry, { disabled: ['a-skill'] })
+    registerProvider(ctx, new MemoryProvider([
+      memorySkill('a-skill', 'A skill', 10),
+      memorySkill('b-skill', 'B skill', 10),
+    ]))
+    expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['b-skill'])
+    expect((await ctx.skills.snapshot()).skills.map(skill => skill.name)).toEqual(['b-skill'])
+    expect(await ctx.skills.get('a-skill')).toBeUndefined()
+    expect((await ctx.skills.get('b-skill'))?.content).toBe('b-skill body.')
+    // An unknown disabled name is inert.
+    expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['b-skill'])
+  })
+
+  it('drops collected catalogs when the live disabled list moves', async () => {
+    const ctx = new Context()
+    let disabled: string[] = []
+    const registry = new SkillRegistry(ctx, { disabled: { get: () => disabled } })
+    registerProvider(ctx, new MemoryProvider([memorySkill('a-skill', 'A skill', 10)]))
+    const changes = vi.fn()
+    ctx.on('skills/change', changes)
+
+    expect((await registry.list()).map(skill => skill.name)).toEqual(['a-skill'])
+    disabled = ['a-skill']
+    expect((await registry.list()).map(skill => skill.name)).toEqual([])
+    expect(await registry.get('a-skill')).toBeUndefined()
+    expect(changes.mock.calls.length).toBe(1)
+    disabled = []
+    expect((await registry.list()).map(skill => skill.name)).toEqual(['a-skill'])
+    expect(changes.mock.calls.length).toBe(2)
+    // An unchanged list between reads publishes nothing.
+    expect((await registry.list()).map(skill => skill.name)).toEqual(['a-skill'])
+    expect(changes.mock.calls.length).toBe(2)
+  })
 })

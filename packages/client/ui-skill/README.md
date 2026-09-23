@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-client-ui-skill` lets users invoke a skill by choosing it from the `/` suggestions or typing `/name` directly. The same literal command loads the skill consistently from the Web composer, TUI, and ACP, while a name shared with a host command continues to resolve as that command. Skill calls appear in the conversation as expandable `Instructions` cards whose settled contents remain stable when the installed skill catalog changes.
+`dsh-client-ui-skill` lets users invoke a skill by choosing it from the `/` suggestions or typing `/name` directly, and it owns the sidebar's **Skills** page where the profile's skills are listed and switched. The same literal command loads the skill consistently from the Web composer, TUI, and ACP, while a name shared with a host command continues to resolve as that command. Skill calls appear in the conversation as expandable `Instructions` cards whose settled contents remain stable when the installed skill catalog changes.
 
 ## Table of Contents
 
@@ -30,6 +30,12 @@ Type `/` in the composer and pick a skill from the suggestions, or type `/name` 
 ### What the source offers
 
 Ordinary-session candidates come from the `skills/list` Remote; the host serves every user-invocable skill, and a `modelInvocable: false` entry (a `disable-model-invocation` skill, whose only entry point is this path) wears the user-only marker as a description prefix in the active language. Results rank through the `/` menu's shared name ranker, `rankByName` from ui-primitives: the query matches a case-insensitive ordered subsequence of the skill name, prefix hits rank first, and ties keep the host order ([ranking decision](../../../.agents/notes/archived/feature/2026-08-04-web-slash-command-fuzzy-discovery.md)). A failed `skills/list` call is logged and folded into a silent menu-group drop — the menu shows only pending/ready states.
+
+### The sidebar Skills page
+
+The sidebar's **Skills** entry opens a global page that manages the skills of the session the main column holds. Two row groups answer the two switch states: the skills the session's composition offers now, and the names the Host withholds. Each row carries the skill name, its routing description, a user-only tag when the model is not offered the skill, a reveal control for the instruction file, and the switch itself.
+
+The switch writes the skill registry's `disabled` list — the settings section of the `skill` entry (see `skill-registry-settings.ts`) — so a switched-off skill leaves the `/` menu, the model catalog, and every other read of that registry, in this session and everywhere else, and the state survives a restart. While a write runs, its row's switch is locked; a refused write reports the failure and leaves the accepted value standing. The page reads the registry section through the shared configuration-form service, so an editor in another tab moves the same switches. Switching writes only the Host document: the page never mutates skill files or providers.
 
 ### The skill tool row
 
@@ -95,11 +101,12 @@ Append-only: the injected message lands after the reusable history prefix. This 
 <a id="known-limitations-and-deferred-work"></a>
 
 
-These limits define where the reference and the row fall back to generic behavior; they are current package constraints.
+These limits define where the reference, the row, and the Skills page fall back to generic behavior; they are current package constraints.
 
 - **Result-only history pages use the generic row** — keyed dispatch needs the paired call in the runtime window; pagination that leaves the call outside has no tool identity. This client presentation feature does not extend the history wire contract to recover it.
 - **Text is the truth** — the reference is plain draft text; a hand-typed identical token is the same reference, and the host gesture boundary judges the sent text, not the menu interaction. Chip visuals derive from the lexicon scan; no occurrence identity, position tracking, or structured reference payload exists on the prompt wire.
 - **A menu opened before the prewarm settles** shows no skill candidates for that keystroke; the next keystroke re-polls the settled cache.
+- **The Skills page lists a session's composition, not the installation** — the catalog is the same session-addressed read the `/` menu uses, so the page asks for a session and shows the empty-selection guidance without one. A disabled name this page has never seen enabled renders with its name alone until a read returns it.
 
 <a id="dev-note"></a>
 ### Dev Note

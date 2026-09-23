@@ -2686,10 +2686,18 @@ Source: [`packages/shell/shell-env/src/index.ts:30`](../packages/shell/shell-env
 export interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills that stay installed but leave every catalog and lookup.
+   * A live reference rather than a startup value, so the Web client's Skills
+   * page switches a skill off without restarting the Host.
+   */
+  readonly disabled?: Volatile<string[]>
 }
 ```
 
-Source: [`packages/skill/skill/src/index.ts:278`](../packages/skill/skill/src/index.ts)
+Depends on: `Volatile` (`@deepseek-ai/cordis`)
+
+Source: [`packages/skill/skill/src/index.ts:277`](../packages/skill/skill/src/index.ts)
 
 <a id="deepseek-aidsh-skill-filesystem"></a>
 

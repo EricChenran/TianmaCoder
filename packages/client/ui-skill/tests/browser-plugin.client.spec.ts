@@ -17,13 +17,18 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { RemoteError, TestRemote, TestSessions } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, TestRemote, TestSessions, stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionFixture } from '@deepseek-ai/dsh-client-test-runtime'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientSessionContext, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { apply, inject } from '../src/client/index.ts'
+import { apply, inject, PANEL_ID } from '../src/client/index.ts'
 import { SkillRow as SkillToolRow } from '../src/client/SkillRow.tsx'
+import { SkillsPanel } from '../src/client/SkillsPanel.tsx'
+import { SkillsPanelIcon } from '../src/client/SkillsPanelIcon.tsx'
+import { en, zh } from '../src/client/locales.ts'
+import type { SkillRegistrySettings } from '../src/client/skill-registry-settings.ts'
 
 type SkillRow = { name: string; description: string; whenToUse?: string; path?: string; modelInvocable?: boolean }
 type ListResult =
@@ -42,7 +47,11 @@ function providePresentation(ctx: Context): PresentationCapture {
   const slots = new SlotRegistry(ctx)
   slots.register({
     name: 'root',
-    children: { 'tool.call.toolview': { kind: 'keyed', scope: 'session' } },
+    children: {
+      'tool.call.toolview': { kind: 'keyed', scope: 'session' },
+      'main': { kind: 'keyed', scope: 'root' },
+      'sidebar.panellist': { kind: 'list', scope: 'root' },
+    },
   } as never, () => null)
   const capture: PresentationCapture = {
     slots,
@@ -55,8 +64,13 @@ function providePresentation(ctx: Context): PresentationCapture {
       return () => { capture.localeDisposed = true }
     },
     // Minimal bound-translate fake: zh dictionary lookup, key passthrough on miss.
-    bind: () => (key: string) => key === 'menu.userOnly' ? '仅用户' : key,
+    bind: () => (key: string) => (zh as Record<string, string>)[key] ?? key,
   })
+  // The page's switches ride the registry's settings section; ready and
+  // writable so the page face is fully constructed wherever the plugin boots.
+  const form = stubConfigForm<SkillRegistrySettings>()
+  form.publish({ status: 'ready', value: { disabled: [] }, writable: true })
+  ctx.provide('configForms', { get: () => form.scope })
   return capture
 }
 
@@ -107,6 +121,12 @@ function countingList(skills: SkillRow[] = CATALOG) {
 
 const sid = (id: string) => id as SessionId
 
+/** The selection face the page follows: an empty main column. */
+const EMPTY_SESSION_LIST = {
+  getSnapshot: () => ({ byId: {} }),
+  subscribe: () => () => {},
+}
+
 const proj = (id: string): ClientSessionContext => ({ sessionId: sid(id) })
 
 const req = (query: string, signal?: AbortSignal) =>
@@ -114,14 +134,14 @@ const req = (query: string, signal?: AbortSignal) =>
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills', 'sidebarRight'])
+    expect(inject).toEqual(['inputTriggers', 'sessions', 'slots', 'locale', 'remote', 'remote.skills', 'sidebarRight', 'configForms'])
   })
 
   it('registers the dedicated skill row and its locale dictionaries', async () => {
     const ctx = new Context()
     ctx.provide('sidebarRight', { openResource: vi.fn() })
     ctx.provide('inputTriggers', { registerSource: () => () => {} })
-    ctx.provide('sessions', { subagentAddress: () => undefined })
+    ctx.provide('sessions', { subagentAddress: () => undefined, list: EMPTY_SESSION_LIST })
     new TestRemote(ctx, { skills: { list: listOk(CATALOG) } })
     const presentation = providePresentation(ctx)
     await ctx.plugin({ inject: [...inject], apply }).await()
@@ -130,34 +150,39 @@ describe('apply', () => {
     expect(entry?.locale).toBe('skill')
     expect(entry?.component).toBe(SkillToolRow)
     expect(presentation.dictionaries).toEqual([{
-      namespace: 'skill', dictionaries: {
-        zh: {
-          'row.title': '加载技能',
-          'row.running': '正在加载 skill',
-          'row.failed': 'skill 加载失败',
-          'row.stopped': 'skill 加载已中止',
-          'row.instructions': '说明',
-          'row.inspect': '查看',
-          'menu.userOnly': '仅用户',
-        },
-        en: {
-          'row.title': 'Skill',
-          'row.running': 'Loading skill',
-          'row.failed': 'Skill load failed',
-          'row.stopped': 'Skill load stopped',
-          'row.instructions': 'Instructions',
-          'row.inspect': 'Inspect',
-          'menu.userOnly': 'user-only',
-        },
-      },
+      namespace: 'skill', dictionaries: { zh, en },
     }])
+  })
+
+  it('registers the sidebar Skills entry and the page it opens', async () => {
+    const ctx = new Context()
+    ctx.provide('sidebarRight', { openResource: vi.fn() })
+    ctx.provide('inputTriggers', { registerSource: () => () => {} })
+    ctx.provide('sessions', { subagentAddress: () => undefined, list: EMPTY_SESSION_LIST })
+    new TestRemote(ctx, { skills: { list: listOk(CATALOG) } })
+    const presentation = providePresentation(ctx)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    const page = presentation.slots.entries('main')[0]
+    expect(page?.options).toMatchObject({ key: PANEL_ID })
+    expect(page?.locale).toBe('skill')
+    expect(page?.component).toBe(SkillsPanel)
+    const icon = presentation.slots.entries('sidebar.panellist')[0]
+    expect(icon?.options).toMatchObject({ id: PANEL_ID, order: 10 })
+    expect(icon?.locale).toBe('skill')
+    expect(icon?.component).toBe(SkillsPanelIcon)
+    // The entry reads the shared dictionaries through the same namespace.
+    expect(resolveSlotLabel(icon?.options.label)).toBe('技能')
+    // Disposal takes the entry and its page with the fiber.
+    await ctx.fiber.dispose()
+    expect(presentation.slots.entries('main')).toEqual([])
+    expect(presentation.slots.entries('sidebar.panellist')).toEqual([])
   })
 
   it('registers the "/" skill source; disposal frees the name (HMR safety)', async () => {
     const ctx = new Context()
     ctx.provide('sidebarRight', { openResource: vi.fn() })
     // InputTriggerService itself injects 'sessions'; the stub unblocks its fiber.
-    ctx.provide('sessions', {})
+    ctx.provide('sessions', { list: EMPTY_SESSION_LIST })
     await ctx.plugin(InputTriggerService).await()
     new TestRemote(ctx, { skills: { list: listOk(CATALOG) } })
     const presentation = providePresentation(ctx)

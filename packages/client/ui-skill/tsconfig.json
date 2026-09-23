@@ -42,6 +42,18 @@
       "path": "../ui-sidebar-right"
     },
     {
+      "path": "../ui-sidebar"
+    },
+    {
+      "path": "../ui-layout"
+    },
+    {
+      "path": "../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../store"
+    },
+    {
       "path": "../../util/workspace-path"
     }
   ]
