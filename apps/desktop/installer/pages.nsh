@@ -8,6 +8,7 @@ Var InstallerPhase
 Var InstallerDpi
 Var InstallerSize
 Var InstallerImage
+Var InstallerEnterpriseImage
 Var InstallerButton
 Var InstallerStatus
 Var InstallerFont
@@ -79,6 +80,19 @@ Function InstallerCreate
         ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5.bmp" $InstallerImage
     ${Else}
         ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5-2x.bmp" $InstallerImage
+    ${EndIf}
+
+    ${NSD_CreateBitmap} 0 0 0 0 ""
+    Pop $4
+    !insertmacro InstallerPlace $4 ${INSTALLER_ENTERPRISE_X} ${INSTALLER_ENTERPRISE_Y} ${INSTALLER_ENTERPRISE_WIDTH} ${INSTALLER_ENTERPRISE_HEIGHT}
+    StrCpy $5 "enterprise-logo"
+    ${If} $InstallerTheme == "dark"
+        StrCpy $5 "enterprise-logo-dark"
+    ${EndIf}
+    ${If} $InstallerDpi <= 96
+        ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5.bmp" $InstallerEnterpriseImage
+    ${Else}
+        ${NSD_SetStretchedImage} $4 "$PLUGINSDIR\$5-2x.bmp" $InstallerEnterpriseImage
     ${EndIf}
 
     ${NSD_CreateLabel} 0 0 0 0 ""
@@ -173,6 +187,7 @@ Function InstallerCreate
     nsDialogs::Show
     ${NSD_KillTimer} InstallerValidateEditedPath
     ${NSD_FreeImage} $InstallerImage
+    ${NSD_FreeImage} $InstallerEnterpriseImage
     ${NSD_FreeImage} $InstallerEditFrameBitmap
     System::Call 'gdiplus::GdiplusShutdown(p $InstallerGdiToken)'
     System::Call 'gdi32::DeleteObject(p $InstallerFont)'
