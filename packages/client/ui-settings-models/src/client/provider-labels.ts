@@ -9,6 +9,7 @@
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
   'zai-coding-cn': '智谱 GLM Coding Plan',
   zai: 'Z.AI（智谱国际）',
+  'commandcode-goat': 'Command Code GOAT 计划',
 }
 
 /**

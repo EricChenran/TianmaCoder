@@ -8,9 +8,9 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: deepseek-official
-    model: deepseek-flash
-    reasoningEffort: high
+    provider: zai-coding-cn
+    model: glm-5.3-flash
+    reasoningEffort: max
 - id: ui-theme
   name: "@deepseek-ai/dsh-client-ui-theme"
   config:
@@ -19,3 +19,38 @@
   name: "@deepseek-ai/dsh-client-locale"
   config:
     preference: zh
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      zai-coding-cn:
+        apiKeyEnv: ZAI_CODING_CN_API_KEY
+        models:
+          - id: glm-5.3-flash
+            name: glm-5.3-flash
+      commandcode-goat:
+        displayName: Command Code GOAT 计划
+        apiKeyEnv: COMMANDCODE_API_KEY
+        baseURL: https://api.commandcode.ai/provider/v1
+        api: openai-completions
+        models:
+          - id: zai/glm-5.2
+            name: GLM-5.2
+          - id: zai/glm-5.3
+            name: GLM-5.3
+          - id: deepseek/deepseek-v4-flash
+            name: DeepSeek V4 Flash
+          - id: deepseek/deepseek-v4-pro
+            name: DeepSeek V4 Pro
+          - id: openai/gpt-5.6-sol
+            name: GPT-5.6 Sol
+          - id: openai/gpt-5.6-luna
+            name: GPT-5.6 Luna
+          - id: moonshot/kimi-k3
+            name: Kimi K3
+          - id: x-ai/grok-4.7
+            name: Grok 4.7
+          - id: google/gemini-3.7-flash
+            name: Gemini 3.7 Flash
+          - id: qwen/qwen3.7-max
+            name: Qwen 3.7 Max
