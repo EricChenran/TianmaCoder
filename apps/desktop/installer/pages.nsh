@@ -1,4 +1,4 @@
-; Native welcome and finish pages for the electron-builder installer.
+; Native introduction, welcome and finish pages for the electron-builder installer.
 !ifndef HARNESS_INSTALLER_UI
 !define HARNESS_INSTALLER_UI
 !define WM_NOTIFY_OUTER_NEXT 0x408
@@ -12,12 +12,23 @@ Var InstallerButton
 Var InstallerStatus
 Var InstallerFont
 Var InstallerSmallFont
+Var InstallerTitleFont
 Var InstallerChoose
 Var InstallerEdit
 Var InstallerEditFrame
 Var InstallerBrowse
 Var InstallerLaunch
 Var InstallerExpanded
+Var InstallerBrandY
+Var InstallerPresented
+Var InstallerGuideStep
+Var InstallerGuideCaption
+Var InstallerGuideTitle
+Var InstallerGuideLine1
+Var InstallerGuideLine2
+Var InstallerGuideLine3
+Var InstallerGuideBack
+Var InstallerGuideNext
 !include "${__FILEDIR__}\path.nsh"
 !include "${__FILEDIR__}\drawing.nsh"
 
@@ -30,7 +41,32 @@ Var InstallerExpanded
     System::Call 'user32::MoveWindow(p ${HWND}, i r0, i r1, i r2, i r3, i 1)'
 !macroend
 
-Function InstallerCreate
+; One introduction step replaces its text block without re-creating controls.
+!macro InstallerGuideText HANDLE STEP1 STEP2 STEP3
+    ${If} $InstallerGuideStep == 1
+        ${NSD_SetText} ${HANDLE} "${STEP1}"
+    ${ElseIf} $InstallerGuideStep == 2
+        ${NSD_SetText} ${HANDLE} "${STEP2}"
+    ${Else}
+        ${NSD_SetText} ${HANDLE} "${STEP3}"
+    ${EndIf}
+!macroend
+
+; Body lines stack from the first slot; $R0 keeps the calculated offset off the caller's registers.
+!macro InstallerGuideLine HANDLE INDEX
+    ${NSD_CreateLabel} 0 0 0 0 ""
+    Pop ${HANDLE}
+    StrCpy $R0 ${INDEX}
+    IntOp $R0 $R0 * ${INSTALLER_GUIDE_BODY_GAP}
+    IntOp $R0 $R0 + ${INSTALLER_GUIDE_BODY_Y}
+    !insertmacro InstallerPlace ${HANDLE} ${INSTALLER_GUIDE_TEXT_X} $R0 ${INSTALLER_GUIDE_TEXT_WIDTH} ${INSTALLER_GUIDE_BODY_HEIGHT}
+    ${NSD_AddStyle} ${HANDLE} ${SS_CENTER}|${SS_CENTERIMAGE}
+    SendMessage ${HANDLE} ${WM_SETFONT} $InstallerSmallFont 1
+    !insertmacro InstallerCaptionColors ${HANDLE}
+!macroend
+
+; Every page of the frameless window shares the drag area, title buttons, brand bitmap and caption.
+Function InstallerCreateShell
     nsDialogs::Create 1018
     Pop $InstallerDialog
     ${If} $InstallerDialog == error
@@ -41,6 +77,7 @@ Function InstallerCreate
     !insertmacro InstallerControlColors $InstallerDialog
     !insertmacro InstallerPixelFont $InstallerFont ${INSTALLER_BUTTON_FONT_SIZE} 500
     !insertmacro InstallerPixelFont $InstallerSmallFont ${INSTALLER_STATUS_FONT_SIZE} 400
+    !insertmacro InstallerPixelFont $InstallerTitleFont ${INSTALLER_GUIDE_TITLE_FONT_SIZE} 500
     System::Call '*(i 1, p 0, i 0, i 0) p.r0'
     System::Call 'gdiplus::GdiplusStartup(*p .r1, p r0, p 0) i.r2'
     StrCpy $InstallerGdiToken $1
@@ -70,7 +107,7 @@ Function InstallerCreate
 
     ${NSD_CreateBitmap} 0 0 0 0 ""
     Pop $4
-    !insertmacro InstallerPlace $4 0 ${INSTALLER_BRAND_Y} ${INSTALLER_WINDOW_SIZE} ${INSTALLER_BRAND_HEIGHT}
+    !insertmacro InstallerPlace $4 0 $InstallerBrandY ${INSTALLER_WINDOW_SIZE} ${INSTALLER_BRAND_HEIGHT}
     StrCpy $5 "brand"
     ${If} $InstallerTheme == "dark"
         StrCpy $5 "brand-dark"
@@ -86,13 +123,119 @@ Function InstallerCreate
     !insertmacro InstallerPlace $4 ${INSTALLER_COPYRIGHT_X} ${INSTALLER_COPYRIGHT_Y} ${INSTALLER_COPYRIGHT_WIDTH} ${INSTALLER_COPYRIGHT_HEIGHT}
     ${NSD_AddStyle} $4 ${SS_CENTER}|${SS_CENTERIMAGE}
     SendMessage $4 ${WM_SETFONT} $InstallerSmallFont 1
-    ; A muted caption keeps the page's two-tone palette; the dialog behind it
-    ; paints its own background, so the label's own is transparent.
-    ${If} $InstallerTheme == "dark"
-        SetCtlColors $4 A0A4AB transparent
-    ${Else}
-        SetCtlColors $4 8A9099 transparent
+    !insertmacro InstallerCaptionColors $4
+FunctionEnd
+
+Function InstallerDestroyShell
+    ${NSD_FreeImage} $InstallerImage
+    System::Call 'gdiplus::GdiplusShutdown(p $InstallerGdiToken)'
+    System::Call 'gdi32::DeleteObject(p $InstallerFont)'
+    System::Call 'gdi32::DeleteObject(p $InstallerSmallFont)'
+    System::Call 'gdi32::DeleteObject(p $InstallerTitleFont)'
+FunctionEnd
+
+; The first page shown raises the prepared window once, after its branded controls exist.
+Function InstallerPresent
+    ShowWindow $InstallerDialog 5
+    ShowWindow $HWNDPARENT 5
+    ${If} $InstallerPresented == 1
+        Return
     ${EndIf}
+    StrCpy $InstallerPresented 1
+    System::Call '$PLUGINSDIR\window-frame.dll::InstallerPresentWelcome(p $HWNDPARENT) i.r0 ?c'
+FunctionEnd
+
+; The introduction steps precede the installation page on a new installation.
+Function InstallerGuide
+    ${If} ${isUpdated}
+        Abort
+    ${EndIf}
+    StrCpy $InstallerPhase "guide"
+    StrCpy $InstallerGuideStep 1
+    StrCpy $InstallerBrandY ${INSTALLER_GUIDE_BRAND_Y}
+    Call InstallerCreateShell
+
+    ${NSD_CreateLabel} 0 0 0 0 ""
+    Pop $InstallerGuideCaption
+    !insertmacro InstallerPlace $InstallerGuideCaption ${INSTALLER_GUIDE_TEXT_X} ${INSTALLER_GUIDE_CAPTION_Y} ${INSTALLER_GUIDE_TEXT_WIDTH} ${INSTALLER_GUIDE_CAPTION_HEIGHT}
+    ${NSD_AddStyle} $InstallerGuideCaption ${SS_CENTER}|${SS_CENTERIMAGE}
+    SendMessage $InstallerGuideCaption ${WM_SETFONT} $InstallerSmallFont 1
+    !insertmacro InstallerCaptionColors $InstallerGuideCaption
+
+    ${NSD_CreateLabel} 0 0 0 0 ""
+    Pop $InstallerGuideTitle
+    !insertmacro InstallerPlace $InstallerGuideTitle ${INSTALLER_GUIDE_TEXT_X} ${INSTALLER_GUIDE_TITLE_Y} ${INSTALLER_GUIDE_TEXT_WIDTH} ${INSTALLER_GUIDE_TITLE_HEIGHT}
+    ${NSD_AddStyle} $InstallerGuideTitle ${SS_CENTER}|${SS_CENTERIMAGE}
+    SendMessage $InstallerGuideTitle ${WM_SETFONT} $InstallerTitleFont 1
+    !insertmacro InstallerControlColors $InstallerGuideTitle
+
+    !insertmacro InstallerGuideLine $InstallerGuideLine1 0
+    !insertmacro InstallerGuideLine $InstallerGuideLine2 1
+    !insertmacro InstallerGuideLine $InstallerGuideLine3 2
+
+    ${NSD_CreateButton} 0 0 0 0 "$(INSTALLER_GUIDE_BACK)"
+    Pop $InstallerGuideBack
+    !insertmacro InstallerPlace $InstallerGuideBack ${INSTALLER_GUIDE_BACK_X} ${INSTALLER_GUIDE_BUTTON_Y} ${INSTALLER_GUIDE_BUTTON_WIDTH} ${INSTALLER_GUIDE_BUTTON_HEIGHT}
+    SendMessage $InstallerGuideBack ${WM_SETFONT} $InstallerFont 1
+    ${NSD_OnClick} $InstallerGuideBack InstallerGuideBackClick
+    ${NSD_OnNotify} $InstallerGuideBack InstallerPaintButton
+
+    ${NSD_CreateButton} 0 0 0 0 "$(INSTALLER_GUIDE_NEXT)"
+    Pop $InstallerGuideNext
+    !insertmacro InstallerPlace $InstallerGuideNext ${INSTALLER_GUIDE_NEXT_X} ${INSTALLER_GUIDE_BUTTON_Y} ${INSTALLER_GUIDE_BUTTON_WIDTH} ${INSTALLER_GUIDE_BUTTON_HEIGHT}
+    SendMessage $InstallerGuideNext ${WM_SETFONT} $InstallerFont 1
+    ${NSD_OnClick} $InstallerGuideNext InstallerGuideNextClick
+    ${NSD_OnNotify} $InstallerGuideNext InstallerPaintButton
+
+    Call InstallerRenderGuide
+    System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Ready", p 1)'
+    Call InstallerPresent
+    nsDialogs::Show
+    ; The page's controls are gone; a recycled handle must not repaint as a guide action.
+    StrCpy $InstallerGuideBack 0
+    StrCpy $InstallerGuideNext 0
+    Call InstallerDestroyShell
+FunctionEnd
+
+; The first step centres one action; later steps pair Back with Next.
+Function InstallerRenderGuide
+    ${NSD_SetText} $InstallerGuideCaption "$InstallerGuideStep / ${INSTALLER_GUIDE_STEPS}"
+    !insertmacro InstallerGuideText $InstallerGuideTitle "$(INSTALLER_GUIDE1_TITLE)" "$(INSTALLER_GUIDE2_TITLE)" "$(INSTALLER_GUIDE3_TITLE)"
+    !insertmacro InstallerGuideText $InstallerGuideLine1 "$(INSTALLER_GUIDE1_LINE1)" "$(INSTALLER_GUIDE2_LINE1)" "$(INSTALLER_GUIDE3_LINE1)"
+    !insertmacro InstallerGuideText $InstallerGuideLine2 "$(INSTALLER_GUIDE1_LINE2)" "$(INSTALLER_GUIDE2_LINE2)" "$(INSTALLER_GUIDE3_LINE2)"
+    !insertmacro InstallerGuideText $InstallerGuideLine3 "$(INSTALLER_GUIDE1_LINE3)" "$(INSTALLER_GUIDE2_LINE3)" "$(INSTALLER_GUIDE3_LINE3)"
+    ${If} $InstallerGuideStep == 1
+        ShowWindow $InstallerGuideBack 0
+        !insertmacro InstallerPlace $InstallerGuideNext ${INSTALLER_BUTTON_X} ${INSTALLER_BUTTON_Y} ${INSTALLER_BUTTON_WIDTH} ${INSTALLER_BUTTON_HEIGHT}
+    ${Else}
+        ShowWindow $InstallerGuideBack 5
+        !insertmacro InstallerPlace $InstallerGuideBack ${INSTALLER_GUIDE_BACK_X} ${INSTALLER_GUIDE_BUTTON_Y} ${INSTALLER_GUIDE_BUTTON_WIDTH} ${INSTALLER_GUIDE_BUTTON_HEIGHT}
+        !insertmacro InstallerPlace $InstallerGuideNext ${INSTALLER_GUIDE_NEXT_X} ${INSTALLER_GUIDE_BUTTON_Y} ${INSTALLER_GUIDE_BUTTON_WIDTH} ${INSTALLER_GUIDE_BUTTON_HEIGHT}
+    ${EndIf}
+FunctionEnd
+
+Function InstallerGuideBackClick
+    Pop $0
+    ${If} $InstallerGuideStep == 1
+        Return
+    ${EndIf}
+    IntOp $InstallerGuideStep $InstallerGuideStep - 1
+    Call InstallerRenderGuide
+FunctionEnd
+
+Function InstallerGuideNextClick
+    Pop $0
+    ${If} $InstallerGuideStep < ${INSTALLER_GUIDE_STEPS}
+        IntOp $InstallerGuideStep $InstallerGuideStep + 1
+        Call InstallerRenderGuide
+        Return
+    ${EndIf}
+    SendMessage $HWNDPARENT ${WM_NOTIFY_OUTER_NEXT} 1 0
+FunctionEnd
+
+Function InstallerCreate
+    StrCpy $InstallerBrandY ${INSTALLER_BRAND_Y}
+    Call InstallerCreateShell
 
     ${NSD_CreateLabel} 0 0 0 0 ""
     Pop $InstallerStatus
@@ -178,18 +321,11 @@ Function InstallerCreate
     ${NSD_OnNotify} $InstallerButton InstallerPaintButton
     Call InstallerRender
     System::Call 'user32::SetPropW(p $HWNDPARENT, w "HarnessInstaller.Ready", p 1)'
-    ShowWindow $InstallerDialog 5
-    ShowWindow $HWNDPARENT 5
-    ${If} $InstallerPhase == "welcome"
-        System::Call '$PLUGINSDIR\window-frame.dll::InstallerPresentWelcome(p $HWNDPARENT) i.r0 ?c'
-    ${EndIf}
+    Call InstallerPresent
     nsDialogs::Show
     ${NSD_KillTimer} InstallerValidateEditedPath
-    ${NSD_FreeImage} $InstallerImage
     ${NSD_FreeImage} $InstallerEditFrameBitmap
-    System::Call 'gdiplus::GdiplusShutdown(p $InstallerGdiToken)'
-    System::Call 'gdi32::DeleteObject(p $InstallerFont)'
-    System::Call 'gdi32::DeleteObject(p $InstallerSmallFont)'
+    Call InstallerDestroyShell
 FunctionEnd
 
 Function InstallerRender
@@ -320,6 +456,7 @@ Function InstallerPaintButton
     System::Call 'gdi32::DeleteObject(p R3)'
     StrCpy $R3 $InstallerBgArgb
     ${If} $R0 == $InstallerButton
+    ${OrIf} $R0 == $InstallerGuideNext
         StrCpy $R3 $InstallerPrimary
         IntOp $R1 $R9 & 64
         ${If} $R1 != 0
@@ -341,11 +478,13 @@ Function InstallerPaintButton
     System::Call 'gdiplus::GdipSetPixelOffsetMode(p R5, i 4)'
     System::Call 'kernel32::MulDiv(i ${INSTALLER_BUTTON_DIAMETER}, i $InstallerDpi, i 96) i.R3'
     ${If} $R0 == $InstallerBrowse
+    ${OrIf} $R0 == $InstallerGuideBack
         System::Call 'kernel32::MulDiv(i 12, i $InstallerDpi, i 96) i.R3'
     ${EndIf}
     !insertmacro InstallerRoundPath $R6 $R7 $R8 $R3
     System::Call 'gdiplus::GdipFillPath(p R5, p R1, p R6)'
     ${If} $R0 == $InstallerBrowse
+    ${OrIf} $R0 == $InstallerGuideBack
         System::Call 'gdiplus::GdipCreatePen1(i $InstallerBorder, i 0x40000000, i 2, *p .r2)'
         System::Call 'gdiplus::GdipDrawPath(p R5, p r2, p R6)'
         System::Call 'gdiplus::GdipDeletePen(p r2)'
@@ -355,6 +494,7 @@ Function InstallerPaintButton
     System::Call 'gdiplus::GdipDeleteBrush(p R1)'
     System::Call 'gdi32::SetBkMode(p R4, i 1)'
     ${If} $R0 == $InstallerButton
+    ${OrIf} $R0 == $InstallerGuideNext
         System::Call 'gdi32::SetTextColor(p R4, i $InstallerButtonText)'
     ${Else}
         System::Call 'gdi32::SetTextColor(p R4, i $InstallerTextColorref)'

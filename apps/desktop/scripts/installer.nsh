@@ -79,6 +79,7 @@ ManifestDPIAware true
 !macroend
 
 !macro customWelcomePage
+  Page custom InstallerGuide
   Page custom InstallerWelcome InstallerWelcomeLeave
 !macroend
 

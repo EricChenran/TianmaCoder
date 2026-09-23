@@ -49,12 +49,27 @@ function Start-Setup([string]$Theme, [string]$Path = $installPath) {
         Start-Sleep -Milliseconds 10
     }
     [InstallerCapture]::Reveal($window)
+    # The installation page follows the introduction steps, so identify the language from their action.
     $languages = @($localizedCopy.Keys | Where-Object {
-        [InstallerCapture]::FindButton($process.Id, $localizedCopy[$_].INSTALLER_INSTALL) -ne [IntPtr]::Zero
+        [InstallerCapture]::FindButton($process.Id, $localizedCopy[$_].INSTALLER_GUIDE_NEXT) -ne [IntPtr]::Zero
     })
     if ($languages.Count -ne 1) { throw "Cannot identify installer language: $([InstallerCapture]::VisibleText($process.Id))" }
     $script:copy = $localizedCopy[$languages[0]]
+    [void](Wait-Control $process $copy.INSTALLER_GUIDE1_TITLE)
+    [void][InstallerCapture]::Save($window, (Join-Path $OutputDirectory ($Theme + '-guide.png')))
+    # Steps render in place; Back returns to the previous step before the last Next leaves the page.
+    Click-Control $process $copy.INSTALLER_GUIDE_NEXT
+    [void](Wait-Control $process $copy.INSTALLER_GUIDE2_TITLE)
+    Click-Control $process $copy.INSTALLER_GUIDE_BACK
+    [void](Wait-Control $process $copy.INSTALLER_GUIDE1_TITLE)
+    Click-Control $process $copy.INSTALLER_GUIDE_NEXT
+    Click-Control $process $copy.INSTALLER_GUIDE_NEXT
+    [void](Wait-Control $process $copy.INSTALLER_GUIDE3_TITLE)
+    Click-Control $process $copy.INSTALLER_GUIDE_NEXT
     [void](Wait-Control $process $copy.INSTALLER_INSTALL)
+    if ($results -notcontains 'introduction-steps-with-back-navigation') {
+        $results.Add('introduction-steps-with-back-navigation')
+    }
     return $process
 }
 function Click-Control([Diagnostics.Process]$Process, [string]$Text) {

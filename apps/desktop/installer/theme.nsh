@@ -22,6 +22,24 @@
 !define INSTALLER_FONT "Microsoft YaHei UI"
 !define INSTALLER_BUTTON_FONT_SIZE 16
 !define INSTALLER_STATUS_FONT_SIZE 14
+; The introduction steps replace the action controls with a text block above the same button row.
+!define INSTALLER_GUIDE_STEPS 3
+!define INSTALLER_GUIDE_BRAND_Y 48
+!define INSTALLER_GUIDE_TEXT_X 48
+!define INSTALLER_GUIDE_TEXT_WIDTH 504
+!define INSTALLER_GUIDE_CAPTION_Y 256
+!define INSTALLER_GUIDE_CAPTION_HEIGHT 20
+!define INSTALLER_GUIDE_TITLE_Y 288
+!define INSTALLER_GUIDE_TITLE_HEIGHT 32
+!define INSTALLER_GUIDE_TITLE_FONT_SIZE 20
+!define INSTALLER_GUIDE_BODY_Y 352
+!define INSTALLER_GUIDE_BODY_HEIGHT 22
+!define INSTALLER_GUIDE_BODY_GAP 30
+!define INSTALLER_GUIDE_BACK_X 168
+!define INSTALLER_GUIDE_NEXT_X 312
+!define INSTALLER_GUIDE_BUTTON_Y 490
+!define INSTALLER_GUIDE_BUTTON_WIDTH 120
+!define INSTALLER_GUIDE_BUTTON_HEIGHT 44
 ; GDI+ ARGB values; GDI text uses COLORREF below.
 !define INSTALLER_PRIMARY 0xFF0F1115
 !define INSTALLER_PRIMARY_HOVER 0xFF2D3135
@@ -50,6 +68,16 @@ Var InstallerBorder
         SetCtlColors ${HANDLE} FFFFFF 151517
     ${Else}
         SetCtlColors ${HANDLE} 0F1115 FFFFFF
+    ${EndIf}
+!macroend
+
+; A muted caption keeps the page's two-tone palette; the dialog behind it
+; paints its own background, so the label's own is transparent.
+!macro InstallerCaptionColors HANDLE
+    ${If} $InstallerTheme == "dark"
+        SetCtlColors ${HANDLE} A0A4AB transparent
+    ${Else}
+        SetCtlColors ${HANDLE} 8A9099 transparent
     ${EndIf}
 !macroend
 

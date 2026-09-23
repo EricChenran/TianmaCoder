@@ -2,6 +2,7 @@
   "launchCheckboxState": 1,
   "nativeProgressVisible": false,
   "cases": [
+    "introduction-steps-with-back-navigation",
     "enter-validates-current-path-and-unchecked-launch",
     "completion-preserves-window-position",
     "welcome-ready-before-first-show",
