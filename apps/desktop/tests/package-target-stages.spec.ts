@@ -102,6 +102,14 @@ it.each(['--unsigned', '--prepare-only'])('keeps %s hardware-free and creates no
   expect(stages.includes('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')).toBe(mode === '--unsigned')
 })
 
+it('packs the private product packages into the set the runtime installs from', async () => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['win-x64', '--unsigned'], 'win32', 'x64'), environment, run)
+  const department = stages.findIndex(stage => stage.startsWith('--dir packages/tianma/department-prompts pack '))
+  expect(department).toBeGreaterThan(-1)
+  expect(stages.indexOf('run prepare:packages')).toBeGreaterThan(department)
+})
+
 it('checks the assembled macOS runtime before notarizing and recording the release', async () => {
   const { run, stages } = supervisor()
   vi.mocked(packageMacOSArtifacts).mockImplementationOnce(async () => {
