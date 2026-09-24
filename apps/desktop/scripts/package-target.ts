@@ -9,6 +9,8 @@ import {
   resolveDesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { unpackedWorkspacePackages } from './unpacked-workspace-packages.ts'
+import { DESKTOP_HOST_PACKAGE } from '../src/core-package-set.ts'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
 import { loadDesktopPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createPackagingRun, recordPackagingEvent } from './packaging-run.mjs'
@@ -456,16 +458,18 @@ export async function packageTarget(
     '--pack-destination',
     buildPaths.packedDsh,
   ], buildEnv, REPOSITORY_ROOT)
-  // The department presets shipped by @deepseek-ai/dsh-web-app load this private product plugin by
-  // package name, so the package set has to carry it. `release:pack` skips it: the manifest is
-  // `private` and named outside the released @deepseek-ai scope it packs.
-  await execute([
-    '--dir',
-    'packages/tianma/department-prompts',
-    'pack',
-    '--pack-destination',
-    buildPaths.packedDsh,
-  ], buildEnv, REPOSITORY_ROOT)
+  // `release:pack` publishes only public @deepseek-ai manifests, while the product runtime
+  // reaches private product plugins through the product bundle's dependencies. The package
+  // set has to carry each one, so pack whatever the earlier stages left unpacked.
+  for (const unpacked of unpackedWorkspacePackages(REPOSITORY_ROOT, [DESKTOP_HOST_PACKAGE])) {
+    await execute([
+      '--dir',
+      unpacked.directory,
+      'pack',
+      '--pack-destination',
+      buildPaths.packedDsh,
+    ], buildEnv, REPOSITORY_ROOT)
+  }
   await execute(['run', 'release:pack', '--family', 'vendor', '--out', buildPaths.packedVendor, ...packArguments], buildEnv, REPOSITORY_ROOT)
   rmSync(buildPaths.packedLandlock, { recursive: true, force: true })
   mkdirSync(buildPaths.packedLandlock, { recursive: true })

@@ -105,9 +105,10 @@ it.each(['--unsigned', '--prepare-only'])('keeps %s hardware-free and creates no
 it('packs the private product packages into the set the runtime installs from', async () => {
   const { run, stages } = supervisor()
   await packageTarget(parseDesktopPackageInvocation(['win-x64', '--unsigned'], 'win32', 'x64'), environment, run)
-  const department = stages.findIndex(stage => stage.startsWith('--dir packages/tianma/department-prompts pack '))
-  expect(department).toBeGreaterThan(-1)
-  expect(stages.indexOf('run prepare:packages')).toBeGreaterThan(department)
+  const products = ['packages/tianma/department-prompts', 'packages/tianma/oa-account', 'packages/tianma/oa-account-ui']
+    .map(directory => stages.findIndex(stage => stage.startsWith(`--dir ${directory} pack `)))
+  expect(products.every(index => index > -1)).toBe(true)
+  expect(stages.indexOf('run prepare:packages')).toBeGreaterThan(Math.max(...products))
 })
 
 it('checks the assembled macOS runtime before notarizing and recording the release', async () => {
