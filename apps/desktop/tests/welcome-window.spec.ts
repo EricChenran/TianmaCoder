@@ -40,9 +40,6 @@ function createWindow() {
 beforeEach(() => { electron.create.mockReset(); electron.handlers.clear() })
 
 const operations = {
-  startSignIn: async () => ({ links: { usageUrl: 'http://localhost/usage', topUpUrl: 'http://localhost/top_up' }, status: 'signed-out' as const, attempt: null }),
-  cancelSignIn: async () => ({ links: { usageUrl: 'http://localhost/usage', topUpUrl: 'http://localhost/top_up' }, status: 'signed-out' as const, attempt: null }),
-  copySignInLink: async () => undefined,
   saveApiKey: () => Promise.resolve({ ok: true as const }),
   skip: () => Promise.resolve(),
 }
@@ -114,8 +111,7 @@ describe('desktop welcome window', () => {
     electron.create.mockReturnValue(window)
     const saveApiKey = vi.fn(operations.saveApiKey)
     const skip = vi.fn(operations.skip)
-    const copySignInLink = vi.fn(operations.copySignInLink)
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveApiKey, skip, copySignInLink })
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveApiKey, skip })
     const own = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
     const save = electron.handlers.get(WELCOME_IPC.saveApiKey)!
     await expect(save({ sender: {}, senderFrame: {} }, 'sk-test')).rejects.toThrow('unowned frame')
@@ -125,11 +121,6 @@ describe('desktop welcome window', () => {
     expect(await save(own, 'sk-test')).toEqual({ ok: true })
     await electron.handlers.get(WELCOME_IPC.skip)!(own)
     expect(skip).toHaveBeenCalledOnce()
-    const copy = electron.handlers.get(WELCOME_IPC.copyLink)!
-    await expect(copy({ ...own, senderFrame: {} }, 'attempt')).rejects.toThrow('unowned frame')
-    await expect(copy(own, 42)).rejects.toThrow('invalid attempt')
-    await copy(own, 'attempt')
-    expect(copySignInLink).toHaveBeenCalledExactlyOnceWith('attempt')
     window.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
   })
@@ -154,28 +145,28 @@ describe('desktop welcome window', () => {
     const previous = createWindow()
     const current = createWindow()
     electron.create.mockReturnValueOnce(previous).mockReturnValueOnce(current)
-    const previousStart = vi.fn(operations.startSignIn)
-    const currentStart = vi.fn(operations.startSignIn)
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, startSignIn: previousStart })
-    const previousHandler = electron.handlers.get(WELCOME_IPC.start)!
+    const previousSave = vi.fn(operations.saveApiKey)
+    const currentSave = vi.fn(operations.saveApiKey)
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveApiKey: previousSave })
+    const previousHandler = electron.handlers.get(WELCOME_IPC.saveApiKey)!
     const previousSender = { sender: previous.webContents, senderFrame: previous.webContents.mainFrame }
-    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, startSignIn: currentStart })
-    const currentHandler = electron.handlers.get(WELCOME_IPC.start)!
-    await expect(previousHandler(previousSender)).rejects.toThrow('unowned frame')
-    await expect(currentHandler(previousSender)).rejects.toThrow('unowned frame')
+    await openWelcomeWindow(resolveDesktopLocale('en'), { ...operations, saveApiKey: currentSave })
+    const currentHandler = electron.handlers.get(WELCOME_IPC.saveApiKey)!
+    await expect(previousHandler(previousSender, 'sk-test')).rejects.toThrow('unowned frame')
+    await expect(currentHandler(previousSender, 'sk-test')).rejects.toThrow('unowned frame')
     previous.once.mock.calls[0]![1]()
-    expect(electron.handlers.get(WELCOME_IPC.start)).toBe(currentHandler)
-    await currentHandler({ sender: current.webContents, senderFrame: current.webContents.mainFrame })
-    expect(currentStart).toHaveBeenCalledOnce()
-    expect(previousStart).not.toHaveBeenCalled()
+    expect(electron.handlers.get(WELCOME_IPC.saveApiKey)).toBe(currentHandler)
+    await currentHandler({ sender: current.webContents, senderFrame: current.webContents.mainFrame }, 'sk-test')
+    expect(currentSave).toHaveBeenCalledOnce()
+    expect(previousSave).not.toHaveBeenCalled()
     current.once.mock.calls[0]![1]()
     expect(electron.handlers.size).toBe(0)
   })
 
-  it('shows the entry after logout only without a separately configured API key', () => {
-    expect(needsWelcome({ loggedIn: true, hasApiKey: false })).toBe(false)
-    expect(needsWelcome({ loggedIn: false, hasApiKey: false })).toBe(true)
-    expect(needsWelcome({ loggedIn: false, hasApiKey: true })).toBe(false)
-    expect(needsWelcome({ loggedIn: true, hasApiKey: true })).toBe(false)
+  it('shows the first run only while no model credential is configured', () => {
+    // The product account no longer gates the first run: the workspace opens and
+    // the account surfaces own signing in.
+    expect(needsWelcome({ hasApiKey: false })).toBe(true)
+    expect(needsWelcome({ hasApiKey: true })).toBe(false)
   })
 })

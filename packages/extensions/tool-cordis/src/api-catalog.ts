@@ -843,67 +843,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
-    key: 'deepseekAccount',
-    summary: 'Account operations; only Host consumers can obtain a request credential.',
-    description: 'Account operations; only Host consumers can obtain a request credential.',
-    methods: [
-      {
-        signature: 'abstract getState(): Promise<AccountView>',
-        description: 'Read stored-account presence and the latest login attempt.',
-        parameters: [],
-        returns: 'a snapshot without credentials or PKCE secrets.',
-      },
-      {
-        signature: 'abstract getProfile(): Promise<AccountDetails[\'profile\'] | null>',
-        description: 'Query Platform profile independently of wallet balances.',
-        parameters: [],
-        returns: 'profile outcome, or null if signed out or the grant changed during the query.',
-      },
-      {
-        signature: 'abstract getBalance(): Promise<AccountDetails[\'balance\'] | null>',
-        description: 'Query Platform recharge and bonus wallet balances independently of profile data.',
-        parameters: [],
-        returns: 'balance outcome, or null if signed out or the grant changed during the query.',
-      },
-      {
-        signature: 'abstract startSignIn(locale: string, callbackOrigin: string, loginSource: \'web\' | \'desktop\'): Promise<AccountView>',
-        description: 'Join an active attempt or start browser authorization.',
-        parameters: [{ name: 'locale', description: 'active UI language for a new attempt; joining retains its original language.' }, { name: 'callbackOrigin', description: 'browser-accessible loopback HTTP origin, including any SSH local port.' }, { name: 'loginSource', description: 'initiating UI, used to return from a failed exchange.' }],
-        returns: 'the initial snapshot without waiting for browser approval.',
-      },
-      {
-        signature: 'abstract cancelSignIn(id: SignInAttemptId): Promise<AccountView>',
-        description: 'Cancel only the named attempt; committing attempts settle before returning.',
-        parameters: [{ name: 'id', description: 'attempt identity from this Host.' }],
-        returns: 'state after cancellation or an already-started commit.',
-      },
-      {
-        signature: 'abstract signOut(): Promise<AccountView>',
-        description: 'Remove the local grant while retaining API keys and tasks; the provider revokes it in the background.',
-        parameters: [],
-        returns: 'the signed-out state after local removal; remote failures never restore the grant.',
-      },
-      {
-        signature: 'abstract watch(signal: AbortSignal): AsyncIterable<AccountView>',
-        description: 'Subscribe to snapshots including a complete initial state.',
-        parameters: [{ name: 'signal', description: 'subscription lifetime; ending it never cancels login.' }],
-        returns: 'complete snapshots as account state changes.',
-      },
-      {
-        signature: 'abstract resolveToken(url: string): Promise<string | undefined>',
-        description: 'Resolve a credential only for the inference origin allowed by the provider.',
-        parameters: [{ name: 'url', description: 'actual request destination or API base URL.' }],
-        returns: 'stored token, or undefined for other origins or a signed-out account.',
-      },
-      {
-        signature: 'abstract getPlatformSession(): Promise<PlatformSession | null>',
-        description: 'Read credentials for the configured Platform origin, bound to their issuing environment.',
-        parameters: [],
-        returns: 'a Host-only snapshot, or null while signed out.',
-      },
-    ],
-  },
-  {
     key: 'deepseekLlmApiExtensions',
     summary: 'Registry of independently owned top-level fields for official DeepSeek requests.',
     description: 'Registry of independently owned top-level fields for official DeepSeek requests.',
@@ -1489,6 +1428,78 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Delete one item after checking its version; absence succeeds without an event.',
         parameters: [{ name: 'request', description: 'Session, message, and observed item version.' }],
         returns: 'the stable absent postcondition or an explicit failure.',
+      },
+    ],
+  },
+  {
+    key: 'oaAccount',
+    summary: 'Reads and writes the OA session and answers whether a conversation may start.',
+    description: 'Reads and writes the OA session and answers whether a conversation may start. Requires the credential seam; the record it owns is `tianma-oa-account/session`.',
+    methods: [
+      {
+        signature: '@Remote async session(): Promise<OaSessionView>',
+        description: 'Read the current session projection without contacting the backend.',
+        parameters: [],
+        returns: 'the stored session, or a signed-out view.',
+      },
+      {
+        signature: '@Remote captcha(): Promise<OaCaptcha>',
+        description: 'Read one captcha challenge for the sign-in form.',
+        parameters: [],
+        returns: 'the challenge id and its renderable image.',
+        throws: ['{OaAccountError} the classified failure of the request.'],
+      },
+      {
+        signature: '@Remote async signIn(request: OaSignInRequest): Promise<OaSessionView>',
+        description: 'Sign in with a solved challenge and keep the resulting session.',
+        parameters: [{ name: 'request', description: 'account, password, and the solved challenge.' }],
+        returns: 'the signed-in projection.',
+        throws: ['{OaAccountError} code `rejected` with the backend\'s reason, or a classified transport failure.'],
+      },
+      {
+        signature: '@Remote async signOut(): Promise<OaSessionView>',
+        description: 'Discard the stored session. The backend has no revocation list, so the local deletion is what signs the user out; the backend call is advisory and its failure does not restore the session.',
+        parameters: [],
+        returns: 'the signed-out projection.',
+      },
+      {
+        signature: '@Remote profile(): Promise<OaUser>',
+        description: 'Read the account holder, re-signing once when the access token has expired.',
+        parameters: [],
+        returns: 'the account holder.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote stats(): Promise<OaStats>',
+        description: 'Read the personal workbench counters, re-signing once when the access token has expired.',
+        parameters: [],
+        returns: 'the counters.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote async updateProfile(patch: OaProfilePatch): Promise<OaUser>',
+        description: 'Write the fields a user may change on their own profile.',
+        parameters: [{ name: 'patch', description: 'the fields to change; an absent field is left unchanged.' }],
+        returns: 'the account holder after the write.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote async gate(): Promise<OaGateDecision>',
+        description: 'Decide whether a conversation may start.',
+        parameters: [],
+        returns: 'the decision, naming the reason when it refuses.',
+      },
+      {
+        signature: 'async assertMayStartConversation(): Promise<void>',
+        description: 'Refuse the current operation unless a conversation may start. This is the Host-side enforcement point: a client that never asks gate — or a caller that reaches a session without a browser at all — still cannot put a user message into a session.',
+        parameters: [],
+        throws: ['{OaAccountError} code `unauthenticated`, whose message names the gate denial.'],
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) watch(signal: AbortSignal): AsyncIterable<OaSessionView>',
+        description: 'Stream the session projection, starting from the current value.',
+        parameters: [{ name: 'signal', description: 'stream lifetime; ending it stops the stream without signing out.' }],
+        returns: 'the current projection followed by every change.',
       },
     ],
   },
@@ -4249,30 +4260,6 @@ export const EVENT_API: readonly EventApiEntry[] = [
 /** Shapes of every exported type the Service and Event signatures reference (transitively), sorted by name. */
 export const TYPE_API: readonly TypeApiEntry[] = [
   {
-    name: 'AccountDetails',
-    declaration: 'export interface AccountDetails {\n    readonly profile: {\n        readonly status: \'ready\';\n        readonly value: AccountProfile;\n    } | {\n        readonly status: \'failed\';\n    };\n    readonly balance: {\n        readonly status: \'ready\';\n        readonly value: readonly AccountWallet[];\n        readonly bonusWallets: readonly AccountWallet[];\n    } | {\n        readonly status: \'failed\';\n    };\n}',
-  },
-  {
-    name: 'AccountLinks',
-    declaration: 'export interface AccountLinks {\n    readonly usageUrl: string;\n    readonly topUpUrl: string;\n}',
-  },
-  {
-    name: 'AccountProfile',
-    declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
-  },
-  {
-    name: 'AccountUserId',
-    declaration: 'export type AccountUserId = Branded<\'AccountUserId\'>;',
-  },
-  {
-    name: 'AccountView',
-    declaration: 'export interface AccountView {\n    readonly status: \'signed-out\' | \'credential-stored\';\n    readonly links: AccountLinks;\n    readonly attempt: SignInAttemptView | null;\n}',
-  },
-  {
-    name: 'AccountWallet',
-    declaration: 'export interface AccountWallet {\n    readonly currency: \'CNY\' | \'USD\';\n    readonly balance: string;\n}',
-  },
-  {
     name: 'AdapterRegistrationHandle',
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
   },
@@ -5585,6 +5572,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface NativeFileApplication {\n    readonly id: string;\n    readonly name: string;\n    readonly default: boolean;\n    readonly icon: string | null;\n}',
   },
   {
+    name: 'OaCaptcha',
+    declaration: 'export interface OaCaptcha {\n    captchaId: string;\n    image: string;\n}',
+  },
+  {
+    name: 'OaGateDecision',
+    declaration: 'export type OaGateDecision = {\n    allowed: true;\n} | {\n    allowed: false;\n    reason: OaGateDenial;\n};',
+  },
+  {
+    name: 'OaGateDenial',
+    declaration: 'export type OaGateDenial = \'signed-out\' | \'inactive-account\';',
+  },
+  {
+    name: 'OaProfilePatch',
+    declaration: 'export interface OaProfilePatch {\n    name?: string;\n    phone?: string;\n    avatar?: string;\n}',
+  },
+  {
+    name: 'OaSessionView',
+    declaration: 'export interface OaSessionView {\n    signedIn: boolean;\n    user: OaUser | null;\n    status: string | null;\n    assetOrigin: string;\n}',
+  },
+  {
+    name: 'OaSignInRequest',
+    declaration: 'export interface OaSignInRequest {\n    account: string;\n    password: string;\n    captchaId: string;\n    captcha: string;\n}',
+  },
+  {
+    name: 'OaStats',
+    declaration: 'export interface OaStats {\n    approval: {\n        pending: number;\n        myApplications: number;\n        rejected: number;\n    };\n    task: {\n        overdue: number;\n        today: number;\n        upcoming: number;\n        workHours: number;\n    };\n    schedule: {\n        today: number;\n    };\n}',
+  },
+  {
+    name: 'OaUser',
+    declaration: 'export interface OaUser {\n    id: number;\n    account: string;\n    name: string;\n    code: string;\n    phone: string;\n    department: string;\n    position: string;\n    level: string;\n    avatar: string;\n    hireDate: string;\n    employmentType: string;\n    role: string;\n    status: string;\n    wxBound: boolean;\n    createdAt: string;\n}',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -5643,10 +5662,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PermissionCatalog',
     declaration: 'export interface PermissionCatalog {\n    options: PresetOption[];\n    defaultOptions: PresetOption[];\n    defaultPreset: string;\n}',
-  },
-  {
-    name: 'PlatformSession',
-    declaration: 'export interface PlatformSession {\n    readonly origin: string;\n    readonly token: string;\n    readonly embeddedPageDist?: string;\n    readonly requestHeaders?: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'PluginChange',
@@ -6667,18 +6682,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ShellSandboxInfo',
     declaration: 'export interface ShellSandboxInfo {\n    mode: SandboxMode;\n    denied: boolean;\n    enforcement?: SandboxEnforcement;\n    runnerFailed?: boolean;\n}',
-  },
-  {
-    name: 'SignInAttemptId',
-    declaration: 'export type SignInAttemptId = Branded<\'SignInAttemptId\'>;',
-  },
-  {
-    name: 'SignInAttemptView',
-    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n}',
-  },
-  {
-    name: 'SignInErrorCode',
-    declaration: 'export type SignInErrorCode = \'network\' | \'protocol\' | \'expired\' | \'storage\';',
   },
   {
     name: 'SkillCandidate',

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/tianma.md
-tianma.md: 69d97330025a4e9d32315662a46b9323197c71e2
-tianma.zh.md: cdc595d3355e1144e01e0836d7d4193647ecf7b7
+tianma.md: 5f24dbf047a596b819a050c95d69879221eadadf
+tianma.zh.md: 3b5ec6ba483caa1b8ecf7ff956abc3562b99ea9f

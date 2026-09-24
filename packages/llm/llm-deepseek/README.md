@@ -82,11 +82,9 @@ The official root is `https://api.deepseek.com/anthropic`. An explicit `baseURL`
 
 Messages sends text, thinking, tool calls, and tool results as content blocks, reasoning effort as `output_config.effort`, and images as Files references or inline base64. Models declaring `systemPromptUpdate: in-history` retain the initial top-level system and send new system snapshots after their corresponding user/tool-result turn; undeclared models use the latest snapshot as the top-level system. Replay metadata preserves the model and thinking signatures. Invalid replay metadata emits a warning and omits signatures while retaining text and tool history.
 
-### Account credentials
+### Credentials
 
-When the [account provider](../../credentials/deepseek-account-platform/README.md) returns a stored token for the resolved endpoint, that token takes priority over the configured API key. Eligibility follows the provider's `inferenceOrigin`, which defaults to `https://api.deepseek.com`. Other origins and signed-out accounts use the configured API-key reference. Signing out removes the account grant and preserves API keys.
-
-Messages and Files requests send account tokens as `x-dsh-auth-token` without a Bearer prefix; API keys use `x-api-key`. Neither credential mode follows redirects.
+Inference and Files requests authenticate with the configured API-key reference alone, sent as `x-api-key`. No product-login credential takes part in a model request, so a deployment authenticates models the same way whether or not a user is signed in. Neither request follows redirects.
 
 ### Streaming with thinking and images
 

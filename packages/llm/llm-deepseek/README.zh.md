@@ -82,11 +82,9 @@ kind: "package-reference"
 
 Messages 以内容块发送文本、思考、工具调用和工具结果，以 `output_config.effort` 发送推理强度，并以 Files 引用或内联 base64 发送图片。声明 `systemPromptUpdate: in-history` 的模型保留初始顶层 system，在对应 user/tool-result 轮次之后发送新的 system 快照；未声明能力时，使用最新快照作为顶层 system。回放元数据保留模型与思考签名。无效的回放元数据产生警告并省略签名，不丢弃文本或工具历史。
 
-### 账号凭据
+### 凭据
 
-当[账号提供者](../../credentials/deepseek-account-platform/README.zh.md)为已解析端点返回保存的 token 时，该 token 优先于配置的 API Key。适用范围由提供者的 `inferenceOrigin` 决定，默认为 `https://api.deepseek.com`。其他源以及已退出登录的账号使用配置的 API Key 引用。退出登录会删除账号授权，保留 API Key。
-
-Messages 和 Files 请求通过 `x-dsh-auth-token` 发送账号 token，不加 Bearer 前缀；API Key 使用 `x-api-key`。两种凭据模式均拒绝重定向。
+推理与 Files 请求仅用配置的 API Key 引用鉴权，以 `x-api-key` 发送。模型请求不涉及任何产品登录凭据，因此无论用户是否已登录，部署都以同一方式为模型鉴权。两类请求均拒绝重定向。
 
 ### 带 thinking 与图片的流式调用
 

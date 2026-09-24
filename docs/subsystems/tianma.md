@@ -30,6 +30,89 @@ The [bundle](../../packages/tianma/bundle) applies row overrides after `dsh-base
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxoaaccount--oaaccountservice"></a>
+
+### `ctx.oaAccount` — `OaAccountService`
+
+Reads and writes the OA session and answers whether a conversation may start. Requires the credential seam; the record it owns is `tianma-oa-account/session`.
+
+```ts cordis-catalog
+/**
+ * Read the current session projection without contacting the backend.
+ * @returns the stored session, or a signed-out view.
+ */
+@Remote async session(): Promise<OaSessionView>
+
+/**
+ * Read one captcha challenge for the sign-in form.
+ * @returns the challenge id and its renderable image.
+ * @throws {OaAccountError} the classified failure of the request.
+ */
+@Remote captcha(): Promise<OaCaptcha>
+
+/**
+ * Sign in with a solved challenge and keep the resulting session.
+ * @param request - account, password, and the solved challenge.
+ * @returns the signed-in projection.
+ * @throws {OaAccountError} code `rejected` with the backend's reason, or a classified transport failure.
+ */
+@Remote async signIn(request: OaSignInRequest): Promise<OaSessionView>
+
+/**
+ * Discard the stored session. The backend has no revocation list, so the
+ * local deletion is what signs the user out; the backend call is advisory
+ * and its failure does not restore the session.
+ * @returns the signed-out projection.
+ */
+@Remote async signOut(): Promise<OaSessionView>
+
+/**
+ * Read the account holder, re-signing once when the access token has expired.
+ * @returns the account holder.
+ * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+ */
+@Remote profile(): Promise<OaUser>
+
+/**
+ * Read the personal workbench counters, re-signing once when the access token has expired.
+ * @returns the counters.
+ * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+ */
+@Remote stats(): Promise<OaStats>
+
+/**
+ * Write the fields a user may change on their own profile.
+ * @param patch - the fields to change; an absent field is left unchanged.
+ * @returns the account holder after the write.
+ * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+ */
+@Remote async updateProfile(patch: OaProfilePatch): Promise<OaUser>
+
+/**
+ * Decide whether a conversation may start.
+ * @returns the decision, naming the reason when it refuses.
+ */
+@Remote async gate(): Promise<OaGateDecision>
+
+/**
+ * Refuse the current operation unless a conversation may start. This is the
+ * Host-side enforcement point: a client that never asks {@link gate} — or a
+ * caller that reaches a session without a browser at all — still cannot put a
+ * user message into a session.
+ * @throws {OaAccountError} code `unauthenticated`, whose message names the gate denial.
+ */
+async assertMayStartConversation(): Promise<void>
+
+/**
+ * Stream the session projection, starting from the current value.
+ * @param signal - stream lifetime; ending it stops the stream without signing out.
+ * @returns the current projection followed by every change.
+ */
+@Remote({ mode: 'stream' }) watch(signal: AbortSignal): AsyncIterable<OaSessionView>
+```
+
+Source: [`packages/tianma/oa-account/src/index.ts`](../../packages/tianma/oa-account/src/index.ts)
+
 <a id="ctxtianmahooktrust--tianmahooktrust"></a>
 
 ### `ctx.tianmaHookTrust` — `TianmaHookTrust`

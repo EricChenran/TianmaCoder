@@ -12,9 +12,6 @@
   "references": [
     {
       "path": "../../packages/client/ui-primitives"
-    },
-    {
-      "path": "../../packages/credentials/deepseek-account"
     }
   ]
 }

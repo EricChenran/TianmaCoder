@@ -68,6 +68,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentPresets: 'core.md',
   tianmaHookTrust: 'tianma.md',
   tianmaTokenCalibration: 'tianma.md',
+  oaAccount: 'tianma.md',
   agents: 'core.md',
   approval: 'approval.md',
   officeToPdf: 'office-to-pdf.md',
@@ -82,7 +83,6 @@ export const SERVICE_PAGE: Record<string, string> = {
   compaction: 'compaction.md',
   cordisInspect: 'extensions.md',
   authorization: 'credentials.md',
-  deepseekAccount: 'credentials.md',
   credentials: 'credentials.md',
   credentialsController: 'credentials.md',
   settingsController: 'settings.md',
@@ -165,6 +165,7 @@ export const SERVICE_PAGE: Record<string, string> = {
  * to a model as `cordis_runtime_inspect what:"client"`).
  */
 export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
+  promptAdmission: 'optional extension point declared as an interface (PromptAdmission | undefined) — packages/api/session-controller/README.md owns the contract; @tianma/dsh-oa-account mounts the deployment implementation',
   invocation: 'not a service: per-call accessor (RemoteInvocation | undefined) the Gateway derives for each Remote call — packages/api/gateway/README.md owns the contract',
   webTerminals: 'client-side terminal view models — packages/api/terminal-controller/README.md owns the API',
   appReady: 'not a service: launcher-provided successful-startup signal — packages/boot/cmdline/README.md owns the launcher contract',
@@ -273,6 +274,14 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  * appear on more than one page.
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
+  OaCaptcha: 'tianma.md',
+  OaGateDecision: 'tianma.md',
+  OaGateDenial: 'tianma.md',
+  OaProfilePatch: 'tianma.md',
+  OaSessionView: 'tianma.md',
+  OaSignInRequest: 'tianma.md',
+  OaStats: 'tianma.md',
+  OaUser: 'tianma.md',
   ProductTelemetryRecord: 'product-telemetry.md',
   ProductTelemetryScalar: 'product-telemetry.md',
   WorkspaceChangesSummary: 'deliverables.md',
@@ -688,10 +697,6 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AuthorizationMethod: 'credentials.md',
   AuthorizationNotice: 'credentials.md',
   AuthorizationOutcome: 'credentials.md',
-  AccountView: 'credentials.md',
-  AccountDetails: 'credentials.md',
-  PlatformSession: 'credentials.md',
-  SignInAttemptId: 'credentials.md',
   AuthorizationPrompt: 'credentials.md',
   AuthorizationRequest: 'credentials.md',
   AuthorizationSession: 'credentials.md',

@@ -79,9 +79,6 @@
     },
     {
       "path": "../../host/plugin-inventory"
-    },
-    {
-      "path": "../account-controller"
     }
   ]
 }

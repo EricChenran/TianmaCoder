@@ -2,5 +2,6 @@ TianmaCoder
 TianmaCoder
 Welcome to TianmaCoder
 Build potential. Explore intelligence.
-Sign in
+Sign in with your Tianma OA account inside the app to send messages.
 Add API Key
+Set up later

@@ -1,8 +1,8 @@
 TianmaCoder
 TianmaCoder
-Add an API key to get started
-Configure official DeepSeek models to start using TianmaCoder
-Enter API key [password]
+Welcome to TianmaCoder
+Build potential. Explore intelligence.
+Sign in with your Tianma OA account inside the app to send messages.
 Save and continue [disabled]
 Set up later
-Back to sign in
+Back

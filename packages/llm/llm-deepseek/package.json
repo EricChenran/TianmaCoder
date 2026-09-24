@@ -38,8 +38,7 @@
     "@deepseek-ai/dsh-launch-environment": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@deepseek-ai/dsh-deepseek-account": "workspace:^"
+    "@deepseek-ai/cordis-plugin-loader": "workspace:^"
   },
   "dependencies": {
     "@deepseek-ai/cosmokit": "workspace:^",
@@ -73,14 +72,10 @@
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-credentials-local": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-deepseek-account": "workspace:^"
+    "@deepseek-ai/dsh-settings": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis-plugin-loader": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-deepseek-account": {
       "optional": true
     }
   }

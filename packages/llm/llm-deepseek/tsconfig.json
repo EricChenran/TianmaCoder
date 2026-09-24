@@ -58,9 +58,6 @@
     },
     {
       "path": "../../settings/settings"
-    },
-    {
-      "path": "../../credentials/deepseek-account"
     }
   ]
 }

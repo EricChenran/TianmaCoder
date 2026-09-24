@@ -259,76 +259,6 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 
 Source: [`packages/api/settings-controller/src/credentials.ts`](../../packages/api/settings-controller/src/credentials.ts)
 
-<a id="ctxdeepseekaccount--deepseekaccount-abstract-seam"></a>
-
-### `ctx.deepseekAccount` — `DeepSeekAccount` (abstract seam)
-
-Account operations; only Host consumers can obtain a request credential.
-
-```ts cordis-catalog
-/**
- * Read stored-account presence and the latest login attempt.
- * @returns a snapshot without credentials or PKCE secrets.
- */
-abstract getState(): Promise<AccountView>
-
-/**
- * Query Platform profile independently of wallet balances.
- * @returns profile outcome, or null if signed out or the grant changed during the query.
- */
-abstract getProfile(): Promise<AccountDetails['profile'] | null>
-
-/**
- * Query Platform recharge and bonus wallet balances independently of profile data.
- * @returns balance outcome, or null if signed out or the grant changed during the query.
- */
-abstract getBalance(): Promise<AccountDetails['balance'] | null>
-
-/**
- * Join an active attempt or start browser authorization.
- * @param locale - active UI language for a new attempt; joining retains its original language.
- * @param callbackOrigin - browser-accessible loopback HTTP origin, including any SSH local port.
- * @param loginSource - initiating UI, used to return from a failed exchange.
- * @returns the initial snapshot without waiting for browser approval.
- */
-abstract startSignIn(locale: string, callbackOrigin: string, loginSource: 'web' | 'desktop'): Promise<AccountView>
-
-/**
- * Cancel only the named attempt; committing attempts settle before returning.
- * @param id - attempt identity from this Host.
- * @returns state after cancellation or an already-started commit.
- */
-abstract cancelSignIn(id: SignInAttemptId): Promise<AccountView>
-
-/**
- * Remove the local grant while retaining API keys and tasks; the provider revokes it in the background.
- * @returns the signed-out state after local removal; remote failures never restore the grant.
- */
-abstract signOut(): Promise<AccountView>
-
-/**
- * Subscribe to snapshots including a complete initial state.
- * @param signal - subscription lifetime; ending it never cancels login.
- * @returns complete snapshots as account state changes.
- */
-abstract watch(signal: AbortSignal): AsyncIterable<AccountView>
-
-/**
- * Resolve a credential only for the inference origin allowed by the provider.
- * @param url - actual request destination or API base URL.
- * @returns stored token, or undefined for other origins or a signed-out account.
- */
-abstract resolveToken(url: string): Promise<string | undefined>
-
-/**
- * Read credentials for the configured Platform origin, bound to their issuing environment.
- * @returns a Host-only snapshot, or null while signed out.
- */
-abstract getPlatformSession(): Promise<PlatformSession | null>
-```
-
-Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
-
 <a id="authorization-events"></a>
 
 ### `authorization/*` events
@@ -404,4 +334,4 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
 <!-- END GENERATED cordis-surface -->
 
-The account Service Definition exposes getState, getProfile, getBalance, startSignIn, cancelSignIn, signOut, watch, and Host-only resolveToken and getPlatformSession. The platform provider implements it with an AuthorizationFlow and a private GrantRecord. AccountView distinguishes stored presence from server validation; attempt IDs bind cancellation to one local flow. See [the account package](../../packages/credentials/deepseek-account/README.md).
+The product's own login lives outside this group: [`@tianma/dsh-oa-account`](../../packages/tianma/oa-account/README.md) keeps its session in a record this seam stores and owns the `ctx.oaAccount` service, so this page documents the storage seam only.

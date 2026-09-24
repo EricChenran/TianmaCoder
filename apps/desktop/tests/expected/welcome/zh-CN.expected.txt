@@ -2,5 +2,6 @@ TianmaCoder
 TianmaCoder
 欢迎使用 TianmaCoder
 组装无限可能，共探智能上限
-登录
+请在应用内使用天码 OA 账号登录后发送消息。
 添加 API Key
+稍后配置

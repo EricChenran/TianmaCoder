@@ -52,12 +52,30 @@ flowchart LR
   cfg --> plugin_dsh_base_settings
   plugin_dsh_base_authorization["authorization<br/>@deepseek-ai/dsh-authorization"]
   cfg --> plugin_dsh_base_authorization
-  plugin_dsh_base_deepseek_account["deepseek-account<br/>@deepseek-ai/dsh-deepseek-account-platform"]
-  cfg --> plugin_dsh_base_deepseek_account
   plugin_dsh_base_credentials["credentials<br/>@deepseek-ai/dsh-credentials-local"]
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
+  plugin_dsh_base_zai_glm_5_2["zai/glm-5.2<br/>GLM-5.2"]
+  cfg --> plugin_dsh_base_zai_glm_5_2
+  plugin_dsh_base_zai_glm_5_3["zai/glm-5.3<br/>GLM-5.3"]
+  cfg --> plugin_dsh_base_zai_glm_5_3
+  plugin_dsh_base_deepseek_deepseek_v4_flash["deepseek/deepseek-v4-flash<br/>DeepSeek V4 Flash"]
+  cfg --> plugin_dsh_base_deepseek_deepseek_v4_flash
+  plugin_dsh_base_deepseek_deepseek_v4_pro["deepseek/deepseek-v4-pro<br/>DeepSeek V4 Pro"]
+  cfg --> plugin_dsh_base_deepseek_deepseek_v4_pro
+  plugin_dsh_base_openai_gpt_5_6_sol["openai/gpt-5.6-sol<br/>GPT-5.6 Sol"]
+  cfg --> plugin_dsh_base_openai_gpt_5_6_sol
+  plugin_dsh_base_openai_gpt_5_6_luna["openai/gpt-5.6-luna<br/>GPT-5.6 Luna"]
+  cfg --> plugin_dsh_base_openai_gpt_5_6_luna
+  plugin_dsh_base_moonshot_kimi_k3["moonshot/kimi-k3<br/>Kimi K3"]
+  cfg --> plugin_dsh_base_moonshot_kimi_k3
+  plugin_dsh_base_x_ai_grok_4_7["x-ai/grok-4.7<br/>Grok 4.7"]
+  cfg --> plugin_dsh_base_x_ai_grok_4_7
+  plugin_dsh_base_google_gemini_3_7_flash["google/gemini-3.7-flash<br/>Gemini 3.7 Flash"]
+  cfg --> plugin_dsh_base_google_gemini_3_7_flash
+  plugin_dsh_base_qwen_qwen3_7_max["qwen/qwen3.7-max<br/>Qwen 3.7 Max"]
+  cfg --> plugin_dsh_base_qwen_qwen3_7_max
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
@@ -218,9 +236,18 @@ flowchart LR
 | `config-editor` | `@deepseek-ai/dsh-config-editor` |
 | `settings` | `@deepseek-ai/dsh-settings` |
 | `authorization` | `@deepseek-ai/dsh-authorization` |
-| `deepseek-account` | `@deepseek-ai/dsh-deepseek-account-platform` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
+| `zai/glm-5.2` | `GLM-5.2` |
+| `zai/glm-5.3` | `GLM-5.3` |
+| `deepseek/deepseek-v4-flash` | `DeepSeek V4 Flash` |
+| `deepseek/deepseek-v4-pro` | `DeepSeek V4 Pro` |
+| `openai/gpt-5.6-sol` | `GPT-5.6 Sol` |
+| `openai/gpt-5.6-luna` | `GPT-5.6 Luna` |
+| `moonshot/kimi-k3` | `Kimi K3` |
+| `x-ai/grok-4.7` | `Grok 4.7` |
+| `google/gemini-3.7-flash` | `Gemini 3.7 Flash` |
+| `qwen/qwen3.7-max` | `Qwen 3.7 Max` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |

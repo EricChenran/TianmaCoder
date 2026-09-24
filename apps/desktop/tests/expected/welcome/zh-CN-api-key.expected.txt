@@ -1,8 +1,8 @@
 TianmaCoder
 TianmaCoder
-添加一个 API Key 开始使用
-配置 DeepSeek 官方模型，即可开始使用
-输入 API 密钥 [password]
+欢迎使用 TianmaCoder
+组装无限可能，共探智能上限
+请在应用内使用天码 OA 账号登录后发送消息。
 保存并继续 [disabled]
 稍后配置
-返回登录
+返回
