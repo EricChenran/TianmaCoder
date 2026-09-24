@@ -32,8 +32,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap { 'settings.oaAccount': OaAccountKey }
 }
 
-/** Services required by the account surfaces. */
-export const inject = ['slots', 'locale', 'remote', 'remote.oaAccount']
+/** Services required by the account surfaces. The conversation and session
+ * services are declared rather than probed with `ctx.get`: this plugin mounts
+ * before `ui-conversation` in the shipped roster, and a probe would see the
+ * service absent once at apply time and silently skip the composer gate. */
+export const inject = ['slots', 'locale', 'remote', 'remote.oaAccount', 'conversation', 'sessions']
 
 /**
  * Register the account launcher and settings page.

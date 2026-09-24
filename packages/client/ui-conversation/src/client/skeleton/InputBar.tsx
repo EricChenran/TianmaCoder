@@ -102,13 +102,22 @@ export const InputBar = memo(function InputBar({
   // an unresolved promptError deliberately re-announces it once — the failure
   // is still pending, and a transient banner is its only surface. Attachment
   // rejections show product copy keyed by the wire reason — whichever domain
-  // refused them. Writer contention has localized recovery guidance; other
-  // failures retain the diagnostic message and code.
+  // refused them. Writer contention and the deployment's prompt-admission
+  // refusals (sign-in gate, inactive account) have localized recovery copy;
+  // other failures retain the diagnostic message and code.
   useEffect(() => {
     if (promptError === null) return
     const { error } = promptError
     if (error.code === 'session/writer-held') {
       showToast(t('error.sessionInUse'))
+      return
+    }
+    if (error.code === 'session/sign-in-required') {
+      showToast(t('error.signInRequired'))
+      return
+    }
+    if (error.code === 'session/account-inactive') {
+      showToast(t('error.accountInactive'))
       return
     }
     showToast(error.code === 'session/attachment-invalid' || error.code === 'subagent/attachment-invalid'

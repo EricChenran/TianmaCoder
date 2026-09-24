@@ -496,6 +496,20 @@ describe('image draft rail', () => {
     expect(other.view.getByRole('alert').textContent).toContain('boom (gateway/internal)')
   })
 
+  it('announces prompt-admission refusals as localized copy without the wire code', () => {
+    const signedOut = bench({
+      promptError: { op: 'send', error: new RemoteError('session/sign-in-required', 'sign in to start a conversation', {}) },
+    })
+    expect(signedOut.view.getByRole('alert').textContent).toContain('登录后才能发送消息。')
+    expect(signedOut.view.getByRole('alert').textContent).not.toContain('session/sign-in-required')
+    cleanup()
+    const inactive = bench({
+      promptError: { op: 'send', error: new RemoteError('session/account-inactive', 'this account is not active', {}) },
+    })
+    expect(inactive.view.getByRole('alert').textContent).toContain('当前账号不可用，请联系管理员。')
+    expect(inactive.view.getByRole('alert').textContent).not.toContain('session/account-inactive')
+  })
+
   it('marks the attachment slot unavailable while the composer is locked', () => {
     const result = bench({ addFiles: vi.fn(() => null), inert: true })
     expect(attachmentOwner(result.slotCalls).canAcceptDrop).toBe(false)
