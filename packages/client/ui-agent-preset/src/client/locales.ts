@@ -24,6 +24,18 @@ export type AgentPresetSettingsKey =
   | 'presetTechDescription'
   | 'presetBusinessName'
   | 'presetBusinessDescription'
+  | 'presetPickerIntro'
+  | 'presetGroupWork'
+  | 'presetGroupTeam'
+  | 'presetTeamTag'
+  | 'presetMore'
+  | 'presetMoreHint'
+  | 'presetStandardSummary'
+  | 'presetPtcSummary'
+  | 'presetMinimalSummary'
+  | 'presetCordisSummary'
+  | 'presetTechSummary'
+  | 'presetBusinessSummary'
   | 'inUse'
   | 'selectionOffDefault'
   | 'noDescription'
@@ -67,6 +79,22 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetBusinessName: 'Business mode',
   presetBusinessDescription:
     'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, and case retrieval, with its own document scripts.',
+
+  // The picker's groups and its one-line rows. A shipped preset publishes no
+  // name and no description, so these dictionaries are the only copy its menu
+  // rows have; the longer `preset*Description` above stays the settings card's.
+  presetPickerIntro: 'Choose this task’s mode (one only)',
+  presetGroupWork: 'Work style · how the agent calls tools',
+  presetGroupTeam: 'Team standard · standard tools plus department rules',
+  presetTeamTag: 'Department',
+  presetMore: 'More modes',
+  presetMoreHint: 'Minimal · Creator',
+  presetStandardSummary: 'Calls tools directly for everyday tasks',
+  presetPtcSummary: 'Runs tools from one program, fewer round trips',
+  presetMinimalSummary: 'One terminal only, the plainest agent',
+  presetCordisSummary: 'Lets the agent write plugins and extend DSH',
+  presetTechSummary: 'Backend, frontend and ops discipline',
+  presetBusinessSummary: 'Requirement documents, quotations, case retrieval',
 
   inUse: 'New task default',
   selectionOffDefault: 'Application default',
@@ -112,6 +140,19 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetTechDescription: '固定技术团队模式。保留标准模式的能力，并加入技术部规范：后端、前端、运维三类工程纪律与交付自检。',
   presetBusinessName: '商务部',
   presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索，自带文档生成脚本。',
+
+  presetPickerIntro: '选择本任务使用的模式（单选）',
+  presetGroupWork: '工作方式 · 决定工具怎么调',
+  presetGroupTeam: '团队规范 · 能力同标准模式，另加部门规范',
+  presetTeamTag: '部门规范',
+  presetMore: '更多模式',
+  presetMoreHint: '极简 · 创造',
+  presetStandardSummary: '直接调用工具，完成日常任务',
+  presetPtcSummary: '写一段程序批量调用工具，来回更少',
+  presetMinimalSummary: '只给一个终端，能力最简',
+  presetCordisSummary: '让 Agent 编写插件，扩展 DSH',
+  presetTechSummary: '后端／前端／运维的工程纪律与交付自检',
+  presetBusinessSummary: '需求文档、报价单、案例检索',
 
   inUse: '新任务默认',
   selectionOffDefault: '应用默认',

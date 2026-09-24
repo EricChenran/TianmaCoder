@@ -126,9 +126,25 @@
 }
 
 .itemName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-primary);
+}
+
+/* What the row's heading claims, on the row itself: the group heading is
+   scrolled away by the time a mode's own claim is read. */
+.itemTag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-tsp-secondary);
+  color: var(--dsw-alias-label-caption);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 500;
 }
 
 .itemDesc {
@@ -136,4 +152,28 @@
   line-height: 16px;
   color: var(--dsw-alias-label-caption);
   white-space: normal;
+}
+
+/* The demoted group's disclosure row: its name, and on the same line what it
+   holds, so the group is chosen between without opening it. */
+.moreRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.moreHint {
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+}
+
+.moreChevron,
+.moreChevronOpen {
+  transition: transform var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.moreChevronOpen {
+  transform: rotate(90deg);
 }

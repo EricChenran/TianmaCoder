@@ -29,6 +29,8 @@ Settings shows the built-in and custom card groups with default highlighting and
 
 The “Choose a mode for new tasks” switch controls whether the saved user default is active. Hiding selection uses the deployment default; showing it restores the user preference. Choosing a healthy default also synchronizes the blank session on the current new-task surface. Creator starts a new task using the `cordis` preset. The new-session picker additionally requires Developer tools in General Settings.
 
+The new-session picker groups its rows by the question each preset answers — how the agent calls tools, then whose standards it works to — and reads one line per preset rather than the settings card's longer claim. Minimal and Creator sit behind a “More modes” row, which carries the chosen mark while one of them is in force; a preset the deployment authored keeps the copy it published and gets its own group.
+
 Known shipped presets offer mode details and usage examples in a read-only dialog. Its tabs preserve each page's scroll position; closing returns focus to the opening action. Help does not change the new-task default. The default badge replaces the card's group badge, and the preset id appears beside the title. Guide copy and examples belong to this package.
 
 <a id="understand-the-implementation"></a>
