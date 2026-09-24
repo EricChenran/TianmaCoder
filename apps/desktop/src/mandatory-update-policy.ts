@@ -1,7 +1,16 @@
 /** Mandatory-update policy, independent of local business traffic and updater artifacts. */
 
 import { valid } from 'semver'
-import { desktopClientHeaders } from '@deepseek-ai/dsh-deepseek-account'
+
+/**
+ * Identify this installation to the update service.
+ * @param platform - Operating system this build runs on.
+ * @returns the client-identity headers, shared with the account client so one
+ *   installation never presents two identities.
+ */
+function desktopClientHeaders(platform: 'darwin' | 'win32'): Record<string, string> {
+  return { 'x-client-platform': platform === 'win32' ? 'desktop-win' : 'desktop-mac' }
+}
 
 /** Installed release identity; no field is supplied by a renderer. */
 export interface DesktopPolicyIdentity {

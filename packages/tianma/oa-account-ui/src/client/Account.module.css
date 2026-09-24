@@ -39,6 +39,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
+  corner-shape: round;
   object-fit: cover;
 }
 

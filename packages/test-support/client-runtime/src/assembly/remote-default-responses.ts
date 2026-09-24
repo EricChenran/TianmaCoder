@@ -42,9 +42,6 @@ export const remoteDefaultResponses: RemoteTable = {
     'credentials/describe': ok({}),
     // ui-permission-presets `PermissionCatalogDirectory` on its first read for a connection generation.
     'permissionPresets/catalog': ok({ options: [] }),
-    // ui-settings-account refreshes details after a stored-grant snapshot.
-    'account/getProfile': ok(null),
-    'account/getBalance': ok(null),
     // oa-account-ui reads the current session at apply and after every stream frame.
     'oaAccount/session': ok(signedOutOaSession),
   },
@@ -56,8 +53,6 @@ export const remoteDefaultResponses: RemoteTable = {
   stream: {
     // api-session-controller client `apply`: the control stream's opening baseline, then open.
     'session/control': openStream([{ type: 'baseline', value: { projections: {} } }]),
-    // ui-settings-account shares the account snapshot across settings and the sidebar menu.
-    'account/watch': openStream([{ status: 'signed-out', attempt: null, links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' } }]),
     // oa-account-ui shares one OA account snapshot across the sidebar and Settings.
     'oaAccount/watch': openStream([signedOutOaSession]),
     // api-workspace-controller client `apply`: the follow stream's opening baseline, then open.

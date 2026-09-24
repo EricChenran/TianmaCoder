@@ -1122,9 +1122,6 @@ importers:
       '@deepseek-ai/dsh-agent-preset-registry':
         specifier: workspace:^
         version: link:../../preset/agent-preset-registry
-      '@deepseek-ai/dsh-api-account-controller':
-        specifier: workspace:^
-        version: link:../account-controller
       '@deepseek-ai/dsh-api-gateway':
         specifier: workspace:^
         version: link:../gateway
@@ -1886,9 +1883,6 @@ importers:
       '@deepseek-ai/dsh-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
-      '@deepseek-ai/dsh-deepseek-account-platform':
-        specifier: workspace:^
-        version: link:../../credentials/deepseek-account-platform
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:^
         version: link:../../llm/deepseek-llm-api-extensions
@@ -13722,9 +13716,6 @@ importers:
       '@deepseek-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../packages/credentials/credentials
-      '@deepseek-ai/dsh-deepseek-account':
-        specifier: workspace:^
-        version: link:../../packages/credentials/deepseek-account
       '@deepseek-ai/dsh-deepseek-llm-api-extensions':
         specifier: workspace:^
         version: link:../../packages/llm/deepseek-llm-api-extensions
