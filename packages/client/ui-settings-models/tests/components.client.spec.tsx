@@ -19,6 +19,9 @@ import {
 import { apiKeyFailure } from '../src/client/apiKey.ts'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { deriveKeyRef, ModelsSettingsStore } from '../src/client/store.ts'
+
+/** The label these specs pass through: provider rows keep the host's own names. */
+const passthroughLabel = (_provider: string, displayName: string): string => displayName
 import { createModelsOperations } from '../src/client/operations.ts'
 import type { ModelsOperations } from '../src/client/operations.ts'
 import type { ProviderRow } from '../src/client/store.ts'
@@ -264,7 +267,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
   const { face, update, mutate, set, unset } = scripted
   const ctx = ctxWith(face)
   const mirror = new SettingsDescribeMirror(ctx)
-  const controller = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+  const controller = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
   await controller.load()
   const renderSlot = stubRenderSlot()
   const injected: ModelsSectionProps = {
@@ -456,7 +459,7 @@ describe('ModelsSection', () => {
     face.credentials.describe.mockImplementation((refs: string[]) => Promise.resolve(remoteOk(
       Object.fromEntries(refs.map(ref => [ref, { configured: false, writable: true }])),
     )))
-    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
+    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)), passthroughLabel)
     await controller.load()
     render(<ModelsSection
       controller={controller}
@@ -480,7 +483,7 @@ describe('ModelsSection', () => {
     face.credentials.describe.mockImplementation((refs: string[]) => Promise.resolve(remoteOk(
       Object.fromEntries(refs.map(ref => [ref, { configured: true, writable: true }])),
     )))
-    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
+    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)), passthroughLabel)
     await controller.load()
     cleanup()
     render(<ModelsSection
@@ -1253,7 +1256,7 @@ describe('ModelsSection', () => {
   it('renders the card without the stored-key hint when the credential probe is refused', async () => {
     const { face } = scriptedFace()
     face.credentials.describe = vi.fn(() => Promise.resolve(remoteFail('no credential provider')))
-    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
+    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)), passthroughLabel)
     await controller.load()
     render(<ModelsSection
       controller={controller}
@@ -1387,7 +1390,7 @@ describe('ModelsSection', () => {
     const face = scriptedFace()
     face.face.llm.listProviders = vi.fn(() => Promise.resolve(remoteFail('directory down', 'gateway/internal'))) as never
     const controller = new ModelsSettingsStore(
-      ctxWith(face.face), settingsSchema, new SettingsDescribeMirror(ctxWith(face.face)))
+      ctxWith(face.face), settingsSchema, new SettingsDescribeMirror(ctxWith(face.face)), passthroughLabel)
     await controller.load()
     render(<ModelsSection
       controller={controller}
@@ -1409,7 +1412,7 @@ describe('ModelsSection', () => {
       hasDocument: false,
       namespaces: wireNamespaces(),
     })))
-    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
+    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)), passthroughLabel)
     await controller.load()
     cleanup()
     render(<ModelsSection
@@ -1720,7 +1723,7 @@ describe('ModelsSection', () => {
 
   it('loads on first render of an idle controller', async () => {
     const { face } = scriptedFace()
-    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)))
+    const controller = new ModelsSettingsStore(ctxWith(face), settingsSchema, new SettingsDescribeMirror(ctxWith(face)), passthroughLabel)
     render(<ModelsSection
       controller={controller}
       useSnapshot={bindSnapshotSelector(controller.store)}

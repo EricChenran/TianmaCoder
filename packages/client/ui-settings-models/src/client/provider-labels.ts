@@ -1,26 +1,35 @@
 /**
  * Friendly display labels for catalog provider routes whose directory
  * `displayName` is still the raw route id. The host directory names a catalog
- * provider by its id (`zai-coding-cn`); this map gives the ids a user-facing
- * wording without waiting on every upstream catalog entry carrying a name.
+ * provider by its id (`zai-coding-cn`); this map names the copy key that gives
+ * the id a user-facing wording without waiting on every upstream catalog entry
+ * carrying a name. The wording itself lives in this section's dictionaries, so
+ * it follows the active UI language.
  */
+import type { ModelsKey } from './locales.ts'
 
-/** Catalog route ids the Models page labels in user-facing wording. */
-const PROVIDER_LABELS: Readonly<Record<string, string>> = {
-  'zai-coding-cn': '智谱 GLM Coding Plan',
-  zai: 'Z.AI（智谱国际）',
-  'commandcode-goat': 'Command Code GOAT 计划',
+/** Catalog route ids this section labels in its own words. */
+const PROVIDER_LABEL_KEYS: Readonly<Record<string, ModelsKey>> = {
+  'zai-coding-cn': 'provider.zai-coding-cn',
+  zai: 'provider.zai',
+  'commandcode-goat': 'provider.commandcode-goat',
 }
 
 /**
  * The label a provider row shows: the host-supplied display name when it
- * already differs from the route id, the friendly label when one exists, and
- * the raw id otherwise.
+ * already differs from the route id, this section's own wording when it names
+ * one, and the raw id otherwise.
  * @param provider - the provider route id.
  * @param displayName - the display name the host directory supplied.
+ * @param translate - this section's translator, so the wording follows the UI language.
  * @returns the user-facing label for the provider.
  */
-export function providerLabel(provider: string, displayName: string): string {
+export function providerLabel(
+  provider: string,
+  displayName: string,
+  translate: (key: ModelsKey) => string,
+): string {
   if (displayName !== provider) return displayName
-  return PROVIDER_LABELS[provider] ?? provider
+  const key = PROVIDER_LABEL_KEYS[provider]
+  return key === undefined ? provider : translate(key)
 }

@@ -15,7 +15,6 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsDescribeFace } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
-import { providerLabel } from './provider-labels.ts'
 
 /**
  * Any route key walks a dict schema to the same profile node, so the lookup
@@ -38,17 +37,19 @@ export interface ProviderDirectoryEntry {
  * Join declared configurable providers with the currently registered routes.
  * @param registered - live provider routes in registration order.
  * @param directory - declared configurable providers in declaration order.
+ * @param label - resolves one row's user-facing name in the active UI language.
  * @returns declared rows followed by live routes with no declaration.
  */
 export function joinProviderDirectory(
   registered: readonly LlmProviderInfo[],
   directory: readonly LlmConfigurableProvider[],
+  label: (provider: string, displayName: string) => string,
 ): ProviderDirectoryEntry[] {
   const active = new Set(registered.map(provider => provider.id))
   const declared = new Set(directory.map(entry => entry.provider))
   const rows: ProviderDirectoryEntry[] = directory.map(entry => ({
     provider: entry.provider,
-    displayName: providerLabel(entry.provider, entry.displayName),
+    displayName: label(entry.provider, entry.displayName),
     settingsNs: entry.settingsNs,
     settingsPath: [...entry.settingsPath],
     active: active.has(entry.provider),
@@ -163,11 +164,13 @@ export class ModelsSettingsStore {
    * `remote.credentials` namespaces carry the directory and credential reads.
    * @param schema - settings-owned schema and immutable path operations.
    * @param describeFace - the shared mirror's describe face (namespace views and writability).
+   * @param label - resolves a catalog route id to this section's own wording in the active UI language.
    */
   constructor(
     private readonly ctx: ClientContext,
     private readonly schema: SettingsSchemaOperations,
     private readonly describeFace: SettingsDescribeFace,
+    private readonly label: (provider: string, displayName: string) => string,
   ) {}
 
   /**
@@ -193,7 +196,7 @@ export class ModelsSettingsStore {
       this.failLoad(generation, mirrored.error ?? 'settings are unavailable in this browser')
       return
     }
-    const providers = joinProviderDirectory(registered.value, declared.value)
+    const providers = joinProviderDirectory(registered.value, declared.value, this.label)
     const writable = mirrored.view.writable
     const views: readonly SettingsNamespaceView[] = mirrored.view.namespaces
     const namespaces = new Map(views.map(view => [view.ns, view]))

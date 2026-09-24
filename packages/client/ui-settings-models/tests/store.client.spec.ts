@@ -10,12 +10,14 @@ it.each([false, true])('retains configuration diagnostics when the route is acti
   expect(joinProviderDirectory(active ? [{ id: 'openai', name: 'openai' }] : [], [{
     provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'],
     error: 'catalog unavailable',
-  }])).toEqual([{
+  }], passthroughLabel)).toEqual([{
     provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'],
     active, error: 'catalog unavailable',
   }])
 })
 
+/** The label these specs pass through: provider rows keep the host's own names. */
+const passthroughLabel = (_provider: string, displayName: string): string => displayName
 let nextRpc = 0
 function ok<T>(value: T): RpcResponse<T> {
   return { rpcId: `r-${nextRpc++}` as never, result: { ok: true, value } }
@@ -121,7 +123,7 @@ function api(overrides: {
 describe('ModelsSettingsStore', () => {
   it('joins rows with configured, removable, and credential state', async () => {
     const { ctx, mirror, seenRefs } = api()
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     const state = store.store.getSnapshot()
     expect(state.status).toBe('ready')
@@ -151,7 +153,7 @@ describe('ModelsSettingsStore', () => {
 
   it('degrades the credential badge, not the page, when the credential domain fails', async () => {
     const { ctx, mirror } = api({ describeCredentials: () => Promise.resolve(remoteFail('no provider')) })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     const state = store.store.getSnapshot()
     expect(state.status).toBe('ready')
@@ -161,11 +163,11 @@ describe('ModelsSettingsStore', () => {
 
   it('surfaces a directory failure and keeps the last good rows', async () => {
     const { ctx, mirror } = api()
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     expect(store.store.getSnapshot().rows).toHaveLength(4)
     const broken = api({ providers: () => Promise.resolve(fail('directory down')) })
-    const failing = new ModelsSettingsStore(broken.ctx, settingsSchema, broken.mirror)
+    const failing = new ModelsSettingsStore(broken.ctx, settingsSchema, broken.mirror, passthroughLabel)
     await failing.load()
     expect(failing.store.getSnapshot()).toMatchObject({ status: 'error', error: 'directory down' })
     // The first store's snapshot is untouched by the second's failure.
@@ -178,7 +180,7 @@ describe('ModelsSettingsStore', () => {
       llm: { listConfigurableProviders: () => Promise<RemoteAnswer<never>> }
     }).llm
     llm.listConfigurableProviders = () => Promise.resolve(remoteFail<never>('configuration directory down'))
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
 
     await store.load()
 
@@ -201,7 +203,7 @@ describe('ModelsSettingsStore', () => {
         return ok({ providers: DIRECTORY })
       },
     })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     const first = store.load()
     const second = store.load()
     release?.()
@@ -231,7 +233,7 @@ describe('edge joins', () => {
         ] as never,
       })),
     })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     const state = store.store.getSnapshot()
     expect(state.rows[0]).toMatchObject({ configured: true, removable: false })
@@ -254,7 +256,7 @@ describe('edge joins', () => {
         Object.fromEntries(refs.map(ref => [ref, { configured: true, writable: true }])),
       )),
     })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     // The dormant row names no reference, so the join asks about the page's
     // own derived <ROUTE>_API_KEY — what the editor would display for it.
@@ -267,7 +269,7 @@ describe('edge joins', () => {
 
   it('surfaces a settings describe failure', async () => {
     const { ctx, mirror } = api({ describeSettings: () => Promise.resolve(remoteFail('settings down')) })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     expect(store.store.getSnapshot()).toMatchObject({ status: 'error', error: 'settings down' })
   })
@@ -278,6 +280,7 @@ describe('edge joins', () => {
       ctx,
       settingsSchema,
       new SettingsDescribeMirror(ctx, 'memory'),
+      passthroughLabel,
     )
     await store.load()
     expect(store.store.getSnapshot()).toMatchObject({
@@ -296,7 +299,7 @@ describe('edge joins', () => {
           : remoteFail('settings refresh down'))
       },
     })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     await store.load()
     await mirror.load()
     expect(mirror.getSnapshot().error).toBe('settings refresh down')
@@ -319,7 +322,7 @@ describe('edge joins', () => {
         return ok({ providers: DIRECTORY })
       },
     })
-    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror)
+    const store = new ModelsSettingsStore(ctx, settingsSchema, mirror, passthroughLabel)
     const first = store.load()
     const second = store.load()
     await second
