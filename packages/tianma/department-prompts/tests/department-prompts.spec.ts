@@ -1,8 +1,10 @@
 /**
  * Department prompts: the selected department's rules must register as one
  * literal system-prompt section, the packaged toolbox must publish its scripts
- * without exposing their location to the model, and neither rule set may carry
- * the source documents' own mechanism vocabulary.
+ * without exposing their location to the model, the bundled 公文 skill must
+ * publish where the model's interpreter can read it and reach only the modes
+ * that mount this row, and neither rule set may carry the source documents' own
+ * mechanism vocabulary.
  */
 
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -11,12 +13,14 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as ShellEnv from '@deepseek-ai/dsh-shell-env'
 import * as plugin from '@tianma/dsh-department-prompts'
 
 const PERSONA = 'You are the deployment assistant.'
 const ASSET_ROOT = fileURLToPath(new URL('../assets/business/', import.meta.url))
+const SKILL_ASSET_ROOT = fileURLToPath(new URL('../skills/official-doc/', import.meta.url))
 const temporaryDirectories: string[] = []
 
 /** The contributor shape a stubbed shell-env registry captures from the plugin. */
@@ -171,5 +175,98 @@ describe('@tianma/dsh-department-prompts', () => {
 
   it.each(plugin.DEPARTMENTS)('states the department the model is acting for', (department) => {
     expect(plugin.departmentPrompt(department)).toContain(department === 'tech' ? '# 技术部工作规范' : '# 商务部工作规范')
+  })
+
+  it('publishes the bundled 公文 skill byte for byte where the interpreter reads it', () => {
+    const skillDir = join(temporaryDirectory(), 'skill')
+    expect(plugin.materializeDepartmentSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
+    for (const relativePath of plugin.SKILL_ASSET_FILES) {
+      expect(readFileSync(join(skillDir, relativePath))).toEqual(readFileSync(join(SKILL_ASSET_ROOT, relativePath)))
+    }
+    // A repeated mount keeps the published bytes and reports the same directory.
+    expect(plugin.materializeDepartmentSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
+    // A published script that drifted from the packaged copy is rewritten.
+    const drifted = join(skillDir, 'scripts', 'gen_doc.py')
+    writeFileSync(drifted, 'print("stale")\n')
+    plugin.materializeDepartmentSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })
+    expect(readFileSync(drifted)).toEqual(readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'gen_doc.py')))
+  })
+
+  it('publishes the skill under the harness home when no directory is configured', () => {
+    const home = temporaryDirectory()
+    const previous = process.env.DSH_HOME
+    process.env.DSH_HOME = home
+    try {
+      const published = plugin.materializeDepartmentSkill()
+      expect(published).toBe(join(home, 'department', 'skills', plugin.SKILL_NAME))
+      expect(readdirSync(join(published, 'scripts'))).toEqual(['gen_doc.py'])
+    } finally {
+      if (previous === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previous
+    }
+  })
+
+  it('fails loud when the packaged skill is incomplete', () => {
+    expect(() => plugin.materializeDepartmentSkill({
+      assetRoot: temporaryDirectory(), skillDir: join(temporaryDirectory(), 'skill'),
+    })).toThrow(/missing SKILL\.md/u)
+  })
+
+  it('registers the bundled skill against the directory it published', async () => {
+    const skillDir = join(temporaryDirectory(), 'skill')
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    try {
+      expect(plugin.installDepartmentSkill(ctx, { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(true)
+      const catalog = await ctx.skills.list()
+      expect(catalog.map(skill => skill.name)).toEqual([plugin.SKILL_NAME])
+      expect(catalog[0]).toMatchObject({
+        source: 'bundled',
+        provider: plugin.SKILL_PROVIDER_NAME,
+        invocation: { modelInvocable: true, userInvocable: true },
+        resourceBase: { kind: 'directory', path: skillDir },
+      })
+      expect(catalog[0]?.description.length).toBeLessThanOrEqual(500)
+      const loaded = await ctx.skills.get(plugin.SKILL_NAME)
+      expect(loaded?.path).toBe(join(skillDir, 'SKILL.md'))
+      expect(loaded?.content).toContain('宜春天码信息集团')
+      expect(loaded?.content.startsWith('# 企业公文生成')).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each(plugin.DEPARTMENTS)('gives the %s mode the skill and drops it with the row', async (department) => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { personaPrefix: PERSONA })
+    await ctx.plugin(SkillRegistry)
+    try {
+      const fiber = await ctx.plugin(plugin, {
+        department, skillAssetRoot: SKILL_ASSET_ROOT, skillDir: join(temporaryDirectory(), 'skill'),
+      })
+      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual([plugin.SKILL_NAME])
+      await fiber.dispose()
+      expect(await ctx.skills.list()).toEqual([])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('skips the skill when the composition mounts no skill registry', () => {
+    const skillDir = join(temporaryDirectory(), 'skill')
+    expect(plugin.installDepartmentSkill(new Context(), { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(false)
+    expect(existsSync(skillDir)).toBe(false)
+  })
+
+  it('ships a skill body free of foreign harness syntax and host paths', () => {
+    const raw = readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')
+    expect(raw.startsWith('---\nname: official-doc\n')).toBe(true)
+    for (const forbidden of ['zcode-file-citation', '::zcode', 'document-skills', '<本技能目录>',
+      'DSH_DEPARTMENT_TOOLS', 'assets/business']) {
+      expect(raw).not.toContain(forbidden)
+    }
+    expect(raw).not.toMatch(/[A-Za-z]:\\/u)
+    expect(raw).toContain('scripts/gen_doc.py')
+    expect(raw).toContain('present')
   })
 })

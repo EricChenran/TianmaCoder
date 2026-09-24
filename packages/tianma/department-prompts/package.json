@@ -22,7 +22,8 @@
   "files": [
     "lib/index.js",
     "lib/types/**/*.d.ts",
-    "assets/business/*.py"
+    "assets/business/*.py",
+    "skills/official-doc/**"
   ],
   "license": "MIT",
   "peerDependencies": {
@@ -37,6 +38,8 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-home-paths": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@deepseek-ai/dsh-skill": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^",
+    "yaml": "^2.4.2"
   }
 }

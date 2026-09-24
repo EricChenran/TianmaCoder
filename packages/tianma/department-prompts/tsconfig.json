@@ -10,6 +10,7 @@
     { "path": "../../../vendor/schemastery" },
     { "path": "../../core/system-prompt" },
     { "path": "../../shell/shell-env" },
+    { "path": "../../skill/skill" },
     { "path": "../../util/home-paths" }
   ]
 }

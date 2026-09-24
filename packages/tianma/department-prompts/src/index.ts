@@ -7,6 +7,10 @@
  * toolbox scripts are published to a private directory whose location reaches
  * the model only as the `DSH_DEPARTMENT_TOOLS` variable.
  *
+ * Both department modes also carry the bundled 公文 skill: the row is the only
+ * thing both presets mount, so registering its provider here keeps the skill
+ * out of every other mode.
+ *
  * @module @tianma/dsh-department-prompts
  */
 
@@ -15,9 +19,18 @@ import z from '@deepseek-ai/schemastery'
 // Type-only: pulls the `ctx.systemPrompt` Context merge into this file's scope.
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { type Department, departmentPrompt } from './prompts/index.ts'
+import { installDepartmentSkill, type DepartmentSkillOptions } from './skill.ts'
 import { type BusinessToolboxOptions, installBusinessToolbox } from './toolbox.ts'
 
 export { departmentPrompt, DEPARTMENTS, DEPARTMENT_PROMPTS, type Department } from './prompts/index.ts'
+export {
+  installDepartmentSkill,
+  materializeDepartmentSkill,
+  SKILL_ASSET_FILES,
+  SKILL_NAME,
+  SKILL_PROVIDER_NAME,
+  type DepartmentSkillOptions,
+} from './skill.ts'
 export {
   BUSINESS_TOOL_FILES,
   installBusinessToolbox,
@@ -40,9 +53,11 @@ export const SECTION_NAME = 'tianma:department'
 export const SECTION_ORDER = 150
 
 /** Plugin config: the department whose rules this row contributes. */
-export interface Config extends BusinessToolboxOptions {
+export interface Config extends BusinessToolboxOptions, DepartmentSkillOptions {
   /** Department identifier; also the preset it belongs to. */
   department: Department
+  /** Packaged skill directory, for a deployment that ships its own copy. */
+  skillAssetRoot?: string
 }
 
 /** Runtime schema for the department row. */
@@ -50,12 +65,15 @@ export const Config: z<Config> = z.object({
   department: z.union(['tech', 'business'] as const).required(),
   assetRoot: z.string(),
   toolsDir: z.string(),
+  skillAssetRoot: z.string(),
+  skillDir: z.string(),
 })
 
 /**
- * Register the selected department's rules, and for 商务部 publish its toolbox.
+ * Register the selected department's rules and its bundled 公文 skill, and for
+ * 商务部 publish its toolbox.
  * @param ctx - the preset scope context this row mounts in.
- * @param config - the department selection and optional toolbox overrides.
+ * @param config - the department selection and optional publication directories.
  */
 export function apply(ctx: Context, config: Config): void {
   const text = departmentPrompt(config.department)
@@ -68,6 +86,10 @@ export function apply(ctx: Context, config: Config): void {
       // read as a prompt-variable reference.
       interpolate: false,
     })
+  })
+  installDepartmentSkill(ctx, {
+    ...config.skillAssetRoot === undefined ? {} : { assetRoot: config.skillAssetRoot },
+    ...config.skillDir === undefined ? {} : { skillDir: config.skillDir },
   })
   if (config.department === 'business') {
     const { assetRoot, toolsDir } = config
