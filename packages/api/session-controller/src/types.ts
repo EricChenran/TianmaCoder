@@ -222,6 +222,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/steer-unavailable': { readonly itemId: MessageId }
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
+    'session/sign-in-required': Record<string, never>
+    'session/account-inactive': Record<string, never>
     'subagent/not-found': {
       readonly parentSessionId: SessionId
       readonly childSessionId: SessionId
@@ -571,6 +573,50 @@ export interface SessionProjectionUpdate {
 export type SessionControlFrame =
   | { readonly type: 'baseline'; readonly value: SessionControlBaseline }
   | ({ readonly type: 'projection' } & SessionProjectionUpdate)
+
+/**
+ * One refusal from a mounted {@link PromptAdmission}.
+ */
+export interface PromptAdmissionRefusal {
+  /**
+   * Refusal code. The prompt path reports it as `session/<code>`, so the two
+   * codes below are the complete vocabulary a client has to know.
+   */
+  readonly code: PromptAdmissionRefusalCode
+  /** Diagnostic message for a caller that does not know the code. */
+  readonly message: string
+}
+
+/** Complete refusal vocabulary a mounted {@link PromptAdmission} may report. */
+export type PromptAdmissionRefusalCode = 'sign-in-required' | 'account-inactive'
+
+/**
+ * Optional check consulted before a user message enters a session.
+ *
+ * A deployment mounts a service under `ctx.promptAdmission` to decide whether a
+ * conversation may start — a signed-in account, a licensed seat, a maintenance
+ * window. The check is an extension point, not a product feature: the key stays
+ * unmounted in compositions that gate nothing, and `ctx.get` returning
+ * undefined means the prompt path admits unconditionally.
+ */
+export interface PromptAdmission {
+  /**
+   * Decide whether a conversation may start.
+   * @returns undefined to admit, or the refusal to report to the caller as a business error.
+   */
+  admitPrompt(): Promise<PromptAdmissionRefusal | undefined>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /**
+     * Optional prompt admission check. Unmounted compositions leave the browser
+     * prompt path ungated; a mounted check is consulted in
+     * `SessionCommandController.prompt` before the message reaches the Agent.
+     */
+    promptAdmission?: PromptAdmission
+  }
+}
 
 declare module '@deepseek-ai/cordis' {
   interface Events {

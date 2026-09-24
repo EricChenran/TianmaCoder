@@ -389,6 +389,7 @@
     { "path": "./packages/tianma/token-meter-calibration" },
     { "path": "./packages/tianma/compaction-file-rehydrator" },
     { "path": "./packages/tianma/hooks-trust" },
+    { "path": "./packages/tianma/oa-account" },
     { "path": "./packages/bundle/headless" },
     { "path": "./packages/bundle/sdk-app" },
     { "path": "./packages/bundle/sdk-minimal" },

@@ -1,0 +1,161 @@
+:root {
+  --oa-account-gap: 8px;
+}
+
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+
+.anchor {
+  min-width: 0;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--oa-account-gap);
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.avatarImage {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error {
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+}
+
+.captchaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--oa-account-gap);
+}
+
+.captcha {
+  width: 120px;
+  height: 50px;
+  flex: none;
+  cursor: pointer;
+}
+
+.captchaMissing {
+  font-size: 12px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.groupTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--oa-account-gap);
+  min-width: 0;
+}
+
+.rowLabel {
+  flex: none;
+  min-width: 96px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.rowValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--oa-account-gap);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statLabel {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.statValue {
+  font-size: 18px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--oa-account-gap);
+}
+
+.notice {
+  font-size: 12px;
+  opacity: 0.7;
+}

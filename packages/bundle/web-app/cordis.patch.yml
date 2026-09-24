@@ -113,14 +113,19 @@
     - id: workspace-files
       name: '@deepseek-ai/dsh-api-workspace-files'
 
+    # Tianma OA user account: captcha sign-in against the OA REST API, the
+    # dual-token session kept in the credential seam's records, and the
+    # signed-in gate the prompt admission path reads. Only this bundle mounts
+    # it, so automation profiles that carry no interactive user stay ungated.
+    - id: oa-account
+      name: '@tianma/dsh-oa-account'
+      config:
+        baseUrl: !!js process.env.DSH_OA_BASE_URL ?? 'https://oabackend.ruimacode.cn/api/v1'
+        requestTimeoutMs: 30000
+        requireSignIn: true
+
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
-    - id: ui-settings-account
-      name: '@deepseek-ai/dsh-client-ui-settings-account'
-
-    - id: account-controller
-      name: '@deepseek-ai/dsh-api-account-controller'
-
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
@@ -262,6 +267,11 @@
 
     - id: ui-settings
       name: '@deepseek-ai/dsh-client-ui-settings'
+
+    # Tianma OA account surfaces: the sidebar launcher and the Settings page
+    # that render the signing-in account and edit its own profile.
+    - id: oa-account-ui
+      name: '@tianma/dsh-oa-account-ui'
 
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'

@@ -316,6 +316,17 @@ export class SessionCommandController {
         {},
       )
     }
+    // The deployment's optional admission check runs before any session work:
+    // a refusal must not resolve an Agent, mint an attempt, or touch the log.
+    // Every browser prompt entry point — send, queue, and steer — reaches the
+    // Agent through this method, so one check covers all of them.
+    const admission = this.ctx.get('promptAdmission')
+    if (admission !== undefined) {
+      const refusal = await admission.admitPrompt()
+      if (refusal !== undefined) {
+        throw new RemoteError(`session/${refusal.code}`, refusal.message, {})
+      }
+    }
     const clientTimeZone = request.clientTimeZone === undefined
       ? undefined
       : canonicalClientTimeZone(request.clientTimeZone)

@@ -333,6 +333,10 @@
       "@tianma/dsh-compaction-summarize": ["./packages/tianma/compaction-summarize/src/index.ts"],
       "@tianma/dsh-compaction-file-rehydrator": ["./packages/tianma/compaction-file-rehydrator/src/index.ts"],
       "@tianma/dsh-hooks-trust": ["./packages/tianma/hooks-trust/src/index.ts"],
+      "@tianma/dsh-oa-account": ["./packages/tianma/oa-account/src/index.ts"],
+      "@tianma/dsh-oa-account/types": ["./packages/tianma/oa-account/src/types.ts"],
+      "@tianma/dsh-oa-account-ui": ["./packages/tianma/oa-account-ui/src/index.ts"],
+      "@tianma/dsh-oa-account-ui/client": ["./packages/tianma/oa-account-ui/src/client/index.ts"],
       "@tianma/dsh-token-meter-calibration": ["./packages/tianma/token-meter-calibration/src/index.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],

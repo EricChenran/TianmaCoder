@@ -175,9 +175,9 @@
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
     "open": "^11.0.0",
-    "@deepseek-ai/dsh-api-account-controller": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-settings-account": "workspace:^",
-    "@tianma/dsh-department-prompts": "workspace:^"
+    "@tianma/dsh-department-prompts": "workspace:^",
+    "@tianma/dsh-oa-account": "workspace:^",
+    "@tianma/dsh-oa-account-ui": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

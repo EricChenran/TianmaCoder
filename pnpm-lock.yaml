@@ -1209,6 +1209,9 @@ importers:
       '@deepseek-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../interaction/user-questions
+      '@tianma/dsh-oa-account':
+        specifier: workspace:^
+        version: link:../../tianma/oa-account
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2289,9 +2292,6 @@ importers:
       '@deepseek-ai/dsh-agent-tool-presentation':
         specifier: workspace:^
         version: link:../../core/agent-tool-presentation
-      '@deepseek-ai/dsh-api-account-controller':
-        specifier: workspace:^
-        version: link:../../api/account-controller
       '@deepseek-ai/dsh-api-job-controller':
         specifier: workspace:^
         version: link:../../api/job-controller
@@ -2412,9 +2412,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings':
         specifier: workspace:^
         version: link:../../client/ui-settings
-      '@deepseek-ai/dsh-client-ui-settings-account':
-        specifier: workspace:^
-        version: link:../../client/ui-settings-account
       '@deepseek-ai/dsh-client-ui-settings-agent-loop':
         specifier: workspace:^
         version: link:../../client/ui-settings-agent-loop
@@ -2643,6 +2640,12 @@ importers:
       '@tianma/dsh-department-prompts':
         specifier: workspace:^
         version: link:../../tianma/department-prompts
+      '@tianma/dsh-oa-account':
+        specifier: workspace:^
+        version: link:../../tianma/oa-account
+      '@tianma/dsh-oa-account-ui':
+        specifier: workspace:^
+        version: link:../../tianma/oa-account-ui
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -12829,6 +12832,67 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+
+  packages/tianma/oa-account:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: workspace:^
+        version: link:../../api/session-controller
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:^
+        version: link:../../typert/protocol
+
+  packages/tianma/oa-account-ui:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../../client/locale
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../../client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:^
+        version: link:../../client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:^
+        version: link:../../client/ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:^
+        version: link:../../client/ui-slots
+      '@tianma/dsh-oa-account':
+        specifier: workspace:^
+        version: link:../oa-account
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.7(@types/react@18.3.31)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/tianma/token-meter-calibration:
     devDependencies:
