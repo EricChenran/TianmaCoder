@@ -11,6 +11,8 @@ kind: "package-reference"
 
 天码 OA 账户体系的浏览器半边。一份由 Host 的 `oaAccount` 远端命名空间喂给的快照支撑三个界面：登录对话框（账号、密码、验证码）、侧栏启动器，以及设置区块——它展示已登录资料、工作台计数，并提供账户所有者可改字段的编辑器。侧栏与设置页读同一份快照，因此不可能对"谁已登录"给出不一致的说法。Token 不会到达浏览器。
 
+它还承载对话闸门的客户端半边：未登录时每个存活会话的输入框都变为惰性并说明原因，因此客户端会在 Host 之前先拒绝这条消息。
+
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -39,6 +41,8 @@ kind: "package-reference"
 
 登录对话框负责验证码生命周期。验证码是一次性的，因此被后端拒绝的一次尝试总会重新取一张新验证码，同时保留已输入的账号与密码——人类重试时很少需要重打账号名。
 
+输入框无法读取本插件（依赖是单向的），因此闸门是**推送**而非读取：插件把每个存活会话写进对话服务的 block 注册表，并在每次快照变化与会话列表变化时重新同步。Host 会独立拒绝同一条提示词，因此两侧是同一个决定的两个平面。
+
 ### 源码导览
 
 | 文件 | 作用 |
@@ -47,6 +51,7 @@ kind: "package-reference"
 | [`src/client/SignInDialog.tsx`](src/client/SignInDialog.tsx) | 带验证码的登录表单 |
 | [`src/client/AccountMenu.tsx`](src/client/AccountMenu.tsx) | 侧栏启动器与头像地址解析 |
 | [`src/client/AccountSection.tsx`](src/client/AccountSection.tsx) | 设置页：资料、计数与编辑器 |
+| [`src/client/composer-block.ts`](src/client/composer-block.ts) | 为客户端已列出的会话推送输入框 block |
 | [`src/client/locales.ts`](src/client/locales.ts) | 中英文文案字典 |
 | [`src/client/contract.ts`](src/client/contract.ts) | 快照与注入操作的契约 |
 
@@ -94,6 +99,7 @@ kind: "package-reference"
 - **失败文案用后端原话。** 被拒绝的尝试显示后端给出的信息（例如账号已停用），只有后端未给信息时才回落到本地化文案，因此产品不会编造后端没说过的原因。
 - **状态映射唯一。** `active` / `disabled` / `banned` 由账户状态渲染；本构建从未见过的状态按"未知"渲染，而不是按可用处理。
 - **只有组态挂载了账户服务时界面才存在。** 没有 Host 半边的档案完全没有账户界面。
+- **客户端闸门是推送而非读取。** 单向依赖下输入框的 block 注册表是唯一通道，因此插件直接写入它、并在卸载时清除；只挂载账户界面而没有对话服务的组态，仍保留 Host 侧拒绝，只是少了输入框禁用。
 
 <a id="dev-note"></a>
 ### 开发者注记

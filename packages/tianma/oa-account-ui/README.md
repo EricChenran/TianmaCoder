@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 The browser half of the Tianma OA account system. One snapshot, fed by the Host's `oaAccount` Remote namespace, backs three surfaces: the sign-in dialog (account, password, and a captcha challenge), the sidebar launcher, and the Settings section that shows the signed-in profile, its workbench counters, and an editor for the fields the account owner may change. The sidebar and the Settings page read the same snapshot, so they cannot disagree about who is signed in. No token reaches the browser.
 
+It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason, so the client refuses the message before the Host has to.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -39,6 +41,8 @@ It registers the sidebar launcher in `settings.launcher` and the Settings page i
 
 The sign-in dialog owns the captcha lifecycle. A challenge is single-use, so an attempt that the backend refuses always fetches a new one while keeping the typed account and password — a human's retry is rarely a fresh account name.
 
+The composer cannot read this plugin — the dependency runs one way — so the gate is pushed rather than read: the plugin writes each live session into the conversation service's block registry and re-syncs on every snapshot change and every session-list change. The Host refuses the same prompt independently, so the two halves are one decision seen from both planes.
+
 ### Source map
 
 | File | Role |
@@ -47,6 +51,7 @@ The sign-in dialog owns the captcha lifecycle. A challenge is single-use, so an 
 | [`src/client/SignInDialog.tsx`](src/client/SignInDialog.tsx) | The captcha sign-in form |
 | [`src/client/AccountMenu.tsx`](src/client/AccountMenu.tsx) | The sidebar launcher and its avatar resolution |
 | [`src/client/AccountSection.tsx`](src/client/AccountSection.tsx) | The Settings page: profile, counters, and the editor |
+| [`src/client/composer-block.ts`](src/client/composer-block.ts) | The pushed composer block for the sessions the client lists |
 | [`src/client/locales.ts`](src/client/locales.ts) | The English and Chinese dictionaries |
 | [`src/client/contract.ts`](src/client/contract.ts) | The snapshot and injected-operation contract |
 
@@ -94,6 +99,7 @@ These limits define the current boundary.
 - **Failure copy is the backend's own message.** A refused attempt shows what the backend said (for example, a disabled account) and falls back to localized copy only when the backend sends no message, so the product never invents a reason the backend did not give.
 - **One status mapping.** `active` / `disabled` / `banned` are rendered from the account status; a status this build has never seen renders as unknown rather than as usable.
 - **The surfaces render only where the composition mounts the account service.** A profile without the Host half has no account surfaces at all.
+- **The client gate is pushed, not read.** The composer's block registry is the only channel the one-way dependency allows, so the plugin writes it directly and clears it when it unloads; a deployment that mounts the account UI without the conversation service keeps the Host-side refusal and loses only the disabled composer.
 
 <a id="dev-note"></a>
 ### Dev Note

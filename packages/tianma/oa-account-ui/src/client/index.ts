@@ -15,10 +15,13 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@tianma/dsh-oa-account/remote'
 import type { OaSessionView } from '@tianma/dsh-oa-account/types'
 import { OaAccountMenu } from './AccountMenu.tsx'
 import { OaAccountSection } from './AccountSection.tsx'
+import { syncComposerBlock } from './composer-block.ts'
 import { en, zh, type OaAccountKey } from './locales.ts'
 import type { OaAccountInjected, OaAccountSnapshot } from './contract.ts'
 
@@ -146,4 +149,28 @@ export function apply(ctx: Context): void {
     name: 'settings.section', id: 'oa-account', order: -10, label: () => t('nav'),
     locale: 'settings.oaAccount', inject: () => operations,
   }, OaAccountSection))
+  // The composer cannot read this plugin (the dependency runs one way), so the
+  // gate is pushed: while no account is signed in, every live session's input is
+  // inert and names the reason, and signing in clears it again. The Host refuses
+  // the same prompt on its own, so this is the client half of one decision.
+  const conversation = ctx.get('conversation')
+  const sessions = ctx.get('sessions')
+  if (conversation !== undefined && sessions !== undefined) {
+    const sync = (): void => {
+      syncComposerBlock(
+        conversation,
+        sessions.list.getSnapshot(),
+        snapshot.session?.signedIn === true ? undefined : t('signInToSend'),
+      )
+    }
+    listeners.add(sync)
+    ctx.effect(() => {
+      const stop = sessions.list.subscribe(sync)
+      sync()
+      return () => {
+        stop()
+        syncComposerBlock(conversation, sessions.list.getSnapshot(), undefined)
+      }
+    }, 'oa-account: composer block')
+  }
 }

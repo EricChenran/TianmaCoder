@@ -145,9 +145,16 @@ export class OaAccountService extends TypertRemoteService {
     this.base = oaBaseUrl(config.baseUrl)
     this.requestTimeoutMs = config.requestTimeoutMs
     this.requireSignIn = config.requireSignIn
-    // The admission check ships as its own service so the browser prompt path
-    // depends on the extension point rather than on this account provider.
-    ctx.plugin(OaPromptAdmission)
+  }
+
+  /**
+   * Mount the prompt-admission check once this service exists. Done here rather
+   * than in the constructor so the child plugin — which waits for `oaAccount` —
+   * is created after this service is constructed, and a deployment that mounts
+   * the account row always gets the extension point the prompt path reads.
+   */
+  [Service.init](): void {
+    this.ctx.plugin(OaPromptAdmission)
   }
 
   /**
