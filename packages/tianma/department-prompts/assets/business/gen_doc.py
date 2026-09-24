@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-gen_doc.py — 从 content.json 一步生成《需求文档》Word（合同规范版式 + 业务工作流图文）
+gen_doc.py — 从 content.json 一步生成《需求文档》Word 与同内容 Markdown
 用法: python gen_doc.py content.json "需求文档-系统名.docx"
 依赖: python-docx, matplotlib
+产出: 除了指定的 .docx，在同一目录写出同名 .md（便于转发给技术部），
+      流程图 PNG 落在同目录 images/ 下，Markdown 以内链引用，内容与 Word 一致。
 版式: 业内合同规范——黑体二号标题、黑体/楷体条款标题、宋体小四正文、
       1.5倍行距、结尾双方签署栏、"第 X 页 共 Y 页"页码。
 业务流程: 每条流程先输出完整正文（业务目标／参与角色／触发条件／前置条件／
@@ -13,7 +15,6 @@ gen_doc.py — 从 content.json 一步生成《需求文档》Word（合同规�
 import json
 import os
 import sys
-import tempfile
 from datetime import date
 
 from docx import Document
@@ -29,7 +30,6 @@ NAVY = "#1F4E79"
 SONG, HEI, KAI, FANG = "宋体", "黑体", "楷体", "仿宋"
 CENTER = WD_ALIGN_PARAGRAPH.CENTER
 RIGHT = WD_ALIGN_PARAGRAPH.RIGHT
-TEMP_FILES = []
 
 
 def cn_num(n):
@@ -223,11 +223,30 @@ def draw_flowchart(steps, out_png):
     plt.close(fig)
 
 
-def flowchart_png(steps):
-    path = os.path.join(tempfile.gettempdir(), "fy_flow_%d.png" % len(TEMP_FILES))
-    draw_flowchart(steps, path)
-    TEMP_FILES.append(path)
-    return path
+def safe_filename(text):
+    """把流程名规范成可用作文件名的形式。"""
+    for ch in '\\/:*?"<>|':
+        text = text.replace(ch, "_")
+    return text.strip() or "流程"
+
+
+def flow_image_path(images_dir, index, name):
+    """一条流程的流程图落盘路径（Word 与 Markdown 复用同一张图）。"""
+    return os.path.join(images_dir, "图%d-%s.png" % (index, safe_filename(name)))
+
+
+def md_cell(text):
+    """Markdown 表格单元格：转义竖线、压掉换行。"""
+    return str(text).replace("|", "\\|").replace("\n", " ")
+
+
+def md_table(headers, rows):
+    """渲染一张 Markdown 表格。"""
+    lines = ["| " + " | ".join(headers) + " |",
+             "| " + " | ".join("---" for _ in headers) + " |"]
+    for row in rows:
+        lines.append("| " + " | ".join(md_cell(cell) for cell in row) + " |")
+    return "\n".join(lines)
 
 
 def normalize_flow(raw, index):
@@ -283,7 +302,7 @@ def normalize_flow(raw, index):
     }
 
 
-def add_flow(doc, flow, index, figure):
+def add_flow(doc, flow, index, figure, image_path):
     """输出一条业务流程：正文（结构化）在前，流程图与图题在后。"""
     para(doc, "（%s）%s" % (cn_num(index), flow["name"]), size=14, font=KAI,
          indent=True, before=6)
@@ -324,22 +343,110 @@ def add_flow(doc, flow, index, figure):
     p = doc.add_paragraph()
     p.alignment = CENTER
     p.paragraph_format.space_after = Pt(2)
-    p.add_run().add_picture(flowchart_png(flow["steps"]), width=Cm(8.5))
+    p.add_run().add_picture(image_path, width=Cm(8.5))
     para(doc, "图 %d　%s流程图" % (figure, flow["name"]), size=9, color=GRAY,
          align=CENTER, after=12)
 
 
-def cleanup():
-    for path in TEMP_FILES:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-    del TEMP_FILES[:]
+def write_markdown(data, flows, image_links, date_str, out_md):
+    """把同一份内容写成 Markdown：与 Word 逐节对应，流程图以内链引用 images/ 下的 PNG。"""
+    lines = ["# %s" % data["system_name"], "",
+             "%s" % data["subtitle"], "",
+             "编制单位：帆远网络科技", ""]
+
+    def section(heading):
+        lines.extend(["## %s" % heading, ""])
+
+    section("一、项目概述")
+    idx = 1
+    for text in data.get("overview", []):
+        lines.extend([text, ""])
+
+    roles = data.get("roles") or []
+    if roles:
+        section("%s、用户角色" % cn_num(idx + 1))
+        idx += 1
+        lines.extend([md_table(["角色", "角色说明", "核心操作"],
+                               [[r.get("name", ""), r.get("desc", ""), r.get("actions", "")]
+                                for r in roles]), ""])
+
+    section("%s、功能模块设计" % cn_num(idx + 1))
+    idx += 1
+    for i, module in enumerate(data["modules"], 1):
+        head = "### （%s）%s" % (cn_num(i), module["name"])
+        if module.get("desc"):
+            head += "——" + module["desc"]
+        lines.extend([head, ""])
+        features = module.get("features") or []
+        if features:
+            lines.extend([md_table(["功能点", "功能说明"],
+                                   [[f.get("point", ""), f.get("detail", "")] for f in features]), ""])
+
+    if flows:
+        section("%s、核心业务流程" % cn_num(idx + 1))
+        idx += 1
+        for i, flow in enumerate(flows, 1):
+            lines.extend(["### （%s）%s" % (cn_num(i), flow["name"]), ""])
+            if flow["goal"]:
+                lines.append("- **业务目标**：%s" % flow["goal"])
+            if flow["roles"]:
+                lines.append("- **参与角色**：%s" % "、".join(flow["roles"]))
+            lines.append("- **触发条件**：%s" % flow["trigger"])
+            if flow["precondition"]:
+                lines.append("- **前置条件**：%s" % flow["precondition"])
+            lines.append("")
+            lines.extend(["**流程步骤**", ""])
+            with_actor = any(s["actor"] for s in flow["steps"])
+            with_rule = any(s["rule"] for s in flow["steps"])
+            headers = ["序号"] + (["执行角色"] if with_actor else []) + ["操作内容"] \
+                + (["业务规则与输出"] if with_rule else [])
+            rows = []
+            for n, step in enumerate(flow["steps"], 1):
+                rows.append([str(n)] + ([step["actor"]] if with_actor else []) + [step["action"]]
+                            + ([step["rule"]] if with_rule else []))
+            lines.extend([md_table(headers, rows), ""])
+            if flow["exceptions"]:
+                lines.extend(["**异常与分支**", ""])
+                lines.extend([md_table(["异常或分支", "处理方式"],
+                                       [[item["case"], item["handling"]] for item in flow["exceptions"]]), ""])
+            lines.extend(["**结束状态**：%s" % flow["result"], ""])
+            lines.extend(["**流程图（辅助理解）**", "",
+                          "![图 %d　%s流程图](%s)" % (i, flow["name"], image_links[i]), ""])
+
+    delivery = data.get("delivery")
+    if delivery:
+        section("%s、交付形态与范围" % cn_num(idx + 1))
+        idx += 1
+        lines.extend([delivery, ""])
+
+    notes = data.get("notes") or []
+    if notes:
+        section("%s、其他说明" % cn_num(idx + 1))
+        for i, note in enumerate(notes, 1):
+            lines.append("%d.%s" % (i, note))
+        lines.append("")
+
+    lines.extend(["## 告知说明", "",
+                  "本需求文档由帆远网络科技根据客户提供的需求整理编制，供客户核对功能范围之用。"
+                  "客户通过企业微信、微信、电话、邮件等任一方式（含口头）确认本文件内容的，"
+                  "即视为需求确认完成，本文档作为项目设计与开发依据。", "",
+                  "**帆远网络科技**", "", date_str, ""])
+    with open(out_md, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines).rstrip("\n") + "\n")
 
 
 def build(data, out_path):
     flows = [normalize_flow(raw, i) for i, raw in enumerate(data.get("flows") or [], 1)]
+    out_abs = os.path.abspath(out_path)
+    images_dir = os.path.join(os.path.dirname(out_abs) or ".", "images")
+    image_paths, image_links = {}, {}
+    if flows:
+        os.makedirs(images_dir, exist_ok=True)
+        for i, flow in enumerate(flows, 1):
+            path = flow_image_path(images_dir, i, flow["name"])
+            draw_flowchart(flow["steps"], path)
+            image_paths[i] = path
+            image_links[i] = "images/" + os.path.basename(path).replace(" ", "%20")
     doc = Document()
     sec = doc.sections[0]
     sec.top_margin = Cm(2.54)
@@ -394,7 +501,7 @@ def build(data, out_path):
         para(doc, "%s、核心业务流程" % cn_num(idx + 1), size=14, font=HEI, indent=True)
         idx += 1
         for i, flow in enumerate(flows, 1):
-            add_flow(doc, flow, i, i)
+            add_flow(doc, flow, i, i, image_paths[i])
 
     # 五、交付形态与范围
     delivery = data.get("delivery")
@@ -418,8 +525,9 @@ def build(data, out_path):
     para(doc, date_str, align=RIGHT, right_indent=56)
 
     doc.save(out_path)
-    cleanup()
-    print("OK 已生成 %s" % out_path)
+    out_md = os.path.splitext(os.path.abspath(out_path))[0] + ".md"
+    write_markdown(data, flows, image_links, date_str, out_md)
+    print("OK 已生成 %s（Word）与 %s（Markdown）" % (out_path, out_md))
 
 
 def main():

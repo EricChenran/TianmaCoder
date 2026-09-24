@@ -84,6 +84,14 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('**不得只给图不给文**')
   })
 
+  it('ships a same-content Markdown copy for the 技术部 handoff', () => {
+    const text = plugin.departmentPrompt('business')
+    expect(text).toContain('需求文档-<系统名>.md')
+    expect(text).toContain('不是技术方案文档')
+    // The quotation stays Word + PDF only.
+    expect(text).toContain('报价单不出 Markdown')
+  })
+
   it('publishes every packaged script without naming where the model reads it', () => {
     const toolsDir = join(temporaryDirectory(), 'tools')
     expect(plugin.materializeBusinessTools({ assetRoot: ASSET_ROOT, toolsDir })).toBe(toolsDir)
