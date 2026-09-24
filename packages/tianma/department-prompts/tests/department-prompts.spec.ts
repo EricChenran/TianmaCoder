@@ -73,7 +73,15 @@ describe('@tianma/dsh-department-prompts', () => {
     const ctx = await setup('business')
     const rendered = renderPrompt(await ctx.systemPrompt.assemble())
     expect(rendered).toContain('"system_name": "必填：系统名"')
+    expect(rendered).toContain('"actor": "客户", "action": "选择规格与数量", "rule": "库存不足时禁止下单"')
     expect(rendered).toContain('DSH_DEPARTMENT_TOOLS')
+  })
+
+  it('requires complete business workflows as text beside the generated diagram', () => {
+    const text = plugin.departmentPrompt('business')
+    expect(text).toContain('### 业务工作流（图文并存，必须完整）')
+    expect(text).toContain('步骤表（序号｜执行角色｜操作内容｜业务规则与输出）')
+    expect(text).toContain('**不得只给图不给文**')
   })
 
   it('publishes every packaged script without naming where the model reads it', () => {

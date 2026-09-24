@@ -83,11 +83,11 @@ The toolbox is published by copying the packaged scripts and comparing bytes fir
 
 #### What the model sees
 
-One literal system-prompt section, `tianma:department`, carrying the selected department's complete rules: 技术部 covers backend, frontend, and operations discipline plus delivery self-checks; 商务部 covers requirement documents, quotations, and case retrieval plus the shared commercial red lines. The text equals `departmentPrompt(department)` byte for byte, and the section replaces nothing — it composes beside the persona, workspace instructions, and behavioral guidelines.
+One literal system-prompt section, `tianma:department`, carrying the selected department's complete rules: 技术部 covers backend, frontend, and operations discipline plus delivery self-checks; 商务部 covers requirement documents, quotations, and case retrieval plus the shared commercial red lines, with each requirement document required to carry complete business workflows as structured text beside a generated flowchart. The text equals `departmentPrompt(department)` byte for byte, and the section replaces nothing — it composes beside the persona, workspace instructions, and behavioral guidelines.
 
 #### Token effect
 
-About 6,400 tokens for 技术部 and 2,700 tokens for 商务部 at the 4-chars/token heuristic, once per request as part of the system prompt and unchanged across turns. A mode a user does not select costs nothing.
+About 6,400 tokens for 技术部 and 3,200 tokens for 商务部 at the 4-chars/token heuristic, once per request as part of the system prompt and unchanged across turns. A mode a user does not select costs nothing.
 
 #### KV Cache effect
 
