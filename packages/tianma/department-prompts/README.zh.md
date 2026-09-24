@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包公文技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它。
+`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包公文技能、为技术部额外发布随包的无头演示视频技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它们，其中演示视频技能只到技术部。
 
 ## 目录
 
@@ -42,7 +42,7 @@ kind: "package-reference"
 | `skillAssetRoot` | 包内 `skills/official-doc/` | 技能来源目录，供自行携带副本的部署使用 |
 | `skillDir` | `<harness home>/department/skills/official-doc` | 技能发布到的目录 |
 
-两种模式都会注册并发布公文技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
+两种模式都会注册并发布公文技能，技术部还会注册并发布无头演示视频技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -54,7 +54,7 @@ kind: "package-reference"
 
 工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
 
-公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。
+公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。演示视频技能同样发布到 `<harness home>/department/skills/web-demo-video`，但它只由技术部那一行注册，因此即便两个预设共用本行，商务部也拿不到它。
 
 ### 源码索引
 
@@ -64,10 +64,12 @@ kind: "package-reference"
 | [`src/prompts/tech.ts`](src/prompts/tech.ts) | 技术部规则，编译内置 |
 | [`src/prompts/business.ts`](src/prompts/business.ts) | 商务部规则，编译内置 |
 | [`src/toolbox.ts`](src/toolbox.ts) | 脚本发布与 `DSH_DEPARTMENT_TOOLS` 贡献者 |
-| [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc` 提供方 |
+| [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc`、`web-demo-video` 提供方 |
 | [`assets/business/`](assets/business) | 随包交付的文档脚本：`gen_doc.py`、`gen_quote.py`、`add_watermark.py`、`to_pdf.py`、`open_folder.py` |
 | [`skills/official-doc/`](skills/official-doc) | 随包交付的公文技能：`SKILL.md`、`scripts/gen_doc.py`、`assets/logo_light.png` |
+| [`skills/web-demo-video/`](skills/web-demo-video) | 随包交付的无头演示视频技能（仅技术部）：`SKILL.md`、`scripts/webdemo.mjs`、`scripts/lib/*.mjs`、`references/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | 节注册、字面渲染、工具箱与技能发布、目录作用域、用词守卫 |
+| [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | 演示视频技能的字节级发布、提供方元数据与仅技术部作用域 |
 | — | 不发布运行时不变式伴生入口；本插件只拥有一条静态节与两个派生目录，均由测试断言，也没有可供伴生入口独立观察的关系。 |
 
 </details>
@@ -114,6 +116,20 @@ kind: "package-reference"
 
 目录行位于部门会话的稳定前缀内；加载正文只是追加一条工具结果。
 
+### 随包无头演示视频技能（仅技术部）
+
+#### 模型看到什么
+
+处于技术部模式的会话多出一条目录项 `web-demo-video`，描述为用无头浏览器驱动真实交互、录制带中文讲解字幕的演示视频（配音可选），只认一份 `plan.json`。加载后返回完整作业流程——环境体检与降级阶梯、`plan.json` 结构、验收门禁、踩坑清单——以及脚本被发布到的资源基准；模型执行 `node <基准>/scripts/webdemo.mjs doctor|probe|record|build`。商务部模式与其他模式没有这条目录项。
+
+#### Token 影响
+
+技术部模式下每请求一条目录行（描述 402 字符，上限 500），加上真正加载它的步骤所产生的正文开销（约 12 KB）。商务部模式与其他模式零开销。
+
+#### KV 缓存影响
+
+目录行位于技术部会话的稳定前缀内；加载正文只是追加一条工具结果。
+
 ## 已知限制与后续工作
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -125,7 +141,8 @@ kind: "package-reference"
 - **工具箱面向 Windows**——`to_pdf.py` 通过 COM 驱动 Word，`open_folder.py` 调起桌面外壳；本机无 Word 时规则要求模型改用 harness 的 Office 转换。
 - **脚本原样发布**——随包副本保留其自身的注释与依赖（`python-docx`、`matplotlib`）；本包不维护它们。
 - **公文技能需要带 `reportlab` 的解释器**——随包运行时载荷带 `python-docx` 与 `Pillow`，但不带 `reportlab`，因此机器上的 `python` 缺它时只能得到 DOCX、没有 PDF。技能正文要求模型交付 DOCX 并说明原因，而不是静默丢掉 PDF。
-- **每个 harness home 只有一个工具箱目录与一个技能目录**——所有部门会话共用 `department/business-tools` 与 `department/skills/official-doc`。
+- **每个 harness home 的工具箱目录与技能目录按名字共用**——所有部门会话共用 `department/business-tools` 与 `department/skills/official-doc`，技术部会话另加 `department/skills/web-demo-video`。
+- **技能里的 `scripts/lib/` 要强制入仓**——仓库级 `.gitignore` 忽略所有 `lib/` 目录，因此新增或改动该目录下的文件必须 `git add -f`；漏掉的话仓库与随包副本会缺那五个模块，`webdemo.mjs` 直接起不来。
 
 <a id="dev-note"></a>
 ### 开发注记
@@ -140,6 +157,6 @@ kind: "package-reference"
 <details>
 <summary>为什么公文技能是发布出来而不是直接指向</summary>
 
-本行是技术部与商务部两个预设唯一共用的东西，因此在这里注册提供方就能限定技能的作用域，无需改动任何一个预设声明。技能也不能直接放进被扫描的根目录：随包副本位于应用运行时归档内，只有 Host 进程能读，而模型的解释器是独立进程、打不开归档路径。把整棵树发布到 harness home 下，模型才拿到一个真实目录，而随正文一起报告的资源基准就是它找到生成脚本的依据。
+本行是技术部与商务部两个预设唯一共用的东西，因此在这里注册提供方就能限定技能的作用域，无需改动任何一个预设声明。演示视频技能只在技术部那一行注册，所以共用这一行不会把它带给商务部。技能也不能直接放进被扫描的根目录：随包副本位于应用运行时归档内，只有 Host 进程能读，而模型的解释器是独立进程、打不开归档路径。把整棵树发布到 harness home 下，模型才拿到一个真实目录，而随正文一起报告的资源基准就是它找到生成脚本的依据。
 
 </details>

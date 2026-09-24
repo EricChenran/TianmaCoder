@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the tianma behavioral guidelines and before the plan policy. It also publishes the bundled 公文 (official document) skill for both modes, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a file the model can read; they reach the model as compiled text, while the skill is a separate contribution only these two modes carry.
+`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the tianma behavioral guidelines and before the plan policy. It also publishes the bundled 公文 (official document) skill for both modes, the bundled headless demo-video skill for 技术部, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a file the model can read; they reach the model as compiled text, while the skills are separate contributions only these two modes carry, with the demo-video skill reaching 技术部 alone.
 
 ## Table of Contents
 
@@ -42,7 +42,7 @@ The shipped `tech` (技术部) and `business` (商务部) presets each mount one
 | `skillAssetRoot` | the packaged `skills/official-doc/` | Skill source directory, for a deployment that ships its own copy |
 | `skillDir` | `<harness home>/department/skills/official-doc` | Directory the skill is published into |
 
-Both modes register the 公文 skill and publish it; `business` additionally publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
+Both modes register and publish the 公文 skill, and 技术部 additionally registers and publishes the headless demo-video skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -54,7 +54,7 @@ Both modes register the 公文 skill and publish it; `business` additionally pub
 
 The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. The directory reaches the model only as the `DSH_DEPARTMENT_TOOLS` variable — no rule text, log line, or shell command names the path.
 
-The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it.
+The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部.
 
 ### Source map
 
@@ -64,10 +64,12 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 | [`src/prompts/tech.ts`](src/prompts/tech.ts) | The 技术部 rules, compiled in |
 | [`src/prompts/business.ts`](src/prompts/business.ts) | The 商务部 rules, compiled in |
 | [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_TOOLS` contributor |
-| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc` provider |
+| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc` and `web-demo-video` providers |
 | [`assets/business/`](assets/business) | The packaged document scripts: `gen_doc.py`, `gen_quote.py`, `add_watermark.py`, `to_pdf.py`, `open_folder.py` |
 | [`skills/official-doc/`](skills/official-doc) | The packaged 公文 skill: `SKILL.md`, `scripts/gen_doc.py`, `assets/logo_light.png` |
+| [`skills/web-demo-video/`](skills/web-demo-video) | The packaged headless demo-video skill (技术部 only): `SKILL.md`, `scripts/webdemo.mjs`, `scripts/lib/*.mjs`, `references/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | Section registration, literal rendering, toolbox and skill publication, catalog scoping, vocabulary guard |
+| [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | Byte-level publication, provider metadata, and 技术部-only scoping of the demo-video skill |
 | — | No runtime invariant companion is published; the plugin owns one static section and two derived directories, all asserted by test, and exposes no independent relation a companion could observe. |
 
 </details>
@@ -114,6 +116,20 @@ One catalog line per request in those two modes (description capped at 500 chara
 
 The catalog line sits in the stable prefix of a department session; loading the body appends one tool result.
 
+### Bundled headless demo-video skill (技术部 only)
+
+#### What the model sees
+
+Sessions in the 技术部 mode carry one more catalog entry, `web-demo-video`, described as driving real interactions in a headless browser and recording a subtitled demo video (narration opt-in), driven by a single `plan.json`. Loading it returns the whole workflow — the environment check with its degradation ladder, the `plan.json` structure, the acceptance gates, the pitfall list — plus the resource base where the scripts were published; the model runs `node <base>/scripts/webdemo.mjs doctor|probe|record|build`. The 商务部 mode and every other mode carry no such entry.
+
+#### Token effect
+
+One catalog line per request in the 技术部 mode (402-character description, capped at 500), plus the loaded body's ~12 KB for the steps that load it. The 商务部 mode and other modes pay nothing.
+
+#### KV Cache effect
+
+The catalog line sits in the stable prefix of a 技术部 session; loading the body appends one tool result.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -125,7 +141,8 @@ These limits define where the row is a poor fit. They are current package constr
 - **The toolbox is Windows-oriented** — `to_pdf.py` drives Word through COM and `open_folder.py` opens the desktop shell; the rules direct the model to fall back to the harness Office conversion when Word is absent.
 - **Scripts are published verbatim** — the packaged copies keep their own internal comments and dependencies (`python-docx`, `matplotlib`); this package does not maintain them.
 - **The 公文 skill needs an interpreter with `reportlab`** — the bundled runtime payload carries `python-docx` and `Pillow` but not `reportlab`, so a machine whose `python` lacks it gets the DOCX and no PDF. The skill body tells the model to deliver the DOCX and say so rather than silently drop the PDF.
-- **One toolbox and one skill directory per harness home** — every department session shares `department/business-tools` and `department/skills/official-doc`.
+- **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools` and `department/skills/official-doc`, and a 技术部 session additionally publishes `department/skills/web-demo-video`.
+- **`scripts/lib/` inside the skill needs a forced add** — the repository `.gitignore` ignores every `lib/` directory, so new or changed files under it require `git add -f`; without that the repository and the packaged copy lose those five modules and `webdemo.mjs` cannot start.
 
 <a id="dev-note"></a>
 ### Dev Note
@@ -140,6 +157,6 @@ A skill is discovered, listed, and read on demand: its text sits in a `SKILL.md`
 <details>
 <summary>Why the 公文 skill is published instead of pointed at</summary>
 
-This row is the only thing the 技术部 and 商务部 presets share, so registering the provider here scopes the skill without touching either preset declaration. The skill cannot simply live in a scanned root either: the packaged copy travels inside the application runtime archive, which only the Host process can read, and the model's interpreter runs as a separate process that cannot open an archive path. Publishing the tree under the harness home gives the model a real directory, and the resource base reported beside the loaded body is how it finds the generator.
+This row is the only thing the 技术部 and 商务部 presets share, so registering the provider here scopes the skill without touching either preset declaration. The demo-video skill registers on the 技术部 row alone, so sharing this row does not hand it to 商务部. The skill cannot simply live in a scanned root either: the packaged copy travels inside the application runtime archive, which only the Host process can read, and the model's interpreter runs as a separate process that cannot open an archive path. Publishing the tree under the harness home gives the model a real directory, and the resource base reported beside the loaded body is how it finds the generator.
 
 </details>

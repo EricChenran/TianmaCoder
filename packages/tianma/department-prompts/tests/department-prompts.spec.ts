@@ -236,7 +236,10 @@ describe('@tianma/dsh-department-prompts', () => {
     }
   })
 
-  it.each(plugin.DEPARTMENTS)('gives the %s mode the skill and drops it with the row', async (department) => {
+  it.each(plugin.DEPARTMENTS)('gives the %s mode its skills and drops them with the row', async (department) => {
+    const home = temporaryDirectory()
+    const previous = process.env.DSH_HOME
+    process.env.DSH_HOME = home
     const ctx = new Context()
     await ctx.plugin(SystemPrompt, { personaPrefix: PERSONA })
     await ctx.plugin(SkillRegistry)
@@ -244,11 +247,16 @@ describe('@tianma/dsh-department-prompts', () => {
       const fiber = await ctx.plugin(plugin, {
         department, skillAssetRoot: SKILL_ASSET_ROOT, skillDir: join(temporaryDirectory(), 'skill'),
       })
-      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual([plugin.SKILL_NAME])
+      const expected = department === 'tech'
+        ? [plugin.SKILL_NAME, plugin.WEB_DEMO_VIDEO_SKILL_NAME]
+        : [plugin.SKILL_NAME]
+      expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(expected)
       await fiber.dispose()
       expect(await ctx.skills.list()).toEqual([])
     } finally {
       await ctx.fiber.dispose()
+      if (previous === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previous
     }
   })
 

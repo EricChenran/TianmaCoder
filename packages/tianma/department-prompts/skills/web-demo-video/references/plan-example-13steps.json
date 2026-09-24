@@ -1,0 +1,197 @@
+{
+  "name": "admin-13steps",
+  "url": "http://127.0.0.1:5173/",
+  "uiKit": "auto",
+  "viewport": { "width": 1600, "height": 900 },
+  "capture": { "fps": 5, "jpegQuality": 82, "screenshotTimeoutMs": 4000 },
+  "timelineFps": 25,
+  "continueOnError": false,
+  "readOnly": false,
+  "narration": true,
+  "tts": { "rate": 0 },
+  "login": {
+    "fill": [
+      { "by": "placeholder", "match": "运营账号", "value": "platform" },
+      { "by": "placeholder", "match": "密码", "value": "Zj@2026#Admin" }
+    ],
+    "submit": { "by": "text", "text": "登录" },
+    "waitPath": { "startsWith": "/dashboard" }
+  },
+  "probeRoutes": ["数据看板", "营地管理", "入驻审核", "车位余量", "用户列表", "订单总览"],
+  "steps": [
+    {
+      "caption": "登录，进入平台总后台。",
+      "minSec": 3,
+      "actions": [
+        { "type": "assert", "expr": "path().startsWith('/dashboard')" },
+        { "type": "waitText", "text": "营地总数", "timeoutMs": 15000 }
+      ]
+    },
+    {
+      "caption": "看板刷新数据，切换柱状图。",
+      "minSec": 3,
+      "actions": [
+        { "type": "click", "text": "刷新" },
+        { "type": "wait", "ms": 900 },
+        { "type": "seg", "text": "柱状" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "seg", "text": "折线" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "caption": "搜索营地，列表实时收敛。",
+      "minSec": 3,
+      "actions": [
+        { "type": "nav", "text": "营地管理" },
+        { "type": "wait", "ms": 900 },
+        { "type": "fill", "by": "placeholder", "match": "搜索营地", "value": "安吉" },
+        { "type": "click", "text": "搜索" },
+        { "type": "wait", "ms": 1000 },
+        { "type": "assert", "expr": "rows() === 1" },
+        { "type": "click", "text": "重置" },
+        { "type": "wait", "ms": 700 }
+      ]
+    },
+    {
+      "caption": "按状态筛选，只看待审核的营地。",
+      "minSec": 3,
+      "actions": [
+        { "type": "pick", "select": "全部状态", "option": "待审核" },
+        { "type": "wait", "ms": 900 },
+        { "type": "assert", "expr": "rows() === 1" },
+        { "type": "click", "text": "重置" },
+        { "type": "wait", "ms": 700 }
+      ]
+    },
+    {
+      "caption": "打开营地详情，改资料并保存。",
+      "minSec": 3.5,
+      "actions": [
+        { "type": "rowAction", "index": 0, "text": "编辑" },
+        { "type": "waitPath", "startsWith": "/camps/camp_" },
+        { "type": "wait", "ms": 900 },
+        { "type": "fill", "by": "label", "match": "营地联系电话", "value": "0571-8888-9999" },
+        { "type": "wait", "ms": 400 },
+        { "type": "toggleBox", "label": "充电桩" },
+        { "type": "wait", "ms": 400 },
+        { "type": "click", "text": "保存修改" },
+        { "type": "wait", "ms": 1400 },
+        { "type": "assert", "expr": "toast().includes('已保存')" },
+        { "type": "click", "text": "返回列表" },
+        { "type": "wait", "ms": 1200 }
+      ]
+    },
+    {
+      "caption": "重置管理员密码，新口令只显示一次。",
+      "minSec": 3.5,
+      "actions": [
+        { "type": "assert", "expr": "rows() > 0" },
+        { "type": "rowAction", "index": 0, "text": "重置密码" },
+        { "type": "wait", "ms": 900 },
+        { "type": "assert", "expr": "overlayTitle().includes('重置密码')" },
+        { "type": "confirm", "buttonText": "重置密码" },
+        { "type": "wait", "ms": 1300 },
+        { "type": "assert", "expr": "overlayTitle().includes('已重置')" },
+        { "type": "closeTop" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "caption": "入驻审核，驳回必须填写备注。",
+      "minSec": 4,
+      "actions": [
+        { "type": "nav", "text": "入驻审核" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "click", "text": "驳回" },
+        { "type": "wait", "ms": 900 },
+        { "type": "assert", "expr": "overlayTitle().includes('驳回')" },
+        { "type": "fill", "by": "selector", "match": ".el-dialog textarea, .el-dialog input", "value": "请补齐排污口照片与充电桩规格说明，补齐后重新提交。" },
+        { "type": "wait", "ms": 700 },
+        { "type": "click", "text": "确认驳回" },
+        { "type": "wait", "ms": 1500 },
+        { "type": "assert", "expr": "toast().includes('已驳回')" }
+      ]
+    },
+    {
+      "caption": "查看车友的驻车画像。",
+      "minSec": 3,
+      "actions": [
+        { "type": "nav", "text": "用户列表" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "rowAction", "index": 0, "text": "查看画像" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "assert", "expr": "overlayTitle().includes('画像')" },
+        { "type": "scroll", "y": 300 },
+        { "type": "wait", "ms": 400 },
+        { "type": "closeTop" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "caption": "禁用账号，二次确认后生效。",
+      "minSec": 3,
+      "actions": [
+        { "type": "rowActionAny", "index": 1, "texts": ["禁用", "启用"] },
+        { "type": "wait", "ms": 900 },
+        { "type": "confirm" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "assert", "expr": "toast().length > 0" }
+      ]
+    },
+    {
+      "caption": "订单详情，核销码与状态流转。",
+      "minSec": 3,
+      "actions": [
+        { "type": "nav", "text": "订单总览" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "pick", "select": "全部状态", "option": "已确认" },
+        { "type": "wait", "ms": 900 },
+        { "type": "assert", "expr": "rows() > 0" },
+        { "type": "rowAction", "index": 0, "text": "查看详情" },
+        { "type": "wait", "ms": 1300 },
+        { "type": "assert", "expr": "overlayTitle().includes('订单')" },
+        { "type": "scroll", "y": 260 },
+        { "type": "wait", "ms": 700 },
+        { "type": "closeTop" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "caption": "勾选两条订单，批量导出。",
+      "minSec": 3,
+      "actions": [
+        { "type": "checkRow", "index": 0 },
+        { "type": "wait", "ms": 300 },
+        { "type": "checkRow", "index": 1 },
+        { "type": "wait", "ms": 600 },
+        { "type": "click", "text": "导出选中" },
+        { "type": "wait", "ms": 1400 },
+        { "type": "assert", "expr": "toast().includes('已导出')" }
+      ]
+    },
+    {
+      "caption": "导出筛选结果，CSV 直接下载。",
+      "minSec": 3,
+      "actions": [
+        { "type": "click", "text": "导出筛选结果" },
+        { "type": "wait", "ms": 1600 },
+        { "type": "assert", "expr": "toast().includes('已导出')" }
+      ]
+    },
+    {
+      "caption": "车位余量：线上与现场两个池独立。",
+      "minSec": 3.5,
+      "actions": [
+        { "type": "nav", "text": "车位余量" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "assert", "expr": "hasText('相互独立')" },
+        { "type": "click", "text": "查看营地详情" },
+        { "type": "waitPath", "startsWith": "/camps/camp_" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "scroll", "y": 760 },
+        { "type": "wait", "ms": 700 }
+      ]
+    }
+  ]
+}

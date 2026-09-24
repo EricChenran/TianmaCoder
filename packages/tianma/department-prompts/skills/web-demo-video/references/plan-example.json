@@ -1,0 +1,49 @@
+{
+  "name": "zhuncheji-admin",
+  "url": "http://127.0.0.1:5173/",
+  "uiKit": "auto",
+  "viewport": { "width": 1600, "height": 900 },
+  "capture": { "fps": 5, "jpegQuality": 82, "screenshotTimeoutMs": 4000 },
+  "timelineFps": 25,
+  "continueOnError": false,
+  "readOnly": false,
+  "narration": false,
+  "login": {
+    "fill": [
+      { "by": "placeholder", "match": "运营账号", "value": "platform" },
+      { "by": "placeholder", "match": "密码", "value": "Zj@2026#Admin" }
+    ],
+    "submit": { "by": "text", "text": "登录" },
+    "waitPath": { "startsWith": "/dashboard" }
+  },
+  "probeRoutes": ["数据看板", "营地管理", "入驻审核", "车位余量", "用户列表", "订单总览"],
+  "steps": [
+    {
+      "caption": "搜索营地，列表实时收敛。",
+      "minSec": 3.5,
+      "actions": [
+        { "type": "nav", "text": "营地管理" },
+        { "type": "wait", "ms": 900 },
+        { "type": "fill", "by": "placeholder", "match": "搜索营地", "value": "安吉" },
+        { "type": "click", "text": "搜索" },
+        { "type": "wait", "ms": 1000 },
+        { "type": "assert", "expr": "rows() === 1" },
+        { "type": "click", "text": "重置" },
+        { "type": "wait", "ms": 700 }
+      ]
+    },
+    {
+      "caption": "勾选两条订单，批量导出。",
+      "minSec": 3.5,
+      "actions": [
+        { "type": "nav", "text": "订单总览" },
+        { "type": "wait", "ms": 1200 },
+        { "type": "checkRow", "index": 0 },
+        { "type": "checkRow", "index": 1 },
+        { "type": "wait", "ms": 600 },
+        { "type": "click", "text": "导出选中" },
+        { "type": "wait", "ms": 1400 }
+      ]
+    }
+  ]
+}
