@@ -9,9 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The browser half of the Tianma OA account system. One snapshot, fed by the Host's `oaAccount` Remote namespace, backs three surfaces: the sign-in dialog (account, password, and a captcha challenge), the sidebar launcher, and the Settings section that shows the signed-in profile, its workbench counters, and an editor for the fields the account owner may change. The sidebar and the Settings page read the same snapshot, so they cannot disagree about who is signed in. No token reaches the browser.
-
-It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason, so the client refuses the message before the Host has to.
+The browser half of the Tianma OA account system: one snapshot from the Host's `oaAccount` Remote namespace backs the sign-in dialog, the sidebar launcher, and the Settings section showing the signed-in profile, its counters, and an editor for the fields its owner may change. Both surfaces read that one snapshot, so they cannot disagree about who is signed in, and no token reaches the browser. It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason.
 
 ## Table of Contents
 
