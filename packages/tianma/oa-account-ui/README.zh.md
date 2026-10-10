@@ -108,3 +108,12 @@ kind: "package-reference"
 刻意**不**占用 `settings.models.sign-in`：那个 slot 是模型凭据引导，而 OA 账户 token 不用于模型请求，因此两套界面必须共存。
 
 </details>
+
+### 开发备注
+
+<details>
+<summary>维护者工作背景——点击展开</summary>
+
+刻意不占用 `settings.models.sign-in`：该槽位属于模型凭据引导，而 OA 账号令牌不用于模型请求，因此两个界面必须共存。
+
+</details>

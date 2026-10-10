@@ -116,3 +116,12 @@ kind: "package-reference"
 本包取代了该产品此前的 DeepSeek 账户登录：seam、provider、Remote 控制器与浏览器界面都是**被移除**而非改造，推理鉴权也不再查询任何账户服务。
 
 </details>
+
+### 开发备注
+
+<details>
+<summary>维护者工作背景——点击展开</summary>
+
+替代本产品此前交付的 DeepSeek 账号登录：接缝、provider、Remote 控制器与浏览器界面均为整体移除而非适配，推理鉴权也不再查询任何账号服务。
+
+</details>
