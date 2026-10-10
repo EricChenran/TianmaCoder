@@ -151,7 +151,7 @@ describe('desktop upload plan', () => {
     expect(plan.version).toBe('1.2.3-alpha.4')
     expect(plan.artifacts).toHaveLength(1)
     expect(plan.artifacts[0]).toMatchObject({
-      path: join(paths.artifactsRoot, 'deepseek-harness-1.2.3-alpha.4-win-x64.exe'),
+      path: join(paths.artifactsRoot, 'tianmacoder-1.2.3-alpha.4-win-x64.exe'),
       key: 'desktop/dsh-latest-windows-x64.exe', channelMetadata: false,
     })
   })
@@ -164,7 +164,7 @@ describe('desktop upload plan', () => {
       DOWNLOAD_TEST_RELEASE_ID: RELEASE_ID, DOWNLOAD_TEST_COS_BUCKET: TEST_BUCKET,
     })
     if (failure === 'checksum') {
-      const path = join(paths.artifactsRoot, 'deepseek-harness-1.2.3-win-x64.exe')
+      const path = join(paths.artifactsRoot, 'tianmacoder-1.2.3-win-x64.exe')
       await writeFile(path, Buffer.alloc((await readFile(path)).length))
     }
     await expect(createDesktopUploadPlan('win-x64', { ...paths, latest: true }))
