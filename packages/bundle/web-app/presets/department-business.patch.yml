@@ -18,8 +18,8 @@
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
               maxBytes: 65536
-              - id: time-context
-                name: '@deepseek-ai/dsh-time-context'
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
           - id: tianma-department
             name: '@tianma/dsh-department-prompts'
             config:
@@ -38,8 +38,8 @@
               sampleOverCapGlobResults: false
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
-              - id: tool-schedule
-                name: '@deepseek-ai/dsh-tool-schedule'
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
           - id: tool-skill
