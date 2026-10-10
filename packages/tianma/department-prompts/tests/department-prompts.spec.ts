@@ -1,10 +1,10 @@
 /**
  * Department prompts: the selected department's rules must register as one
  * literal system-prompt section, the packaged toolbox must publish its scripts
- * without exposing their location to the model, the bundled 公文 skill must
- * publish where the model's interpreter can read it and reach only the modes
- * that mount this row, and neither rule set may carry the source documents' own
- * mechanism vocabulary.
+ * without exposing their location to the model, the bundled 公文 and
+ * 模板源码抓取 skills must publish where the model's interpreter can read them
+ * and reach only the modes that mount this row, and neither rule set may carry
+ * the source documents' own mechanism vocabulary.
  */
 
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -248,8 +248,8 @@ describe('@tianma/dsh-department-prompts', () => {
         department, skillAssetRoot: SKILL_ASSET_ROOT, skillDir: join(temporaryDirectory(), 'skill'),
       })
       const expected = department === 'tech'
-        ? [plugin.SKILL_NAME, plugin.WEB_DEMO_VIDEO_SKILL_NAME]
-        : [plugin.SKILL_NAME]
+        ? [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME, plugin.WEB_DEMO_VIDEO_SKILL_NAME]
+        : [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME]
       expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(expected)
       await fiber.dispose()
       expect(await ctx.skills.list()).toEqual([])

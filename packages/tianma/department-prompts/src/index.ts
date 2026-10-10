@@ -7,10 +7,10 @@
  * toolbox scripts are published to a private directory whose location reaches
  * the model only as the `DSH_DEPARTMENT_TOOLS` variable.
  *
- * Both department modes also carry the bundled 公文 skill: the row is the only
- * thing both presets mount, so registering its provider here keeps the skill
- * out of every other mode. The bundled 无头演示视频 skill is 技术部-only, so the
- * 技术部 row registers it and the 商务部 row does not.
+ * Both department modes also carry the bundled 公文 and 模板源码抓取 skills: the
+ * row is the only thing both presets mount, so registering their providers here
+ * keeps those skills out of every other mode. The bundled 无头演示视频 skill is
+ * 技术部-only, so the 技术部 row registers it and the 商务部 row does not.
  *
  * @module @tianma/dsh-department-prompts
  */
@@ -22,6 +22,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { type Department, departmentPrompt } from './prompts/index.ts'
 import {
   installDepartmentSkill,
+  installTemplateFetchSkill,
   installWebDemoVideoSkill,
   type DepartmentSkillOptions,
 } from './skill.ts'
@@ -31,11 +32,16 @@ export { departmentPrompt, DEPARTMENTS, DEPARTMENT_PROMPTS, type Department } fr
 export {
   installDepartmentSkill,
   installWebDemoVideoSkill,
+  installTemplateFetchSkill,
   materializeDepartmentSkill,
   materializeWebDemoVideoSkill,
+  materializeTemplateFetchSkill,
   SKILL_ASSET_FILES,
   SKILL_NAME,
   SKILL_PROVIDER_NAME,
+  TEMPLATE_FETCH_SKILL_ASSET_FILES,
+  TEMPLATE_FETCH_SKILL_NAME,
+  TEMPLATE_FETCH_SKILL_PROVIDER_NAME,
   WEB_DEMO_VIDEO_SKILL_ASSET_FILES,
   WEB_DEMO_VIDEO_SKILL_NAME,
   WEB_DEMO_VIDEO_SKILL_PROVIDER_NAME,
@@ -101,6 +107,7 @@ export function apply(ctx: Context, config: Config): void {
     ...config.skillAssetRoot === undefined ? {} : { assetRoot: config.skillAssetRoot },
     ...config.skillDir === undefined ? {} : { skillDir: config.skillDir },
   })
+  installTemplateFetchSkill(ctx)
   if (config.department === 'tech') installWebDemoVideoSkill(ctx)
   if (config.department === 'business') {
     const { assetRoot, toolsDir } = config
