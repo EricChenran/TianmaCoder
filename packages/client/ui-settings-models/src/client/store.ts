@@ -176,7 +176,7 @@ export class ModelsSettingsStore {
     private readonly ctx: ClientContext,
     private readonly schema: SettingsSchemaOperations,
     private readonly describeFace: SettingsDescribeFace,
-    private readonly label: (provider: string, displayName: string) => string,
+    private readonly label: (provider: string, displayName: string) => string = (_provider, displayName) => displayName,
   ) {}
 
   /**

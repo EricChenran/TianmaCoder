@@ -352,6 +352,12 @@
       "@tianma/dsh-oa-account-ui": ["./packages/tianma/oa-account-ui/src/index.ts"],
       "@tianma/dsh-oa-account-ui/client": ["./packages/tianma/oa-account-ui/src/client/index.ts"],
       "@tianma/dsh-token-meter-calibration": ["./packages/tianma/token-meter-calibration/src/index.ts"],
+      "@deepseek-ai/dsh-api-account-controller": ["./packages/api/account-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-account-controller/types": ["./packages/api/account-controller/src/types.ts"],
+      "@deepseek-ai/dsh-deepseek-account-platform": ["./packages/credentials/deepseek-account-platform/src/index.ts"],
+      "@deepseek-ai/dsh-deepseek-account-platform/types": ["./packages/credentials/deepseek-account-platform/src/types.ts"],
+      "@deepseek-ai/dsh-deepseek-account": ["./packages/credentials/deepseek-account/src/index.ts"],
+      "@deepseek-ai/dsh-deepseek-account/types": ["./packages/credentials/deepseek-account/src/types.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],
