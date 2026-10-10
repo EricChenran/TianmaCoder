@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/compaction-summarize/README.md
-README.md: 289c379004467146d0011864ec9b764f451cfcbc
-README.zh.md: 4f96dce781b65d51ab302bccd253af6ba84b3efe
+/:
+  en: c360307936413c12
+  zh: afbfbeaa7d0703ae
+/tianma-dsh-compaction-summarize:
+  en: 8a10350963ef4013
+  zh: e7bd0792a8cd9df7
+/tianma-dsh-compaction-summarize/summary:
+  en: fba46ac517fc4ef0
+  zh: fc163bb432a75ef8
+/tianma-dsh-compaction-summarize/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-compaction-summarize/use-this-package:
+  en: 3cd2cc1c7f56d6ee
+  zh: ebb521ee14a56fb4
+/tianma-dsh-compaction-summarize/understand-the-implementation:
+  en: 18f02884998430c6
+  zh: fb93491360622c2c
+/tianma-dsh-compaction-summarize/understand-the-implementation/source-map:
+  en: 5874f77a6ce48a3a
+  zh: 2982f528e6815d9b
+/tianma-dsh-compaction-summarize/understand-the-implementation/invariant-ownership:
+  en: 89e8361f1ded8add
+  zh: 12a350bf10da2547
+/tianma-dsh-compaction-summarize/further-exploration:
+  en: 2fcdc348f6a9dfc9
+  zh: d1470c0ce89b0abb
+/tianma-dsh-compaction-summarize/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-compaction-summarize/model-experience/compaction-instruction:
+  en: 4dc36c84a94d9190
+  zh: 69920b7affda9a73
+/tianma-dsh-compaction-summarize/model-experience/compaction-instruction/what-the-model-sees:
+  en: 0495ef40cea489e2
+  zh: 99582e79836ced0b
+/tianma-dsh-compaction-summarize/model-experience/compaction-instruction/token-effect:
+  en: b15aae3d80a905ab
+  zh: dea3db7f64e3ad55
+/tianma-dsh-compaction-summarize/model-experience/compaction-instruction/kv-cache-effect:
+  en: ddebd5a025a9108d
+  zh: c9010d3f25fb7e02
+/tianma-dsh-compaction-summarize/known-limitations-and-deferred-work:
+  en: de280865b35252d8
+  zh: 375d6666a620d9ba
+/tianma-dsh-compaction-summarize/known-limitations-and-deferred-work/dev-note:
+  en: 656de4f58adcbe76
+  zh: 6cf58682e3497729

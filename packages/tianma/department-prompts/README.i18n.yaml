@@ -1,6 +1,49 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
-README.md: 5fc1757e8bf855022dae0b84251443795b299ebf
-README.zh.md: 056c93db28b5917690dcfa1e97b01d67b68ea064
+/:
+  en: f993d752a2dc329b
+  zh: e88d80d97d133c29
+/tianma-dsh-department-prompts:
+  en: 994c2699629b0295
+  zh: bc75ee520c5f8f98
+/tianma-dsh-department-prompts/summary:
+  en: c30ae1ae63747676
+  zh: 400709cb9c273160
+/tianma-dsh-department-prompts/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: fdb6e058f7d240b2
+/tianma-dsh-department-prompts/use-this-package:
+  en: 2d3db46063a703e8
+  zh: c725c5757ae70567
+/tianma-dsh-department-prompts/understand-the-implementation:
+  en: 6ff1aaff8f68c136
+  zh: 3519a43a4587b655
+/tianma-dsh-department-prompts/understand-the-implementation/source-map:
+  en: 8346f13742fa29aa
+  zh: afbb810260f65dda
+/tianma-dsh-department-prompts/further-exploration:
+  en: 734fc236dcac8d29
+  zh: 134b24998e01591f
+/tianma-dsh-department-prompts/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-department-prompts/model-experience/department-rules:
+  en: 1a7d4baa0d0fa7a8
+  zh: 5fb4780141f14781
+/tianma-dsh-department-prompts/model-experience/department-rules/what-the-model-sees:
+  en: a96837bd94edfaba
+  zh: bd73f1a9cb089fc9
+/tianma-dsh-department-prompts/model-experience/department-rules/token-effect:
+  en: c9dfdd3bcd84df41
+  zh: 1d8adcc6b259dad4
+/tianma-dsh-department-prompts/model-experience/department-rules/kv-cache-effect:
+  en: 1b8f499f8f868701
+  zh: c865ca57d5ebf3f0
+/tianma-dsh-department-prompts/known-limitations-and-deferred-work:
+  en: 09340a7c5dc5ae16
+  zh: 117cea406df4bf43
+/tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
+  en: df94beb791a8dec8
+  zh: a550604d7569293f

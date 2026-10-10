@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/compaction-file-rehydrator/README.md
-README.md: c02ba3030f95002e235be75cd9e3dd9faf36f6f3
-README.zh.md: ac5046a1fac23232c52497f7ccbd7678d1cc5fd1
+/:
+  en: 3b1ec02ae31b4466
+  zh: b3454847c2a97097
+/tianma-dsh-compaction-file-rehydrator:
+  en: c7d10991496a1773
+  zh: c05c9066176ffcc5
+/tianma-dsh-compaction-file-rehydrator/summary:
+  en: cebda69cb0cc99e8
+  zh: f388579ee69aecac
+/tianma-dsh-compaction-file-rehydrator/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-compaction-file-rehydrator/use-this-package:
+  en: af992824e9279f6f
+  zh: 0302d02998a887e6
+/tianma-dsh-compaction-file-rehydrator/understand-the-implementation:
+  en: f539676fbfbbea2b
+  zh: e95163a20dd22202
+/tianma-dsh-compaction-file-rehydrator/understand-the-implementation/source-map:
+  en: 2173a6fe6d924219
+  zh: 9f79e0b796274934
+/tianma-dsh-compaction-file-rehydrator/understand-the-implementation/invariant-ownership:
+  en: 6427f8df2c4ec03e
+  zh: b608c1b7c3b323a2
+/tianma-dsh-compaction-file-rehydrator/further-exploration:
+  en: d8fe60e681fa1bb5
+  zh: 99312518f3e57522
+/tianma-dsh-compaction-file-rehydrator/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-compaction-file-rehydrator/model-experience/rehydrated-file-ledger:
+  en: 432b3b20af8826b0
+  zh: 4386ed5fe5ed7fd1
+/tianma-dsh-compaction-file-rehydrator/model-experience/rehydrated-file-ledger/what-the-model-sees:
+  en: 45515d9f3dcc22bf
+  zh: 7102e0acfe211252
+/tianma-dsh-compaction-file-rehydrator/model-experience/rehydrated-file-ledger/token-effect:
+  en: 45a9c1c197158d6a
+  zh: 4b9514bd4b96ba16
+/tianma-dsh-compaction-file-rehydrator/model-experience/rehydrated-file-ledger/kv-cache-effect:
+  en: 2da9a57b6bfecf19
+  zh: 0dc456cff45797fa
+/tianma-dsh-compaction-file-rehydrator/known-limitations-and-deferred-work:
+  en: 7b50bfdfc775947e
+  zh: 01598a71c8f3cc2b
+/tianma-dsh-compaction-file-rehydrator/known-limitations-and-deferred-work/dev-note:
+  en: 8a305293dae79d05
+  zh: cb6f47f933cdd2f5

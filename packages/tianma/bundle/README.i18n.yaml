@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/bundle/README.md
-README.md: 7ef5df5cf82aae441e1e44ec9f7e84d2a5fa20e9
-README.zh.md: ea1ec4f0d1e4ef078934322afdad3bdd0fee85f3
+/:
+  en: d5d8b3b3992c1055
+  zh: 19851de5822f7df4
+/tianma-dsh-bundle:
+  en: 51e197480b4e5e67
+  zh: a9618ccf09c5a929
+/tianma-dsh-bundle/summary:
+  en: adc7dc2a50321ec8
+  zh: 418d9bbe3d2a623c
+/tianma-dsh-bundle/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-bundle/use-this-package:
+  en: 24b75da3dbb509b7
+  zh: dbadfee05addd5de
+/tianma-dsh-bundle/understand-the-implementation:
+  en: 9bd765e754d6d450
+  zh: 43f1fb67fa638ddc
+/tianma-dsh-bundle/understand-the-implementation/source-map:
+  en: 227e824ae535e12d
+  zh: 9231190aa239f25b
+/tianma-dsh-bundle/understand-the-implementation/invariant-ownership:
+  en: 6923d13a599046d0
+  zh: 9435ee6fee008adc
+/tianma-dsh-bundle/further-exploration:
+  en: abb4bb7738129045
+  zh: 5a30e466275a36b2
+/tianma-dsh-bundle/model-experience:
+  en: 447eb3504c5a06a7
+  zh: 95f25676e5a00eef
+/tianma-dsh-bundle/model-experience/kv-cache-effect:
+  en: 1ae2467e9f2434ed
+  zh: 8d3a575486386000
+/tianma-dsh-bundle/known-limitations-and-deferred-work:
+  en: f92747fbf603d436
+  zh: 5f993ea3f59479ff
+/tianma-dsh-bundle/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 4c879960b94cc733

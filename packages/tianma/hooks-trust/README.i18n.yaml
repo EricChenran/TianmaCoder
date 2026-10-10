@@ -1,6 +1,55 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/hooks-trust/README.md
-README.md: 83cef2aeedee7a8355400c7fb9dcacc690bf9714
-README.zh.md: 49daa0ddaa4c758cf72180bb3e57ac012e622972
+/:
+  en: 2b791ddfe1ec2a84
+  zh: 2547bcea9c671b6d
+/tianma-dsh-hooks-trust:
+  en: 1090fd142f48970e
+  zh: db11361da50bbfb8
+/tianma-dsh-hooks-trust/summary:
+  en: f84ab5ced1fbba7e
+  zh: 08e02d080d528c9c
+/tianma-dsh-hooks-trust/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-hooks-trust/use-this-package:
+  en: 7718c9761a8caeaf
+  zh: 83aa9d0b061e9522
+/tianma-dsh-hooks-trust/understand-the-implementation:
+  en: 86e4637860c63fb4
+  zh: 09dc08404dc7b23c
+/tianma-dsh-hooks-trust/understand-the-implementation/source-map:
+  en: 13a2ad5699bd7394
+  zh: 4deabaa1275c0c71
+/tianma-dsh-hooks-trust/understand-the-implementation/invariant-ownership:
+  en: ee82462db220bf57
+  zh: 8e77f6d65f851236
+/tianma-dsh-hooks-trust/further-exploration:
+  en: e858c7335d1079f4
+  zh: c0c0d463ca486953
+/tianma-dsh-hooks-trust/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-hooks-trust/model-experience/hook-admission-ledger:
+  en: 29f8628a980b2e38
+  zh: a9a4dfd4aa5b4b0a
+/tianma-dsh-hooks-trust/model-experience/hook-admission-ledger/what-the-model-sees:
+  en: 2980a2544ee4574c
+  zh: 6be6cfb6bb2671fd
+/tianma-dsh-hooks-trust/model-experience/hook-admission-ledger/what-the-model-sees/admission-contract:
+  en: 3bf22485bd03fb9b
+  zh: 9ca8cdf65bfb4bf0
+/tianma-dsh-hooks-trust/model-experience/hook-admission-ledger/token-effect:
+  en: 87b3b88ae0328206
+  zh: 64073f5ecdaafa55
+/tianma-dsh-hooks-trust/model-experience/hook-admission-ledger/kv-cache-effect:
+  en: 0d76c5f43d685615
+  zh: 601c493aa8d15d16
+/tianma-dsh-hooks-trust/known-limitations-and-deferred-work:
+  en: 93e95136349c89df
+  zh: 339ebbee6fdd6d6f
+/tianma-dsh-hooks-trust/known-limitations-and-deferred-work/dev-note:
+  en: f25b4fb745fd3b93
+  zh: 4bae0f31309e7fed

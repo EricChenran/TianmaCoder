@@ -9,8 +9,8 @@
   en: 17b91cfc2300ea2b
   zh: 1fcd42e48e14c5ec
 /deepseek-ai-dsh-client-ui-skill/summary:
-  en: fad7bff8d3371dfc
-  zh: c546189c87d6fbf2
+  en: aeacc45d2c9b09aa
+  zh: eed98157177e80cc
 /deepseek-ai-dsh-client-ui-skill/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
@@ -20,6 +20,9 @@
 /deepseek-ai-dsh-client-ui-skill/use-this-package/what-the-source-offers:
   en: 2ba1a6158c85b46e
   zh: 9ab58ceef8743849
+/deepseek-ai-dsh-client-ui-skill/use-this-package/the-sidebar-skills-page:
+  en: f980377f94fa34b1
+  zh: 8c8d59bf7d192b0d
 /deepseek-ai-dsh-client-ui-skill/use-this-package/the-skill-tool-row:
   en: 975c6cd80af3684a
   zh: 395c10e51c6a15f6
@@ -51,8 +54,8 @@
   en: da53c649077dad7e
   zh: 845f77793f8e10a2
 /deepseek-ai-dsh-client-ui-skill/known-limitations-and-deferred-work:
-  en: aed53b17a91d4b02
-  zh: fac571e9228e69c5
+  en: cf18534fcdf59d08
+  zh: a16dc2bf60fe0407
 /deepseek-ai-dsh-client-ui-skill/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

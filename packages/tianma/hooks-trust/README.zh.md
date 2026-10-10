@@ -55,7 +55,7 @@ No invariant companion is published because 账本不持有派生关系：每条
 <a id="further-exploration"></a>
 ## 进一步探索
 
-- [hooks 桥接](../../hooks/README.zh.md) — 本账本旨在约束的 Claude Code/Codex hook 执行器
+- [hooks 桥接](../../experimental/hooks-claude-code/README.zh.md) — 本账本旨在约束的 Claude Code/Codex hook 执行器
 
 -----
 
