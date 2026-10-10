@@ -221,6 +221,12 @@ interface SkillViewOptions extends SkillLookupOptions {
 interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills that stay installed but leave every catalog and lookup.
+   * A live reference rather than a startup value, so the Web client's Skills
+   * page switches a skill off without restarting the Host.
+   */
+  readonly disabled?: Volatile<string[]>
 }
 ```
 

@@ -61,7 +61,7 @@ export class HookTrustStore {
   /**
    * Evaluate one hook command.
    * @param command - the hook command string.
-   * @param source - provenance recorded with the decision.
+   * @param source - the caller that recorded the decision.
    * @returns `approved` when an unchanged approval exists, `denied` when a
    *   denial exists, `review` otherwise.
    */
@@ -76,7 +76,7 @@ export class HookTrustStore {
    * Record a decision for one hook command.
    * @param command - the hook command string.
    * @param state - the decision.
-   * @param source - provenance recorded with the decision.
+   * @param source - the caller that recorded the decision.
    */
   decide(command: string, state: 'approved' | 'denied', source: string): void {
     this.records.set(hookHash(command), {
