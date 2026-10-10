@@ -29,7 +29,7 @@ import {
   launchWebScaffold, parseSeedFixture, realizeSeedFixture, recordFixture, renderSeedFixture, seedSession, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
+import { expandOwningTurnProcess, newEnglishPage, pinBrowserClock, pinHostClock, saveFailureShot, WEB_FIXTURE_TIME } from './support.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -227,8 +227,13 @@ describe('web e2e: seeded history renders through cold resume', () => {
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   let seededThroughSeq = -1
+  let openingWindow: unknown
+  let hostClock: ReturnType<typeof pinHostClock> | undefined
+  let unpinBrowserClock: (() => void) | undefined
 
   beforeAll(async () => {
+    // Seeded and later command timestamps share the renderer's fixture day across midnight.
+    if (MODE !== 'record') hostClock = pinHostClock()
     // The POSIX terminal fixture stays off Windows; the pinned desktop applies
     // everywhere. The Open In rows carry the document header's file controls,
     // and the SSH marker keeps the application catalog empty so the
@@ -261,18 +266,45 @@ describe('web e2e: seeded history renders through cold resume', () => {
       if (meter === undefined) throw new Error('seeded-history requires the host token meter')
       const realizedWithCompaction = withCompaction(realizeSeedFixture(scaffold, raw, SEED_ID), meter)
       seededThroughSeq = parseSeedFixture(realizedWithCompaction).events.at(-1)?.seq ?? -1
-      await seedSession(scaffold, realizedWithCompaction, SEED_ID)
+      await seedSession(scaffold, realizedWithCompaction, SEED_ID, undefined, { createdAt: WEB_FIXTURE_TIME })
     }
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
+    if (MODE !== 'record') unpinBrowserClock = await pinBrowserClock(page)
     tripwire = watchConsole(page)
+    if (MODE !== 'record') {
+      // A one-message tail makes this short recording exercise the real Load earlier path.
+      let pagedOpening = false
+      await page.routeWebSocket('**/api/remote.mux', (socket) => {
+        const server = socket.connectToServer()
+        socket.onMessage((message) => {
+          const frame = JSON.parse(String(message)) as {
+            type: string
+            endpoint?: string
+            payload: { args: { request: { maxMessages: number; turnWindow?: { minMessages: number; minTurns: number } } } }
+          }
+          if (!pagedOpening && frame.type === 'open' && frame.endpoint === 'session/follow') {
+            pagedOpening = true
+            openingWindow = { ...frame.payload.args.request }
+            frame.payload.args.request.maxMessages = 1
+            delete frame.payload.args.request.turnWindow
+            server.send(JSON.stringify(frame))
+          } else server.send(message)
+        })
+      })
+    }
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 
   afterAll(async () => {
-    await browser?.close()
-    await scaffold?.close()
+    try {
+      await browser?.close()
+      await scaffold?.close()
+    } finally {
+      unpinBrowserClock?.()
+      hostClock?.mockRestore()
+    }
   })
 
   it.skipIf(MODE !== 'record')('records the seed turn live through the composer', async () => {
@@ -330,6 +362,16 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await sessionRow.click()
     // Settled barrier for history: the recorded final assistant text renders.
     await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+    expect(openingWindow).toMatchObject({ maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } })
+    expect(await page.getByText(PROMPT, { exact: true }).count()).toBe(0)
+    const [paging] = await Promise.all([
+      page.waitForRequest('**/api/session/page'),
+      page.getByRole('button', { name: 'Load earlier', exact: true }).click(),
+    ])
+    expect(paging.postDataJSON()).toMatchObject({
+      payload: { args: { request: { maxMessages: 500, turnWindow: { minMessages: 50, minTurns: 2 } } } },
+    })
+    await expect.poll(() => page.getByText(PROMPT, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(() => page.getByText('compact', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(() => page.getByText(/^Compacted \d+ history items \(~\d+ tokens\)$/).count(), {
       timeout: 10_000,
@@ -340,7 +382,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     const processBottom = await process.evaluate(element => element.getBoundingClientRect().bottom)
     const answerTop = await page.getByText('DONE', { exact: true }).evaluate(element =>
       element.getBoundingClientRect().top)
-    // Collapsed control row keeps its own 8px margin plus the 8px flow gap.
     expect(answerTop).toBe(processBottom + 16)
     expect(await page.getByText('Context compacted', { exact: true }).count()).toBe(0)
     // Tool cards render from logged tool/call + tool/result alone (views are

@@ -14,8 +14,6 @@ import {
   SessionId,
   SessionSeq,
 } from '@deepseek-ai/dsh-session'
-import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import RecencyToolResultPruner, {
@@ -240,6 +238,3 @@ describe('RecencyToolResultPruner service registration', () => {
   })
 })
 
-// Keep the invariant registry import meaningful for session integrity checks.
-void SessionInvariant
-void InvariantRegistry

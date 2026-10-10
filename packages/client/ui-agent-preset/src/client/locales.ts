@@ -12,6 +12,7 @@ export type AgentPresetSettingsKey =
   | 'nav'
   | 'sectionIntro'
   | 'setDefault'
+  | 'view'
   | 'presetStandardName'
   | 'presetStandardDescription'
   | 'presetPtcName'
@@ -25,17 +26,17 @@ export type AgentPresetSettingsKey =
   | 'presetBusinessName'
   | 'presetBusinessDescription'
   | 'inUse'
-  | 'selectionOffDefault'
   | 'noDescription'
   | 'brokenBadge'
   | 'switchRefused'
+  | 'standardUnavailable'
   | 'close'
   | 'creatorDraft'
-  | 'showPicker'
-  | 'showPickerBeta'
-  | 'showPickerDescription'
-  | 'enablePickerToSetDefault'
-  | 'enablePickerToCreate'
+  | 'createPlugin'
+  | 'createPluginDescription'
+  | 'createPluginChecking'
+  | 'createPluginUnavailable'
+  | 'createPluginMissing'
 
 /** English copy. */
 export const en: Record<AgentPresetSettingsKey, string> = {
@@ -48,6 +49,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   nav: 'Agent presets',
 
   setDefault: 'Set as new task default',
+  view: 'View configuration',
 
   presetStandardName: 'Standard mode',
   presetStandardDescription:
@@ -69,23 +71,22 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, and case retrieval, with its own document scripts.',
 
   inUse: 'New task default',
-  selectionOffDefault: 'Application default',
 
   noDescription: 'No description.',
   brokenBadge: 'Failed to load',
 
   switchRefused: 'Could not switch to {name}: {reason}',
+  standardUnavailable: 'Standard mode is unavailable. Restore it or choose another available mode.',
 
   close: 'Close',
 
   creatorDraft: 'Let the agent help me create a preset',
+  createPlugin: 'Let the agent create a plugin',
+  createPluginDescription: 'Enter Creator mode and make your own DSH plugin',
+  createPluginChecking: 'Checking whether Creator mode is available',
+  createPluginUnavailable: 'Temporarily unavailable. Reopen this menu to retry',
+  createPluginMissing: 'Creator mode is not included in this configuration',
 
-  showPicker: 'Choose a mode for new tasks',
-  showPickerBeta: 'Beta',
-  showPickerDescription:
-    'When enabled, each new task can choose a mode and the default is set here. When disabled, new tasks use the application default preset. Existing tasks are unaffected.',
-  enablePickerToSetDefault: 'Turn on mode selection for new tasks to choose a default',
-  enablePickerToCreate: 'Turn on mode selection for new tasks to start Creator mode',
 }
 
 /** Simplified Chinese copy. */
@@ -99,6 +100,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   nav: 'Agent 预设',
 
   setDefault: '设为新任务默认',
+  view: '查看配置',
 
   presetStandardName: '标准模式',
   presetStandardDescription: '处理代码、文件和资料，适合大多数任务。Agent 会按需使用检索、编辑和终端等工具。',
@@ -114,22 +116,22 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索，自带文档生成脚本。',
 
   inUse: '新任务默认',
-  selectionOffDefault: '应用默认',
 
   noDescription: '暂无描述。',
   brokenBadge: '加载失败',
 
   switchRefused: '无法切换到「{name}」：{reason}',
+  standardUnavailable: '标准模式不可用，请恢复该模式或选择其他可用模式。',
 
   close: '关闭',
 
   creatorDraft: '让 Agent 帮我创建预设模式',
+  createPlugin: '让 Agent 创建插件',
+  createPluginDescription: '进入创造模式，制作属于你的 DSH 插件',
+  createPluginChecking: '正在确认创造模式是否可用',
+  createPluginUnavailable: '暂时不可用，请重新打开菜单重试',
+  createPluginMissing: '当前配置未提供创造模式',
 
-  showPicker: '新任务可选择模式',
-  showPickerBeta: 'Beta',
-  showPickerDescription: '开启后，可为每个新任务选择模式，并在这里设置默认值。关闭后，新任务使用应用配置的默认预设。已有任务不受影响。',
-  enablePickerToSetDefault: '请先开启新任务模式选择，再设置默认值',
-  enablePickerToCreate: '请先开启新任务模式选择，再启动创造模式',
 }
 
 // The resolution itself is the shared fold in `dsh-agent-preset-registry/display`,

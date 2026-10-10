@@ -157,7 +157,7 @@ export interface ModelCatalogFailure {
 /** Host-generation model catalog and the default used by unconfigured Sessions. */
 export interface ModelCatalog {
   readonly default: ModelSelection
-  /** Provider routes currently able to serve a request, including empty catalogs. */
+  /** Provider routes with at least one currently available catalog model. */
   readonly routableProviders: readonly string[]
   readonly groups: readonly ModelProviderGroup[]
   readonly failures: readonly ModelCatalogFailure[]
@@ -177,6 +177,8 @@ export type QueueAction =
 export interface SessionSummary {
   /** Whether this Session currently owns a live Agent. */
   readonly agentAvailable: boolean
+  /** Current for attached Sessions; otherwise the persistence format status when reported. */
+  readonly formatStatus?: 'current' | 'migration-required'
   readonly sessionId: SessionId
   readonly updatedAt: number
   readonly running: boolean
@@ -201,6 +203,8 @@ export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    'session/provider-credentials-unavailable': Record<string, never>
+    'session/provider-models-unavailable': { readonly provider: string }
     'session/model-unavailable': { readonly provider: string; readonly model: string }
     'session/conflict': {
       readonly sessionId: SessionId
@@ -224,6 +228,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/fork-unavailable': { readonly sessionId: SessionId }
     'session/sign-in-required': Record<string, never>
     'session/account-inactive': Record<string, never>
+    'session/migration-required': { readonly sessionId: SessionId }
     'subagent/not-found': {
       readonly parentSessionId: SessionId
       readonly childSessionId: SessionId
@@ -322,6 +327,8 @@ export interface SessionForkRequest {
   readonly sessionId: SessionId
   /** Exact inclusive source event seq; omission selects the latest completed-turn prefix. */
   readonly atSeq?: number
+  /** False asks the Host to check for required migration before forking. Defaults to true. */
+  readonly allowMigration?: boolean
 }
 
 /** Identity of a newly forked Session. */
@@ -419,8 +426,11 @@ export interface SessionProjectionsRequest {
   readonly sessionId: SessionId
 }
 
-/** Complete Session projection baseline; null when the Session does not exist. */
-export type SessionProjectionsValue = SessionProjectionBaseline | null
+/** Exact projections carry their event cut; required migration returns sequence-free cache hints. Null means absent. */
+export type SessionProjectionsValue =
+  | (SessionProjectionBaseline & { readonly kind: 'sequenced' })
+  | { readonly kind: 'migration-required'; readonly values: SessionProjectionValues }
+  | null
 
 /** One raw Session event in the Remote journal. */
 export interface SessionEventEntry {
@@ -474,12 +484,18 @@ export interface SessionPageRequest {
   readonly throughSeq: number
   readonly beforeSeq?: number
   readonly maxMessages?: number
+  /** Stop at a Turn start after both minima, unless maxMessages or history exhaustion wins. */
+  readonly turnWindow?: {
+    /** Minimum append-origin user/assistant messages; must not exceed maxMessages. */
+    readonly minMessages: number
+    /** Minimum Turn starts crossed, including the partial Turn at beforeSeq. */
+    readonly minTurns: number
+  }
 }
 
 /** One live event request for a durable Session address. */
-export interface SessionFollowRequest {
+export interface SessionFollowRequest extends Pick<SessionPageRequest, 'maxMessages' | 'turnWindow'> {
   readonly address: SessionAddress
-  readonly maxMessages?: number
   /** Include process-local assistant presentation frames for the Web client. */
   readonly assistantStream?: true
 }
