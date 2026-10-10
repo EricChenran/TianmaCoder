@@ -27,7 +27,7 @@ export interface TrustRecord {
 
 /** Persisted document shape. */
 export interface TrustStoreDocument {
-  readonly version: 1
+  readonly version: number
   readonly records: Readonly<Record<string, TrustRecord>>
 }
 

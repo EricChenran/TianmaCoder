@@ -16,7 +16,7 @@ const BASE_PATCH = `
 `
 
 const dir = mkdtempSync(join(tmpdir(), 'verify-profile-patches-'))
-afterAll(() => rmSync(dir, { recursive: true, force: true }))
+afterAll(() =>{  rmSync(dir, { recursive: true, force: true }) })
 
 function fixture(name: string, content: string): string {
   const path = join(dir, name)

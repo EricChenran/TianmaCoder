@@ -17,7 +17,7 @@ const FACTOR_MAX = 4
 
 /** Serialized shape written to non-session storage. */
 export interface CalibrationFactorSnapshot {
-  readonly version: 1
+  readonly version: number
   readonly sampleCount: number
   readonly factor: number
 }

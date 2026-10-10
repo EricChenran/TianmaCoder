@@ -75,6 +75,7 @@ describe('transport failures', () => {
   it('reports a rejected fetch as a network failure naming the error', async () => {
     stubFetch(() => Promise.reject(new TypeError('connection refused')))
     await expect(fetchCaptcha(BASE, 5_000)).rejects.toThrow(/TypeError/)
+    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- The case under test is a non-Error rejection.
     stubFetch(() => Promise.reject('not an Error'))
     await expect(fetchCaptcha(BASE, 5_000)).rejects.toThrow(/unknown/)
   })
@@ -182,7 +183,7 @@ describe('payload validation', () => {
 describe('caller lifetime', () => {
   it('carries a live signal into every request', async () => {
     const controller = new AbortController()
-    stubFetch((url) => Promise.resolve(url.endsWith('/auth/captcha')
+    stubFetch(url => Promise.resolve(url.endsWith('/auth/captcha')
       ? envelope(200, { code: 200, message: 'ok', data: { captcha_id: 'c1', img: 'data:image/png;base64,AA' } })
       : url.endsWith('/auth/login')
         ? envelope(200, { code: 200, message: 'ok', data: { token: 'a', refresh_token: 'r', user: WIRE_USER } })
@@ -194,7 +195,7 @@ describe('caller lifetime', () => {
     expect(await postRefresh(BASE, 'r', 5_000, controller.signal)).toBe('a2')
     expect((await fetchProfile(BASE, 'a', 5_000, controller.signal)).account).toBe('chenran')
     expect((await putProfile(BASE, 'a', { name: 'x' }, 5_000, controller.signal)).account).toBe('chenran')
-    expect(await postSignOut(BASE, 'a', 5_000, controller.signal)).toBeUndefined()
+    await expect(postSignOut(BASE, 'a', 5_000, controller.signal)).resolves.toBeUndefined()
   })
 
   it('classifies a failure it cannot name', () => {

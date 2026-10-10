@@ -37,7 +37,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
 
   useEffect(() => {
     if (page === 'key') input.current?.focus()
-    else if (page === 'entry' && focusEntry.current) {
+    else if (focusEntry.current) {
       focusEntry.current = false
       keyButton.current?.focus()
     }

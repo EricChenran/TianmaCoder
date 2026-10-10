@@ -41,7 +41,8 @@ export function isPromptTooLong(error: unknown): boolean {
  */
 export function truncatePrefix(messages: readonly Message[]): Message[] {
   if (messages.length <= 1) return [...messages]
-  const head = messages[0]!.role === 'system' ? [messages[0]!] : []
+  const first = messages[0]
+  const head = first !== undefined && first.role === 'system' ? [first] : []
   const rest = messages.slice(head.length)
   const keep = Math.max(1, Math.floor(rest.length / 2))
   const tail = rest.slice(rest.length - keep)
@@ -77,7 +78,8 @@ export function fallbackCheckpoint(messages: readonly Message[], maxChars = 12_0
   const tailText: string[] = []
   let budget = maxChars - userLines.join('\n').length
   for (let i = messages.length - 1; i >= 0 && budget > 0; i -= 1) {
-    const message = messages[i]!
+    const message = messages[i]
+    if (message === undefined) continue
     const text = message.content
       .map(block => block.type === 'text' ? block.text : '')
       .join(' ')
