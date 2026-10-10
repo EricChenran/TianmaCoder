@@ -7,6 +7,10 @@ A service can be a core spine service, a swappable capability seam, a bundle/com
 
 ```mermaid
 flowchart LR
+  pkg_hooks_trust["hooks-trust"]
+  svc_tianmaHookTrust["ctx.tianmaHookTrust<br/>Content-hash trust admission for third-party workspace hooks"]
+  pkg_token_meter_calibration["token-meter-calibration"]
+  svc_tianmaTokenCalibration["ctx.tianmaTokenCalibration<br/>CJK-aware correction of the token-meter pressure measurement"]
   pkg_experimental_client_ui_cot_translation["experimental-client-ui-cot-translation"]
   svc_cotTranslation["ctx.cotTranslation<br/>Reasoning translation Remote"]
   pkg_experimental_translator["experimental-translator"]
@@ -119,6 +123,10 @@ flowchart LR
   svc_deepseekAccount["ctx.deepseekAccount<br/>DeepSeek account"]
   pkg_deepseek_account_platform["deepseek-account-platform"]
   pkg_api_account_controller["api-account-controller"]
+  pkg_oa_account["oa-account"]
+  svc_oaAccount["ctx.oaAccount<br/>Tianma OA account"]
+  pkg_oa_account_ui["oa-account-ui"]
+  pkg_api_remotes["api-remotes"]
   pkg_authorization["authorization"]
   svc_authorization["ctx.authorization<br/>Authorization flow registry"]
   pkg_client_product_analytics["client-product-analytics"]
@@ -348,6 +356,7 @@ flowchart LR
   pkg_fs_ssh --> svc_fs
   pkg_goal --> svc_goals
   pkg_hmr --> svc_hmr
+  pkg_hooks_trust --> svc_tianmaHookTrust
   pkg_host_directory_picker --> svc_directoryPicker
   pkg_host_directory_picker_browse --> svc_directoryPicker
   pkg_host_directory_picker_native --> svc_directoryPicker
@@ -365,6 +374,7 @@ flowchart LR
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
+  pkg_oa_account --> svc_oaAccount
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
   pkg_permission_presets --> svc_permissionPresets
@@ -422,6 +432,7 @@ flowchart LR
   pkg_terminal --> svc_terminals
   pkg_terminal_bash --> svc_terminals
   pkg_token_meter --> svc_tokenMeter
+  pkg_token_meter_calibration --> svc_tianmaTokenCalibration
   pkg_tool_subagent --> svc_subagentModelSelection
   pkg_tools --> svc_tools
   pkg_typert_registry --> svc_typert
@@ -487,6 +498,9 @@ flowchart LR
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
   svc_mcpResources --> pkg_mcp_resources
+  svc_oaAccount --> pkg_api_remotes
+  svc_oaAccount --> pkg_api_session_controller
+  svc_oaAccount --> pkg_oa_account_ui
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
@@ -592,6 +606,8 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.tianmaHookTrust` | `core` | `hooks-trust` | - | - | - | Ledger of hook command approvals: unchanged hashes pass, any change re-opens review, denials persist. Registered by the Tianma hooks-trust package. |
+| `ctx.tianmaTokenCalibration` | `core` | `token-meter-calibration` | - | - | - | Maintains the session density ratio and the rolling reported/estimated factor, corrects ctx.tokenMeter.measure, and persists the factor under the harness home. Registered by the Tianma token-meter-calibration package. |
 | `ctx.cotTranslation` | `service` | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | - | - | Serves reasoning translations, reuses saved results, and joins ordinary Session activation for uncached inactive Sessions. |
 | `ctx.translator` | `service` | [`experimental-translator`](../packages/experimental/translator) | - | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | Resolves Google or Bing requests and retains shared experimental records through the active Session writer. |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock. |
@@ -632,6 +648,7 @@ flowchart LR
 | `ctx.subagentModelSelection` | `core` | [`tool-subagent`](../packages/subagent/tool-subagent) | - | [`tool-subagent`](../packages/subagent/tool-subagent) | - | Owns the default-off settings namespace that Agent-scoped delegation tools sample when composing a new top-level Session. |
 | `ctx.credentials` | `seam` | [`credentials`](../packages/credentials/credentials) | [`credentials-local`](../packages/credentials/credentials-local) | [`api-settings-controller`](../packages/api/settings-controller), [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the settings controller exposes value-free views and write-only storage. |
 | `ctx.deepseekAccount` | `seam` | [`deepseek-account`](../packages/credentials/deepseek-account) | [`deepseek-account-platform`](../packages/credentials/deepseek-account-platform) | [`api-account-controller`](../packages/api/account-controller), [`llm-deepseek`](../packages/llm/llm-deepseek) | - | The Host owns browser authorization and local credentials; UI consumers receive state without tokens. |
+| `ctx.oaAccount` | `seam` | `oa-account` | `oa-account` | `oa-account-ui`, [`api-remotes`](../packages/api/remotes), [`api-session-controller`](../packages/api/session-controller) | - | The Host owns captcha sign-in and the stored token records; the browser half receives session, profile, and counter projections without tokens, and the prompt path reads the same account state through the ctx.promptAdmission extension point. |
 | `ctx.authorization` | `seam` | [`authorization`](../packages/credentials/authorization) | - | [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol. |
 | `ctx.productAnalytics` | `service` | [`client-product-analytics`](../packages/client/product-analytics) | - | - | - | Accepts selected Desktop events, enriches available login identity, and observes live compaction under the live Host collection policy. |
 | `ctx.otel` | `service` | [`otel`](../packages/telemetry/otel) | - | [`host-product-telemetry-otel`](../packages/host/product-telemetry-otel), [`session-telemetry-otel`](../packages/session/session-telemetry-otel) | - | Product analytics and Session feedback adapters create independent reporting channels through one injected service. |

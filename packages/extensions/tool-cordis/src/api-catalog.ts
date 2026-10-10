@@ -1560,6 +1560,78 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'oaAccount',
+    summary: 'Reads and writes the OA session and answers whether a conversation may start.',
+    description: 'Reads and writes the OA session and answers whether a conversation may start. Requires the credential seam; the record it owns is `tianma-oa-account/session`.',
+    methods: [
+      {
+        signature: '@Remote async session(): Promise<OaSessionView>',
+        description: 'Read the current session projection without contacting the backend.',
+        parameters: [],
+        returns: 'the stored session, or a signed-out view.',
+      },
+      {
+        signature: '@Remote captcha(): Promise<OaCaptcha>',
+        description: 'Read one captcha challenge for the sign-in form.',
+        parameters: [],
+        returns: 'the challenge id and its renderable image.',
+        throws: ['{OaAccountError} the classified failure of the request.'],
+      },
+      {
+        signature: '@Remote async signIn(request: OaSignInRequest): Promise<OaSessionView>',
+        description: 'Sign in with a solved challenge and keep the resulting session.',
+        parameters: [{ name: 'request', description: 'account, password, and the solved challenge.' }],
+        returns: 'the signed-in projection.',
+        throws: ['{OaAccountError} code `rejected` with the backend\'s reason, or a classified transport failure.'],
+      },
+      {
+        signature: '@Remote async signOut(): Promise<OaSessionView>',
+        description: 'Discard the stored session. The backend has no revocation list, so the local deletion is what signs the user out; the backend call is advisory and its failure does not restore the session.',
+        parameters: [],
+        returns: 'the signed-out projection.',
+      },
+      {
+        signature: '@Remote profile(): Promise<OaUser>',
+        description: 'Read the account holder, re-signing once when the access token has expired.',
+        parameters: [],
+        returns: 'the account holder.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote stats(): Promise<OaStats>',
+        description: 'Read the personal workbench counters, re-signing once when the access token has expired.',
+        parameters: [],
+        returns: 'the counters.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote async updateProfile(patch: OaProfilePatch): Promise<OaUser>',
+        description: 'Write the fields a user may change on their own profile.',
+        parameters: [{ name: 'patch', description: 'the fields to change; an absent field is left unchanged.' }],
+        returns: 'the account holder after the write.',
+        throws: ['{OaAccountError} code `unauthenticated` when no usable session remains.'],
+      },
+      {
+        signature: '@Remote async gate(): Promise<OaGateDecision>',
+        description: 'Decide whether a conversation may start.',
+        parameters: [],
+        returns: 'the decision, naming the reason when it refuses.',
+      },
+      {
+        signature: 'async assertMayStartConversation(): Promise<void>',
+        description: 'Refuse the current operation unless a conversation may start. This is the Host-side enforcement point: a client that never asks gate — or a caller that reaches a session without a browser at all — still cannot put a user message into a session.',
+        parameters: [],
+        throws: ['{OaAccountError} code `unauthenticated`, whose message names the gate denial.'],
+      },
+      {
+        signature: '@Remote({ mode: \'stream\' }) watch(signal: AbortSignal): AsyncIterable<OaSessionView>',
+        description: 'Stream the session projection, starting from the current value.',
+        parameters: [{ name: 'signal', description: 'stream lifetime; ending it stops the stream without signing out.' }],
+        returns: 'the current projection followed by every change.',
+      },
+    ],
+  },
+  {
     key: 'officeToPdf',
     summary: 'A provider lifetime owns all converters, queued calls, and temporary files.',
     description: 'A provider lifetime owns all converters, queued calls, and temporary files.',
@@ -3225,6 +3297,47 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List fresh snapshots for exactly one owner.',
         parameters: [{ name: 'owner', description: 'exact owner whose sessions are visible.' }],
         returns: 'owner-visible snapshots in publication order.',
+      },
+    ],
+  },
+  {
+    key: 'tianmaHookTrust',
+    summary: 'The Cordis service registered under `ctx.tianmaHookTrust`.',
+    description: 'The Cordis service registered under `ctx.tianmaHookTrust`.',
+    methods: [],
+  },
+  {
+    key: 'tianmaTokenCalibration',
+    summary: 'The calibration service: rolling factor plus file persistence.',
+    description: 'The calibration service: rolling factor plus file persistence. Pure state container + explicit I/O — no hidden timers, no background work.',
+    methods: [
+      {
+        signature: 'estimateSession(session: Session): DensityPrices',
+        description: 'Both density prices over one session\'s current model-visible surface.',
+        parameters: [{ name: 'session', description: 'session whose derived history to price.' }],
+        returns: 'the CJK-split and fixed-density totals.',
+      },
+      {
+        signature: 'sessionMultiplier(session: Session): number',
+        description: 'The correction the token meter applies to one session\'s measurement: the session\'s own density ratio times the rolling residual factor.',
+        parameters: [{ name: 'session', description: 'session whose surface is being measured.' }],
+        returns: '1 when the surface is non-CJK and no sample has been recorded.',
+      },
+      {
+        signature: 'record(estimatedTokens: number, reportedTokens: number): void',
+        description: 'Record one heuristic-vs-reported pair from a routed request.',
+        parameters: [{ name: 'estimatedTokens', description: 'the heuristic estimate for the request surface.' }, { name: 'reportedTokens', description: 'the provider-reported total for the same request.' }],
+      },
+      {
+        signature: 'recordSession(session: Session, estimateTokens: (index: number) => number): number',
+        description: 'Scan one session for reported usage samples and record each against the given heuristic estimate of the same request surface.',
+        parameters: [{ name: 'session', description: 'the session whose log to scan.' }, { name: 'estimateTokens', description: 'heuristic estimate per sampled request.' }],
+        returns: 'how many samples were recorded.',
+      },
+      {
+        signature: 'persist(): void',
+        description: 'Write the current factor snapshot to the state file.',
+        parameters: [],
       },
     ],
   },
@@ -5206,6 +5319,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DeliveryRetentionBounds {\n    readonly days: number;\n    readonly records: number;\n}',
   },
   {
+    name: 'DensityPrices',
+    declaration: 'export interface DensityPrices {\n    readonly calibratedTokens: number;\n    readonly flatTokens: number;\n}',
+  },
+  {
     name: 'DeveloperMessage',
     declaration: 'export interface DeveloperMessage extends MessageBase {\n    readonly role: \'developer\';\n}',
   },
@@ -6072,6 +6189,38 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'NotFutureError',
     declaration: 'export interface NotFutureError {\n    readonly code: \'not_future\';\n    readonly message: string;\n}',
+  },
+  {
+    name: 'OaCaptcha',
+    declaration: 'export interface OaCaptcha {\n    captchaId: string;\n    image: string;\n}',
+  },
+  {
+    name: 'OaGateDecision',
+    declaration: 'export type OaGateDecision = {\n    allowed: true;\n} | {\n    allowed: false;\n    reason: OaGateDenial;\n};',
+  },
+  {
+    name: 'OaGateDenial',
+    declaration: 'export type OaGateDenial = \'signed-out\' | \'inactive-account\';',
+  },
+  {
+    name: 'OaProfilePatch',
+    declaration: 'export interface OaProfilePatch {\n    name?: string;\n    phone?: string;\n    avatar?: string;\n}',
+  },
+  {
+    name: 'OaSessionView',
+    declaration: 'export interface OaSessionView {\n    signedIn: boolean;\n    user: OaUser | null;\n    status: string | null;\n    assetOrigin: string;\n}',
+  },
+  {
+    name: 'OaSignInRequest',
+    declaration: 'export interface OaSignInRequest {\n    account: string;\n    password: string;\n    captchaId: string;\n    captcha: string;\n}',
+  },
+  {
+    name: 'OaStats',
+    declaration: 'export interface OaStats {\n    approval: {\n        pending: number;\n        myApplications: number;\n        rejected: number;\n    };\n    task: {\n        overdue: number;\n        today: number;\n        upcoming: number;\n        workHours: number;\n    };\n    schedule: {\n        today: number;\n    };\n}',
+  },
+  {
+    name: 'OaUser',
+    declaration: 'export interface OaUser {\n    id: number;\n    account: string;\n    name: string;\n    code: string;\n    phone: string;\n    department: string;\n    position: string;\n    level: string;\n    avatar: string;\n    hireDate: string;\n    employmentType: string;\n    role: string;\n    status: string;\n    wxBound: boolean;\n    createdAt: string;\n}',
   },
   {
     name: 'ObjectJsonSchema',

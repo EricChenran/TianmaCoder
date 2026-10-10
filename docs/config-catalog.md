@@ -547,56 +547,6 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-plugin-manager -->
 
-<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-account -->
-<a id="deepseek-aidsh-client-ui-settings-account"></a>
-
-## `@deepseek-ai/dsh-client-ui-settings-account`
-
-- `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/client/ui-settings-account/src/index.ts:9`](../packages/client/ui-settings-account/src/index.ts)
-
-```ts config-catalog
-/** Public contact options and live device-local onboarding progress. */
-export interface Config extends ContactConfig {
-  /** Onboarding progress format version. */
-  version: Volatile<1>
-  /** Last accepted onboarding page. */
-  step: Volatile<OnboardingStep>
-  /** Selected work scenario. */
-  purpose?: Volatile<OnboardingPurpose | null | undefined>
-  /** Selected transcript detail. */
-  process?: Volatile<OnboardingProcess | null | undefined>
-  /** Completion reason, absent until completion. */
-  completion?: Volatile<'completed' | 'skipped' | 'api-key' | null | undefined>
-  /** Selected usage detail. */
-  usage: Volatile<'compact' | 'detailed'>
-  /** Selected developer-tool visibility. */
-  developerTools: Volatile<boolean>
-}
-
-/** Questionnaire destination and bonus notice timings shared by Host and Client. */
-export interface ContactConfig {
-  /** HTTPS questionnaire URL; override for a test form. */
-  contactFormUrl: string
-  /** Questionnaire source option; empty until Harness is supported by the form. */
-  contactSource: string
-  /** First delay before retrying a failed bonus acknowledgement. */
-  bonusAckRetryDelayMs: number
-  /** Ceiling for the acknowledgement retry backoff. */
-  bonusAckRetryMaxDelayMs: number
-}
-
-/** Persisted steps; a native top-up page leaves the durable step at credit. */
-export type OnboardingStep = 'welcome' | 'credit' | 'purpose' | 'process' | 'done'
-
-/** Work scenarios offered by the desktop introduction. */
-export type OnboardingPurpose = 'office' | 'development' | 'both'
-
-/** Work-detail mode applied to Chat when onboarding completes. */
-export type OnboardingProcess = 'compact' | 'standard' | 'detailed'
-```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-account -->
-
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-models -->
 <a id="deepseek-aidsh-client-ui-settings-models"></a>
 
@@ -2999,13 +2949,20 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-skill`
 
-- `source`: [`packages/skill/skill/src/index.ts:278`](../packages/skill/skill/src/index.ts)
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/skill/skill/src/index.ts:277`](../packages/skill/skill/src/index.ts)
 
 ```ts config-catalog
 /** Skill registry configuration. */
 export interface Config {
   /** Maximum number of completed cwd/provider catalogs kept in memory. */
   readonly collectCacheMaxEntries?: number
+  /**
+   * Names of skills that stay installed but leave every catalog and lookup.
+   * A live reference rather than a startup value, so the Web client's Skills
+   * page switches a skill off without restarting the Host.
+   */
+  readonly disabled?: Volatile<string[]>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-skill -->
@@ -4490,6 +4447,155 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-workspace-changes -->
 
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-compaction-file-rehydrator -->
+<a id="tianmadsh-compaction-file-rehydrator"></a>
+
+## `@tianma/dsh-compaction-file-rehydrator`
+
+- `source`: [`packages/tianma/compaction-file-rehydrator/src/index.ts:31`](../packages/tianma/compaction-file-rehydrator/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Upper bound for the rendered section (default `4096` chars). */
+  maxChars?: number
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-compaction-file-rehydrator -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-compaction-recency-pruner -->
+<a id="tianmadsh-compaction-recency-pruner"></a>
+
+## `@tianma/dsh-compaction-recency-pruner`
+
+- `inject`: `tokenMeter`
+- `source`: [`packages/tianma/compaction-recency-pruner/src/types.ts:5`](../packages/tianma/compaction-recency-pruner/src/types.ts)
+
+```ts config-catalog
+/** Recency policy for tool-result clearing. */
+export interface RecencyPruneConfig {
+  /**
+   * Tool results this recent (in surface order) are never cleared, regardless
+   * of size. ZCode's microcompact keeps five groups; here the unit is the
+   * tool-result event. Defaults to `5`.
+   */
+  keepRecentResults?: number
+  /**
+   * Clear an older tool result only when its text exceeds this many Unicode
+   * code points; smaller results are not worth the context dance. Defaults
+   * to `8192` (mirrors the upstream pruner's threshold).
+   */
+  thresholdChars?: number
+  /**
+   * Skip a candidate whose replacement would save fewer Unicode code points.
+   * ZCode gates at 256 tokens; at the harness's 4-chars-per-token heuristic
+   * that is 1024 code points, which is the default here.
+   */
+  minCharsSaved?: number
+  /**
+   * Tool names eligible for clearing; an empty list means every tool. The
+   * default lists the volume-heavy read/search/shell tools and leaves
+   * everything else untouched.
+   */
+  compactableTools?: string[]
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-compaction-recency-pruner -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-department-prompts -->
+<a id="tianmadsh-department-prompts"></a>
+
+## `@tianma/dsh-department-prompts`
+
+- `inject`: `systemPrompt`
+- `source`: [`packages/tianma/department-prompts/src/index.ts:43`](../packages/tianma/department-prompts/src/index.ts)
+
+```ts config-catalog
+/** Plugin config: the department whose rules this row contributes. */
+export interface Config extends BusinessToolboxOptions {
+  /** Department identifier; also the preset it belongs to. */
+  department: Department
+}
+
+/** Where the toolbox scripts are published, and where they are read from. */
+export interface BusinessToolboxOptions {
+  /** Packaged script directory; defaults to this package's `assets/business/`. */
+  assetRoot?: string
+  /** Published script directory; defaults to `<harness home>/department/business-tools`. */
+  toolsDir?: string
+}
+
+/** Department identifier a preset selects. */
+export type Department = 'tech' | 'business'
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-department-prompts -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-hooks-trust -->
+<a id="tianmadsh-hooks-trust"></a>
+
+## `@tianma/dsh-hooks-trust`
+
+- `source`: [`packages/tianma/hooks-trust/src/index.ts:25`](../packages/tianma/hooks-trust/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Ledger file path (default `<home>/.dsh/tianma-hook-trust.json`). */
+  ledgerPath?: string
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-hooks-trust -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-oa-account -->
+<a id="tianmadsh-oa-account"></a>
+
+## `@tianma/dsh-oa-account`
+
+- `inject`: `credentials`
+- `source`: [`packages/tianma/oa-account/src/index.ts:56`](../packages/tianma/oa-account/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * The OA API base URL, including its version segment. Deployment-specific, so
+   * it has no default here: a composition supplies it from its own environment.
+   */
+  baseUrl: string
+  /**
+   * Deadline for one OA request in milliseconds. The backend issues
+   * two-hour access tokens, so this only bounds a single round trip.
+   */
+  requestTimeoutMs: number
+  /**
+   * Whether starting a conversation requires a signed-in account whose status
+   * is `active`. Turning this off mounts the account surfaces without gating
+   * the product, which a development composition may want.
+   */
+  requireSignIn: boolean
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-oa-account -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-token-meter-calibration -->
+<a id="tianmadsh-token-meter-calibration"></a>
+
+## `@tianma/dsh-token-meter-calibration`
+
+- `inject`: `tokenMeter`
+- `source`: [`packages/tianma/token-meter-calibration/src/index.ts:57`](../packages/tianma/token-meter-calibration/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Calibration state file path (default `<harness home>/tianma-calibration.json`). */
+  statePath?: string
+  /** Rolling reported/estimated sample window (default {@link DEFAULT_WINDOW}). */
+  window?: number
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-token-meter-calibration -->
+
 ## Loadable plugins with no config
 
 These load from a `cordis.yml` entry with no `config:` block; they declare no configuration API.
@@ -4599,6 +4705,9 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-user-questions` | — | [`packages/interaction/user-questions/src/index.ts`](../packages/interaction/user-questions/src/index.ts) |
 | `@deepseek-ai/dsh-webhook` | `agents` · `agentDefaultModel` · `agentPresets` · `permissionPresets` · `sessionTitle` · `workspaceRegistry` | [`packages/experimental/webhook/src/index.ts`](../packages/experimental/webhook/src/index.ts) |
 | `@deepseek-ai/dsh-workspace` | `storageDomain` · `sessionPersistence` | [`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts) |
+| `@tianma/dsh-behavioral-guidelines` | — | [`packages/tianma/behavioral-guidelines/src/index.ts`](../packages/tianma/behavioral-guidelines/src/index.ts) |
+| `@tianma/dsh-compaction-summarize` | — | [`packages/tianma/compaction-summarize/src/index.ts`](../packages/tianma/compaction-summarize/src/index.ts) |
+| `@tianma/dsh-oa-account-ui` | — | [`packages/tianma/oa-account-ui/src/index.ts`](../packages/tianma/oa-account-ui/src/index.ts) |
 <!-- END GENERATED config-catalog:no-config -->
 
 ## Seam packages (not directly loadable)
@@ -4697,4 +4806,5 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 | `@deepseek-ai/dsh-util-values` | — | [`packages/util/values/src/index.ts`](../packages/util/values/src/index.ts) |
 | `@deepseek-ai/dsh-util-workspace-path` | — | [`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts) |
 | `@deepseek-ai/dsh-win32-process` | — | [`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts) |
+| `@tianma/dsh-bundle` | — | [`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts) |
 <!-- END GENERATED config-catalog:library -->

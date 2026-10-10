@@ -69,6 +69,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentPresets: 'core.md',
   tianmaHookTrust: 'tianma.md',
   tianmaTokenCalibration: 'tianma.md',
+  deepseekAccount: 'credentials.md',
   oaAccount: 'tianma.md',
   agents: 'core.md',
   approval: 'approval.md',

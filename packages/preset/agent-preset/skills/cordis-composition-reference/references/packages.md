@@ -14,6 +14,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
+| `@deepseek-ai/dsh-api-account-controller` | no | Expose safe account operations over authenticated Remote |
 | `@deepseek-ai/dsh-api-gateway` | yes | Typert Remote Host dispatcher and Client API endpoint |
 | `@deepseek-ai/dsh-api-job-controller` | yes | Job Remote observation stream and the reference-counted client job-output service |
 | `@deepseek-ai/dsh-api-remotes` | no | Remote BFF assembly for application-selected Host capabilities |
@@ -157,6 +158,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 |---|---|---|
 | `@deepseek-ai/dsh-authorization` | no | Authorization seam (ctx.authorization): plugin-owned flows that obtain a credential through a conversation with the human |
 | `@deepseek-ai/dsh-credentials-local` | yes | File-backed credentials provider ($DSH_HOME/.env under the live process environment) for the DeepSeek Harness |
+| `@deepseek-ai/dsh-deepseek-account-platform` | yes | Authorize DeepSeek accounts through browser PKCE |
 
 ## deliverables
 
@@ -477,6 +479,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@tianma/dsh-department-prompts` | yes | Department operating rules for the TianmaCoder desktop modes, injected as one named system-prompt contribution plus a private document-toolbox runtime |
 | `@tianma/dsh-hooks-trust` | yes | Content-hash trust ledger for third-party workspace hooks: unchanged approvals pass, any change re-opens review, denials persist |
 | `@tianma/dsh-oa-account` | yes | Tianma OA user account: captcha sign-in, dual-token refresh, live status gate, and the signed-in requirement that gates starting a conversation |
+| `@tianma/dsh-oa-account-ui` | no | Tianma OA account surfaces for the Web GUI: captcha sign-in, the sidebar account menu, and the Settings page that shows and edits the signed-in profile |
 | `@tianma/dsh-token-meter-calibration` | yes | CJK-aware density pricing and rolling usage-calibration factor cores for the token meter |
 
 ## todo

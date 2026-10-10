@@ -259,6 +259,111 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 
 Source: [`packages/api/settings-controller/src/credentials.ts`](../../packages/api/settings-controller/src/credentials.ts)
 
+<a id="ctxdeepseekaccount--deepseekaccount-abstract-seam"></a>
+
+### `ctx.deepseekAccount` — `DeepSeekAccount` (abstract seam)
+
+Account operations; only Host consumers can obtain a request credential.
+
+```ts cordis-catalog
+/**
+ * Read stored-account presence and the latest login attempt.
+ * @returns a snapshot without credentials or PKCE secrets.
+ */
+abstract getState(): Promise<AccountView>
+
+/**
+ * Query Platform profile independently of wallet balances.
+ * A ready result whose stable profile ID first becomes available or changes notifies watch
+ * consumers, so identity consumers re-read getPlatformSession; repeated IDs stay silent.
+ * @param client - identity of the requesting UI for this call.
+ * @returns profile outcome, or null if signed out or the grant changed during the query.
+ */
+abstract getProfile(client: AccountClientMetadata): Promise<AccountDetails['profile'] | null>
+
+/**
+ * Query Platform recharge and bonus wallet balances independently of profile data.
+ * @param client - identity of the requesting UI for this call.
+ * @returns balance outcome, or null if signed out or the grant changed during the query.
+ */
+abstract getBalance(client: AccountClientMetadata): Promise<AccountDetails['balance'] | null>
+
+/**
+ * Query the granted bonuses Platform has not yet recorded as displayed.
+ * @param client - identity of the requesting UI for this call; its language selects the server-authored message.
+ * @returns bonuses with their account, or null if signed out or the grant changed during the query.
+ */
+abstract getUnnotifiedBonuses(client: AccountClientMetadata): Promise<AccountBonusBatch | null>
+
+/**
+ * Record one displayed bonus as notified for the account it belongs to.
+ * @param accountId - account the notification was read for; a different current account is never acknowledged.
+ * @param orderId - granted bonus order the user saw.
+ * @param client - identity of the requesting UI for this call.
+ * @returns true once Platform records the acknowledgement; false if signed out or the account changed.
+ */
+abstract ackBonusNotified(accountId: AccountUserId, orderId: AccountBonusOrderId, client: AccountClientMetadata): Promise<boolean>
+
+/**
+ * Join an active attempt or start browser authorization.
+ * @param client - identity of the requesting UI; a new attempt captures it, and joining retains the original attempt's identity.
+ * @param callbackOrigin - browser-accessible loopback HTTP origin, including any SSH local port.
+ * @param loginSource - initiating UI, used to return from a failed exchange.
+ * @returns the initial snapshot without waiting for browser approval.
+ */
+abstract startSignIn(client: AccountClientMetadata, callbackOrigin: string, loginSource: 'web' | 'desktop'): Promise<AccountView>
+
+/**
+ * Cancel only the named attempt; committing attempts settle before returning.
+ * @param id - attempt identity from this Host.
+ * @returns state after cancellation or an already-started commit.
+ */
+abstract cancelSignIn(id: SignInAttemptId): Promise<AccountView>
+
+/**
+ * Remove the local grant while retaining API keys; the provider revokes it in the background.
+ * @param client - identity of the requesting UI, captured for the background revocation retries.
+ * @returns the signed-out state after local removal; remote failures never restore the grant.
+ */
+abstract signOut(client: AccountClientMetadata): Promise<AccountView>
+
+/**
+ * Subscribe to snapshots including a complete initial state.
+ * @param signal - subscription lifetime; ending it never cancels login.
+ * @returns complete snapshots as account state changes.
+ */
+abstract watch(signal: AbortSignal): AsyncIterable<AccountView>
+
+/**
+ * Resolve a credential only for the inference origin allowed by the provider.
+ * @param url - actual request destination or API base URL.
+ * @returns stored token, or undefined for other origins or a signed-out account.
+ */
+abstract resolveToken(url: string): Promise<string | undefined>
+
+/**
+ * Remove an inference-rejected token only while it still matches the stored login.
+ * @param token - token captured by the rejected inference request.
+ * @returns after matching credentials are removed and the expiry notification is emitted.
+ */
+abstract rejectToken(token: string): Promise<void>
+
+/**
+ * Read credentials for the configured Platform origin, bound to their issuing environment, and
+ * pair them with the account ID from the last successful profile read; no profile request is made.
+ * @returns a Host-only snapshot, or null while signed out or when the credential changed during the read.
+ */
+abstract getPlatformSession(): Promise<PlatformSession | null>
+
+/**
+ * Read existing login identity without creating a device or returning credentials.
+ * @returns optional device/account identifiers and the provider's OS version string.
+ */
+abstract getDeviceIdentity(): Promise<{ deviceId?: string; userId?: AccountUserId; osVersion: string }>
+```
+
+Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
+
 <a id="authorization-events"></a>
 
 ### `authorization/*` events
@@ -313,7 +418,7 @@ Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credent
 
 #### `credentials/reference-updated` — emit
 
-Committed change to a provider-managed credential source: a `set`, an `unset`, or an external edit observed in storage. Ambient process-environment changes are not observable and never emit. Listener failures are contained and logged — a sync throw and an async rejection alike — without changing the committed operation's outcome, except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.
+Committed change to a provider-managed credential source: a `set`, an `unset`, or an external edit observed in storage. Ambient process-environment changes are not observable and never emit. Listener failures are contained and logged — a sync throw and an async rejection alike — without changing the committed operation's outcome.
 
 ```ts cordis-catalog
 /**
@@ -321,10 +426,7 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
  * `unset`, or an external edit observed in storage. Ambient
  * process-environment changes are not observable and never emit. Listener
  * failures are contained and logged — a sync throw and an async rejection
- * alike — without changing the committed operation's outcome, except
- * `INVARIANT`-coded failures, which rethrow after every listener ran;
- * that rethrow reaches the emitter only from synchronous listeners, so
- * invariant checks on this event must not be async functions.
+ * alike — without changing the committed operation's outcome.
  * @param ref - the reference whose stored value changed.
  * @mode emit
  */
@@ -332,6 +434,55 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
 ```
 
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="deepseek-account-events"></a>
+
+### `deepseek-account/*` events
+
+<a id="deepseek-accountmodel-sign-in-required--emit"></a>
+
+#### `deepseek-account/model-sign-in-required` — emit
+
+An account model request requires the user to sign in.
+
+```ts cordis-catalog
+/** An account model request requires the user to sign in.
+ * @mode emit
+ */
+'deepseek-account/model-sign-in-required'(): void
+```
+
+Source: [`packages/credentials/deepseek-account/src/types.ts`](../../packages/credentials/deepseek-account/src/types.ts)
+
+<a id="deepseek-accountsession-expired--emit"></a>
+
+#### `deepseek-account/session-expired` — emit
+
+Server rejection removed the current account credential; this notification is not replayed.
+
+```ts cordis-catalog
+/** Server rejection removed the current account credential; this notification is not replayed.
+ * @mode emit
+ */
+'deepseek-account/session-expired'(): void
+```
+
+Source: [`packages/credentials/deepseek-account/src/types.ts`](../../packages/credentials/deepseek-account/src/types.ts)
+
+<a id="deepseek-accountsigned-out--emit"></a>
+
+#### `deepseek-account/signed-out` — emit
+
+Local grant removal has completed.
+
+```ts cordis-catalog
+/** Local grant removal has completed.
+ * @mode emit
+ */
+'deepseek-account/signed-out'(): void
+```
+
+Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
 <!-- END GENERATED cordis-surface -->
 
 The product's own login lives outside this group: [`@tianma/dsh-oa-account`](../../packages/tianma/oa-account/README.md) keeps its session in a record this seam stores and owns the `ctx.oaAccount` service, so this page documents the storage seam only.
