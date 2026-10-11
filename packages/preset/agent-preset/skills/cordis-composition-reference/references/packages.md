@@ -464,6 +464,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@tianma/dsh-department-prompts` | yes | Department operating rules for the TianmaCoder desktop modes, injected as one named system-prompt contribution plus a private document-toolbox runtime |
 | `@tianma/dsh-hooks-trust` | yes | Content-hash trust ledger for third-party workspace hooks: unchanged approvals pass, any change re-opens review, denials persist |
 | `@tianma/dsh-oa-account` | yes | Tianma OA user account: captcha sign-in, dual-token refresh, live status gate, and the signed-in requirement that gates starting a conversation |
+| `@tianma/dsh-oa-account-ui` | no | Tianma OA account surfaces for the Web GUI: captcha sign-in, the sidebar account menu, and the Settings page that shows and edits the signed-in profile |
 | `@tianma/dsh-token-meter-calibration` | yes | CJK-aware density pricing and rolling usage-calibration factor cores for the token meter |
 
 ## todo
@@ -488,6 +489,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-web-search-deepseek` | yes | DeepSeek-backed search provider (native web_search via the Anthropic-compatible API) for the DeepSeek Harness web capability seam (ctx.web) |
 | `@deepseek-ai/dsh-web-search-exa` | yes | Exa-backed search provider for the DeepSeek Harness web capability seam (ctx.web) |
 | `@deepseek-ai/dsh-web-search-perplexity` | yes | Perplexity-backed search provider for the DeepSeek Harness web capability seam (ctx.web) |
+| `@deepseek-ai/dsh-web-search-serp` | yes | Search-engine-result-page provider for the DeepSeek Harness web capability seam (ctx.web) |
 
 ## webhook
 

@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Stand-in for the Baidu security-verification page. Baidu served such a page for
+     https://www.baidu.com/s?wd=deepseek on 2026-10-11 (HTTP 200, about 1.4 KB) while rate-limiting
+     this client; the title and the form target below are the markers observed in that response,
+     and the surrounding document is reduced to them. -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>百度安全验证</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+</head>
+<body>
+<div class="verification">
+<form action="https://wappass.baidu.com/static/captcha/tuxing_v2.html" method="post">
+<input type="hidden" name="ak" value="captcha">
+<div class="tips">请完成安全验证后继续访问</div>
+</form>
+</div>
+</body>
+</html>

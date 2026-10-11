@@ -3961,6 +3961,37 @@ export interface Config {
 
 来源： [`packages/web/web-search-perplexity/src/index.ts:30`](../packages/web/web-search-perplexity/src/index.ts)
 
+<a id="deepseek-aidsh-web-search-serp"></a>
+
+## `@deepseek-ai/dsh-web-search-serp`
+
+需要： `web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills the shipped defaults). */
+export interface Config {
+  /** Engines to query, in result-merge order. Defaults to every supported engine. */
+  engines?: SerpEngineId[]
+  /** Endpoint override by engine, for a mirror or a test double. Omitted engines use their default. */
+  endpoints?: Partial<Record<SerpEngineId, string>>
+  /** Per-search budget (ms), covering every engine request that search starts. Defaults to 8000. */
+  timeoutMs?: number
+  /** Minimum gap (ms) between two requests to one engine host. `0` disables throttling. Defaults to 1000. */
+  minIntervalMs?: number
+  /** Largest number of rows read from one engine's page. Defaults to 10. */
+  maxResultsPerEngine?: number
+  /** Largest fetched document the parsers read. Defaults to 2000000. */
+  maxHtmlChars?: number
+  /** User agent sent with every engine request. Defaults to a browser identity. */
+  userAgent?: string
+}
+
+/** Stable ids of the engines this provider scrapes. */
+export type SerpEngineId = 'baidu' | 'bing' | 'so360'
+```
+
+来源： [`packages/web/web-search-serp/src/index.ts:54`](../packages/web/web-search-serp/src/index.ts)
+
 <a id="deepseek-aidsh-webhook-github"></a>
 
 ## `@deepseek-ai/dsh-webhook-github`
@@ -4278,6 +4309,7 @@ export interface Config {
 - `@deepseek-ai/dsh-workspace` — 需要 `storageDomain` · `sessionPersistence`（[`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts)）
 - `@tianma/dsh-behavioral-guidelines`（[`packages/tianma/behavioral-guidelines/src/index.ts`](../packages/tianma/behavioral-guidelines/src/index.ts)）
 - `@tianma/dsh-compaction-summarize`（[`packages/tianma/compaction-summarize/src/index.ts`](../packages/tianma/compaction-summarize/src/index.ts)）
+- `@tianma/dsh-oa-account-ui`（[`packages/tianma/oa-account-ui/src/index.ts`](../packages/tianma/oa-account-ui/src/index.ts)）
 
 ## Seam 包（不可直接加载）
 
@@ -4359,4 +4391,3 @@ export interface Config {
 - `@deepseek-ai/dsh-util-workspace-path`（[`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts)）
 - `@deepseek-ai/dsh-win32-process`（[`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts)）
 - `@tianma/dsh-bundle`（[`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts)）
-- `@tianma/dsh-oa-account-ui`（[`packages/tianma/oa-account-ui/src/index.ts`](../packages/tianma/oa-account-ui/src/index.ts)）
