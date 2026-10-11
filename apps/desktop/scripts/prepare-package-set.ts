@@ -28,11 +28,15 @@ import { tarballFiles } from '../../../scripts/release/tarball.ts'
 import { resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 
 const DSH_PACKAGE = '@deepseek-ai/dsh'
-const ROOT_PACKAGES = [DSH_PACKAGE, DESKTOP_HOST_PACKAGE] as const
+
+/** Packages the Desktop package set's closure starts from. */
+export const DESKTOP_PACKAGE_SET_ROOTS = [DSH_PACKAGE, DESKTOP_HOST_PACKAGE] as const
+
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
 
-const REQUIRED_DEPENDENCY_SECTIONS = ['dependencies', 'peerDependencies'] as const
+/** Manifest sections a packed package must satisfy for the closure to be complete. */
+export const REQUIRED_DEPENDENCY_SECTIONS = ['dependencies', 'peerDependencies'] as const
 const OPTIONAL_DEPENDENCY_SECTION = 'optionalDependencies'
 
 /** Packed package information needed to form the local Desktop closure. */
@@ -41,7 +45,13 @@ export interface PackedDesktopPackage {
   readonly manifest: Readonly<Record<string, unknown>>
 }
 
-function dependencyNames(manifest: Readonly<Record<string, unknown>>, section: string): string[] {
+/**
+ * Read one dependency section's package names.
+ * @param manifest - parsed package manifest.
+ * @param section - manifest section to read.
+ * @returns Declared names sorted, empty when the section is absent.
+ */
+export function dependencyNames(manifest: Readonly<Record<string, unknown>>, section: string): string[] {
   const value = manifest[section]
   if (value === undefined) return []
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -80,7 +90,7 @@ export function selectDesktopPackageClosure(
       if (available.has(dependency)) visit(dependency)
     }
   }
-  for (const name of ROOT_PACKAGES) {
+  for (const name of DESKTOP_PACKAGE_SET_ROOTS) {
     if (!available.has(name)) throw new Error(`desktop package set: packed inputs omit ${name}`)
     visit(name)
   }

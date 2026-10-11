@@ -4095,9 +4095,11 @@ export interface RecencyPruneConfig {
 
 ```ts config-catalog
 /** Plugin config: the department whose rules this row contributes. */
-export interface Config extends BusinessToolboxOptions {
+export interface Config extends BusinessToolboxOptions, DepartmentSkillOptions {
   /** Department identifier; also the preset it belongs to. */
   department: Department
+  /** Packaged skill directory, for a deployment that ships its own copy. */
+  skillAssetRoot?: string
 }
 
 /** Where the toolbox scripts are published, and where they are read from. */
@@ -4108,11 +4110,19 @@ export interface BusinessToolboxOptions {
   toolsDir?: string
 }
 
+/** Where the skill is published from, and where it is published to. */
+export interface DepartmentSkillOptions {
+  /** Packaged skill directory; defaults to this package's `skills/official-doc/`. */
+  assetRoot?: string
+  /** Published skill directory; defaults to `<harness home>/department/skills/official-doc`. */
+  skillDir?: string
+}
+
 /** Department identifier a preset selects. */
 export type Department = 'tech' | 'business'
 ```
 
-来源： [`packages/tianma/department-prompts/src/index.ts:43`](../packages/tianma/department-prompts/src/index.ts)
+来源： [`packages/tianma/department-prompts/src/index.ts:56`](../packages/tianma/department-prompts/src/index.ts)
 
 <a id="tianmadsh-hooks-trust"></a>
 
