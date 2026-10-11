@@ -17,7 +17,9 @@ import type { AgentPresetLabelProps } from '../src/client/AgentPresetLabel.tsx'
 import { AgentPresetSeat } from '../src/client/AgentPresetSeat.tsx'
 import type { AgentPresetSeatProps } from '../src/client/AgentPresetSeat.tsx'
 import type { AgentPresetSettingsState } from '../src/client/settings-store.ts'
+import type { AgentPresetOption } from '../src/client/settings-store.ts'
 import type { AgentPresetSeatState } from '../src/client/seat-store.ts'
+import { MORE_ROW_ID, presetMenuEntries, presetMenuSelectedId } from '../src/client/preset-menu.tsx'
 import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -123,8 +125,9 @@ describe('the new-session chip', () => {
     fireEvent.click(screen.getByRole('button'))
 
     // The id alone never said what a preset does; the description is the
-    // whole reason a preset can publish metadata at all.
-    expect(screen.getByText(en.presetStandardDescription)).toBeTruthy()
+    // whole reason a preset can publish metadata at all. A shipped preset's row
+    // reads the picker's one-line summary, not the settings card's longer claim.
+    expect(screen.getByText(en.presetStandardSummary)).toBeTruthy()
     // A preset that published none still reads as a row, with its id standing
     // in for the name.
     expect(screen.getByText(en.noDescription)).toBeTruthy()
@@ -134,10 +137,10 @@ describe('the new-session chip', () => {
   it('closes the picker immediately when developer tools turn off without changing the staged preset', () => {
     const actions = renderSeat()
     fireEvent.click(screen.getByRole('button'))
-    expect(screen.getByText(en.presetStandardDescription)).toBeTruthy()
+    expect(screen.getByText(en.presetStandardSummary)).toBeTruthy()
     act(() => { actions.developerTools.set(false) })
     expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.queryByText(en.presetStandardDescription)).toBeNull()
+    expect(screen.queryByText(en.presetStandardSummary)).toBeNull()
     expect(actions.select).not.toHaveBeenCalled()
     act(() => { actions.developerTools.set(true) })
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
@@ -195,6 +198,123 @@ describe('the new-session chip', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+  })
+})
+
+describe('the picker’s groups', () => {
+  /** Every shipped preset, so each group has rows. */
+  const shipped: readonly AgentPresetOption[] = [
+    { id: 'standard' }, { id: 'ptc' }, { id: 'minimal' },
+    { id: 'cordis' }, { id: 'tech' }, { id: 'business' },
+  ]
+
+  it('asks how tools are called before whose standards they follow', () => {
+    renderSeat({ options: shipped })
+    fireEvent.click(screen.getByRole('button'))
+
+    expect(screen.getByText(en.presetPickerIntro)).toBeTruthy()
+    expect(screen.getByText(en.presetGroupWork)).toBeTruthy()
+    expect(screen.getByText(en.presetGroupTeam)).toBeTruthy()
+    // The heading's claim also rides its own rows, so a row read on its own
+    // still says which group it belongs to.
+    expect(screen.getAllByText(en.presetTeamTag)).toHaveLength(2)
+
+    const text = document.body.textContent ?? ''
+    expect(text.indexOf(en.presetGroupWork)).toBeLessThan(text.indexOf(en.presetGroupTeam))
+    expect(text.indexOf(en.presetTechSummary)).toBeLessThan(text.indexOf(en.presetBusinessSummary))
+  })
+
+  it('leaves the demoted modes closed until their row is opened', () => {
+    const actions = renderSeat({ options: shipped })
+    fireEvent.click(screen.getByRole('button'))
+
+    expect(screen.getByText(en.presetMoreHint)).toBeTruthy()
+    expect(screen.queryByText(en.presetMinimalSummary)).toBeNull()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(en.presetMore) }))
+
+    // Opening the group is not a pick: nothing is staged and the picker stays
+    // up, so a mode inside it is still one click away.
+    expect(actions.select).not.toHaveBeenCalled()
+    expect(screen.getByText(en.presetMinimalSummary)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(en.presetMinimalSummary) }))
+
+    expect(actions.select).toHaveBeenCalledWith('minimal')
+  })
+
+  it('closes the demoted group again with the picker', () => {
+    renderSeat({ options: shipped })
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(en.presetMore) }))
+    expect(screen.getByText(en.presetMinimalSummary)).toBeTruthy()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button'))
+
+    expect(screen.queryByText(en.presetMinimalSummary)).toBeNull()
+  })
+
+  it('gives a deployment’s own presets their own group, with the copy they published', () => {
+    renderSeat({
+      options: [...shipped, { id: 'mine', name: 'My mode', description: 'Deployment copy.' }],
+    })
+    fireEvent.click(screen.getByRole('button'))
+
+    expect(screen.getByText(en.customGroup)).toBeTruthy()
+    expect(screen.getByText('My mode')).toBeTruthy()
+    expect(screen.getByText('Deployment copy.')).toBeTruthy()
+  })
+})
+
+describe('the picker’s row rules', () => {
+  it('marks the collapsed disclosure while the current preset is behind it', () => {
+    // Folding the group away must not hide which mode is in force.
+    expect(presetMenuSelectedId('minimal', false)).toBe(MORE_ROW_ID)
+    // Open, the row itself carries the mark.
+    expect(presetMenuSelectedId('minimal', true)).toBe('minimal')
+    expect(presetMenuSelectedId('tech', false)).toBe('tech')
+  })
+
+  it('omits a group the deployment composes no presets for', () => {
+    const entries = presetMenuEntries({ options: [{ id: 'standard' }], t: translate, moreOpen: false })
+
+    const labels = entries.flatMap(entry => 'type' in entry && entry.type === 'label' ? [entry.text] : [])
+    const rowIds = entries.flatMap(entry => 'type' in entry ? [] : [entry.id])
+
+    expect(labels).toEqual([en.presetPickerIntro, en.presetGroupWork])
+    expect(rowIds).toEqual(['standard'])
+  })
+})
+
+describe('the mode glyph', () => {
+  /** The chip's leading glyph, drawn for one staged preset. */
+  function chipGlyph(current: string): string | undefined {
+    renderSeat({ current })
+    const drawn = screen.getByRole('button').querySelector('svg')?.innerHTML
+    cleanup()
+    return drawn
+  }
+
+  it('follows the mode, and falls back to the generic agent glyph', () => {
+    const standard = chipGlyph('standard')
+
+    expect(chipGlyph('tech')).not.toBe(standard)
+    expect(chipGlyph('ptc')).not.toBe(chipGlyph('business'))
+    // A preset this package does not know keeps the generic glyph.
+    expect(chipGlyph('mine')).toBe(standard)
+  })
+
+  it('draws the same glyph in the session header', () => {
+    const headerGlyph = (id: string): string | undefined => {
+      const { view } = renderLabel({ blank: false, projectionValues: { agentPreset: id } })
+      const drawn = view.container.querySelector('svg')?.innerHTML
+      cleanup()
+      return drawn
+    }
+
+    expect(headerGlyph('tech')).toBe(chipGlyph('tech'))
+    expect(headerGlyph('standard')).not.toBe(headerGlyph('tech'))
   })
 })
 

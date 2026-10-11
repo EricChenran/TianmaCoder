@@ -16,12 +16,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  IconAgentPresetOutlineRegular, IconChevronDownOutlineRegular, IconWarningOutlineRegular, Menu, Toast,
+  IconChevronDownOutlineRegular, IconWarningOutlineRegular, Menu, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the ui-conversation SlotMap merge (the hero seat).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { AgentPresetSeatState } from './seat-store.ts'
 import { presetDisplayText } from './locales.ts'
+import { presetIcon } from './preset-icons.tsx'
+import { MORE_ROW_ID, presetMenuEntries, presetMenuSelectedId } from './preset-menu.tsx'
 import css from './AgentPresetSeat.module.css'
 
 /** Registration-side business face for the hero chip. */
@@ -83,6 +85,9 @@ export function AgentPresetSeat({
   const main = useSessionRetainInfo(info => sessionId === undefined
     || (info?.retainedBy.mainView ?? 0) > 0)
   const [open, setOpen] = useState(false)
+  // The demoted group's disclosure. Local to the menu, and reset with it: the
+  // group is demoted, so a reopened picker starts collapsed.
+  const [moreOpen, setMoreOpen] = useState(false)
   // The seq keys the banner, so picking the same broken preset twice replays
   // it rather than leaving the first one silently in place.
   const toastSeq = useRef(0)
@@ -101,6 +106,7 @@ export function AgentPresetSeat({
   useEffect(() => {
     if (visible) return
     setOpen(false)
+    setMoreOpen(false)
     setToast(null)
   }, [visible])
 
@@ -157,27 +163,22 @@ export function AgentPresetSeat({
     <>
       <Menu
         open={open}
-        onClose={() => { setOpen(false) }}
-        items={state.options.map((option) => {
-          const text = presetDisplayText(option, t)
-          return {
-            id: option.id,
-            // Name and description together: the id alone never says what a
-            // preset does, which is why the roster carries display copy.
-            label: (
-              <span className={css.item}>
-                <span className={css.itemName}>{text.name}</span>
-                <span className={css.itemDesc}>{text.description ?? t('noDescription')}</span>
-              </span>
-            ),
-          }
-        })}
-        selectedId={state.current}
+        onClose={() => { setOpen(false); setMoreOpen(false) }}
+        items={presetMenuEntries({ options: state.options, t, moreOpen })}
+        selectedId={presetMenuSelectedId(state.current, moreOpen)}
         onSelect={(id) => {
+          // The disclosure is not a preset: it opens the group it names and
+          // leaves the picker standing, so the choice inside is one click away.
+          if (id === MORE_ROW_ID) {
+            setMoreOpen(value => !value)
+            return
+          }
           setOpen(false)
+          setMoreOpen(false)
           const picked = state.options.find(option => option.id === id)
-          // The fallback is for the row shape `find` cannot promise; the menu's
-          // items ARE `state.options`, so an emitted id is always one of them.
+          // The fallback is for the row shape `find` cannot promise; every row
+          // the menu offers for a preset comes from `state.options`, so an
+          // emitted id that is not the disclosure is always one of them.
           /* v8 ignore next */
           const name = picked === undefined ? id : presetDisplayText(picked, t).name
           void select(id).then((refusal) => {
@@ -200,9 +201,18 @@ export function AgentPresetSeat({
             aria-expanded={open}
             title={state.error ?? t('seatHint')}
             disabled={state.busy}
-            onClick={() => { setOpen(value => !value) }}
+            onClick={() => {
+              // Closing through the trigger leaves the same state a dismissal
+              // does: the demoted group starts collapsed every time.
+              if (open) setMoreOpen(false)
+              setOpen(value => !value)
+            }}
           >
-            <IconAgentPresetOutlineRegular className={introducing ? `${css.seatIcon} ${css.introIcon}` : css.seatIcon} />
+            {presetIcon(
+              state.current,
+              16,
+              introducing ? `${css.seatIcon} ${css.introIcon}` : css.seatIcon,
+            )}
             <span className={css.seatLabel}>{shownLabel}</span>
             <IconChevronDownOutlineRegular className={css.chevron} />
           </button>
