@@ -34,7 +34,7 @@ bundles:
   - '@tianma/dsh-bundle'
 ```
 
-补丁覆盖的每一行都保留自己的配置块，部署方可独立调参或禁用（`disabled: true`）任一能力，无需改代码。
+随附的 `web` profile 已列出该 bundle，因此上面的片段用于其他 profile 或有序覆盖层。补丁覆盖的每一行都保留自己的配置块，部署方可独立调参或禁用（`disabled: true`）任一能力，无需改代码。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

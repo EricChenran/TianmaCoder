@@ -475,6 +475,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
+      '@tianma/dsh-bundle':
+        specifier: workspace:*
+        version: link:../../packages/tianma/bundle
       commander:
         specifier: ^15.0.0
         version: 15.0.0

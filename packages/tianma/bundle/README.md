@@ -34,7 +34,7 @@ bundles:
   - '@tianma/dsh-bundle'
 ```
 
-Every row the patch overrides keeps its own config block, so a deployment can retune or disable (`disabled: true`) any single capability without touching code.
+The shipped `web` profile already lists the bundle, so this snippet is for another profile or an ordered overlay. Every row the patch overrides keeps its own config block, so a deployment can retune or disable (`disabled: true`) any single capability without touching code.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

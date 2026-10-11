@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/tianma.md
 /tianma-integration-family:
-  en: e029180696c50d0b
-  zh: b233b7026318e2dd
+  en: 1d3d03051fd456de
+  zh: 578ac1752ac223ea
 /tianma-integration-family/why-these-packages-exist:
   en: bc7c7a6306025693
   zh: 54f6c36053c8a014

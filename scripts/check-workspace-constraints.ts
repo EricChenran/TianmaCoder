@@ -230,9 +230,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // resolve at install time, before the build produces lib/bin.js.
   '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
   // Startup and runtime share the advertised URL parser.
-  // The Tianma department presets ship with this bundle as selectable patches;
-  // they stay out of dsh.bundle.patch, which every web profile loads unconditionally.
-  '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js', 'presets/department-tech.patch.yml', 'presets/department-business.patch.yml'],
+  '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js'],
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],
