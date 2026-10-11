@@ -45,6 +45,10 @@ export type {
   ResolvedTargetPolicy,
 } from './types.ts'
 
+/** The default one-shot summarizer, exported for engines that subclass the hook. */
+export { summarizeWithLlm } from './summarizer.ts'
+export type { SummarizationInput, SummaryResult } from './summarizer.ts'
+
 /** Resolve the exact provider/model durably routed for the latest request. */
 function routedTarget(
   session: Session,

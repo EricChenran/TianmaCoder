@@ -17,13 +17,15 @@ import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 // The upstream default one-shot summarizer. `super.summarize` cannot serve as
 // the fallback: the base engine dispatches its hook back to `this.summarize`
 // (summarize is bound dynamically at index.ts), which would re-enter the
-// fidelity override. The plain function IS the upstream behavior.
-import { summarizeWithLlm } from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
-import type { ResolvedConfig } from '@deepseek-ai/dsh-compaction-basic'
+// fidelity override. The plain function IS the upstream behavior. Imported
+// from the package root: the packed artifact carries `lib/` only, so a
+// `/src/*.ts` deep import resolves in the workspace and nowhere else.
+import { summarizeWithLlm } from '@deepseek-ai/dsh-compaction-basic'
 import type {
+  ResolvedConfig,
   SummarizationInput,
   SummaryResult,
-} from '@deepseek-ai/dsh-compaction-basic/src/summarizer.ts'
+} from '@deepseek-ai/dsh-compaction-basic'
 import {
   BlockAssembler,
   LlmError,
