@@ -44,7 +44,7 @@ Windows 普通子进程通过 `windowsHide` 启动私有 Job runner，并为原�
 
 ### 收集输出
 
-收集模式在内存中保留一条流的最后 `maxBytes`——错误与最终结果通常聚集在末尾——并在配置了 `spill` 上限时把完整流追加到 OS 临时目录下每进程目录中的私有文件（`0700` 目录、`0600` 随机命名文件）。某条流大于 spill 上限时，会丢弃不完整的 spill，只返回带截断标记的尾部。读取基于偏移量且从不消费，因此后台读取与批量读取在退出前后都可以共存。
+收集模式在内存中保留一条流的最后 `maxBytes`——错误与最终结果通常聚集在末尾——并在配置了 `spill` 上限时把完整流追加到 OS 临时目录下每进程目录中的私有文件（`0700` 目录、`0600` 随机命名文件）。某条流大于 spill 上限时，会丢弃不完整的 spill，只返回带截断标记的尾部。spill 是尽力而为：当 spill 文件无法打开或追加（每进程目录被临时文件清理工具删除、`EACCES`、`EMFILE`、`ENOSPC`）时，收集器丢弃该 spill，通过插件 logger 记录一条 `error`，并继续收集内存尾部，因此结果带截断标记且没有 spill 路径。读取基于偏移量且从不消费，因此后台读取与批量读取在退出前后都可以共存。
 
 `./output` 导出向进程适配器共享该收集器与保留 spill 的存储。`snapshot()` 返回保留的原始字节及总字节数，使远程适配器能够保留偏移量，而无需转发完整的流。
 
@@ -101,7 +101,6 @@ Linux 普通进程和终端进程即使在 bootstrap 消费启动请求前被取
 | [`src/terminal.ts`](src/terminal.ts) | `node-pty` 终端句柄：Linux scope 绑定、前台检查与 fallback 清理 |
 | [`src/process-inspector.ts`](src/process-inspector.ts) | POSIX 进程树与会话检查 |
 | [`src/windows-inspector.ts`](src/windows-inspector.ts) | 经 koffi 的 Windows Toolhelp32 进程表检查 |
-| — | 不发布运行时不变式伴生入口；除所属 seam 强制执行的约定外，本包不公开独立的事件序列或可变数据关系。 |
 
 ### 主流程
 
@@ -109,7 +108,7 @@ Linux 普通进程和终端进程即使在 bootstrap 消费启动请求前被取
 
 ### 安全不变式
 
-spill 文件以 `0600` 权限、`O_EXCL` 与随机名称在 `0700` 每进程目录下创建，可抵御共享临时目录中的符号链接植入；最终关闭失败时不公布 spill 路径。fallback 进程身份携带启动时间，因此清理绝不会跟随 PID 复用。选定的 native 路径失败时会报告错误，而不会通过 fallback 重放 argv；受管范围只有在清理完成后才从存活集合移除，否则失败仍保持可观察。宿主退出最终清理不创建 Promise 或定时器，保留宿主退出码与诊断，分别包含每个目标的失败，也不会声称已经完全停稳。
+spill 文件以 `0600` 权限、`O_EXCL` 与随机名称在 `0700` 每进程目录下创建，可抵御共享临时目录中的符号链接植入；打开、追加或最终关闭失败时不公布 spill 路径，且绝不中断收集，因为收集运行在流的 `'data'` 监听器内，抛出的错误会杀死宿主进程。fallback 进程身份携带启动时间，因此清理绝不会跟随 PID 复用。选定的 native 路径失败时会报告错误，而不会通过 fallback 重放 argv；受管范围只有在清理完成后才从存活集合移除，否则失败仍保持可观察。宿主退出最终清理不创建 Promise 或定时器，保留宿主退出码与诊断，分别包含每个目标的失败，也不会声称已经完全停稳。
 
 </details>
 
@@ -150,11 +149,13 @@ spill 文件以 `0600` 权限、`O_EXCL` 与随机名称在 `0700` 每进程目�
 - **native ownership 有明确宿主要求**——Linux 需要可读的 user manager 与 `systemd-run --expand-environment=no`；旧版 systemd 使用带告警的 PGID fallback。macOS 因没有受支持的公开 persistent owner，始终使用该 fallback。
 - **native 选择具有有界的每次 spawn 成本**——Linux 会重复检查 bootstrap 入口、libc `execve`/`fcntl` bindings、存活的 user manager 与 literal-argv scope 支持，直到这套完整探测首次成功；后续符合条件的普通命令或终端 spawn 只重新检查存活的 user manager。Windows 会在每次普通 spawn 前重新检查 runner 入口、bindings 与当前 Job 支持。Linux 深度探测的成功状态与 fallback 告警去重会在提供方生命周期内持续保留。所有探测都会在用户命令可能运行前完成，子进程探测的超时为 5 秒。每次 Linux 启动都会创建私有请求目录，以 50 毫秒间隔检查尚未确定的 scope 建立状态；scope 已建立且仍 active 后，查询间隔按指数增长，最多为 5 秒。Windows 普通命令会保留一个 runner 与一条 IPC 通道，直到 Job 报告活动进程数为零。目标会直接继承标准句柄，不使用 named-pipe stdio 或结果文件。
 - **Windows Job inheritance 有明确排除项**——普通后代默认继承 Job，但 breakaway 进程不在保证范围。目标只在 Job 分配后启动；runner 若在 create-to-assignment 极窄区间遭外力终止，可能留下 suspended target。
-- **Windows 终端信号是控制台级的**——SIGINT 以 `\x03` Ctrl-C 输入写入投递，由 conhost 转为控制台级 CTRL_C 事件；SIGTSTP 与 SIGHUP 被拒绝（不可用）；不带 `/F` 的 `taskkill` 无法终止控制台进程，因此拆卸的 TERM 档是 `/F` 升级前的宽限等待。Windows 就绪没有精确的 stdin-wait 档：prompt-marker 快路径把 shell pid 作为伪前台进程组比较，其余由静默与计时档覆盖。
+- **Windows 终端信号是控制台级的**——SIGINT 以 `\x03` Ctrl-C 输入写入投递，由控制台宿主（Windows 上为 node-pty 自带的 OpenConsole）转为控制台级 CTRL_C 事件；SIGTSTP 与 SIGHUP 被拒绝（不可用）；不带 `/F` 的 `taskkill` 无法终止控制台进程，因此拆卸的 TERM 档是 `/F` 升级前的宽限等待。Windows 就绪没有精确的 stdin-wait 档：prompt-marker 快路径把 shell pid 作为伪前台进程组比较，其余由静默与计时档覆盖。
+- **Windows 终端分配依赖 node-pty 自带的控制台宿主资产**——每个 Windows 终端都以 `useConptyDll: true` 启动，分配时按 node-pty 自身 addon 的相对位置解析 `conpty/conpty.dll` 与 `OpenConsole.exe`；资产缺失或解包错误会让 `spawnTerminal` 抛错，而不是回退到操作系统控制台宿主。node-pty 把该选项标为实验性，升级 node-pty 可能改变这一行为。见[自带控制台宿主说明](../../../.agents/notes/implemented/bug-fix/2026-09-28-pty-bundled-console-host.zh.md)。
 - **fallback 终端 ownership 仍依赖观察**——在 macOS 或缺少可用 user-systemd 的 Linux 上，子进程如果在任何前台检查快照之前重新设定父进程，或离开自有终端会话，就可能逃出进程表扫描。本地提供方不会新增持续进程表监视器；受支持的 Linux native 模式改由 scope membership 持有这些后代。
 - **进程内清理要求退出阶段仍能执行 JavaScript**——直接 `process.exit()`、默认未捕获异常和默认未处理 rejection 会发出 Node 同步 `exit` 事件。未安装 handler 时，`SIGTERM`、`SIGINT` 或 `SIGHUP` 的默认 OS 处置不会发出该事件；应用只有安装执行正常 dispose 或调用 `process.exit()` 的 handler 才能覆盖这些信号。`SIGKILL`、fatal OOM、`process.abort()`、native crash、断电，以及任何无法运行 JavaScript 的故障，都需要外部 supervisor、容器 init 或等价的 OS owner 负责。
 - **凭据清除依赖名称启发式规则**——只匹配 `*KEY*`／`*PASSWORD*`／`*SECRET*`／`*TOKEN*`；名称不同的 secret（例如 `*PASSPHRASE*`）会继续传递，对误删变量引入白名单属于已记录的后续工作。
 - **不会删除已完成的 spill 文件**——有界的完整输出恢复文件会在 OS tmpdir 下累积，直到外部机制进行清理；每进程私有 spill 目录仅在未持有任何已完成 spill 文件时于 JavaScript 可观察的退出阶段删除。
+- **被删除的 spill 目录不会重建**——每进程私有目录只创建一次；被外部清理工具删除后，该进程内之后的每次 spill 都降级为内存尾部并记录一条 `error`，直到宿主重启。在 `ENOENT` 时重新创建一个新的随机目录是待办工作。
 
 <a id="dev-note"></a>
 ### 开发备注

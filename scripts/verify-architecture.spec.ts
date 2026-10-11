@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { auditModule, auditRepository, importSources, parsePolicy } from './verify-architecture.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'verify-architecture-'))
-afterAll(() => rmSync(dir, { recursive: true, force: true }))
+afterAll(() =>{  rmSync(dir, { recursive: true, force: true }) })
 
 function fixture(rel: string, content: string): string {
   const path = join(dir, rel)

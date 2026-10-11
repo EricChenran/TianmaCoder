@@ -1,6 +1,46 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for desktop-client-migration-plan.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/desktop-client-migration-plan.md
-desktop-client-migration-plan.md: b2c0bcbb1e06a783794961377887e065deb625c6
-desktop-client-migration-plan.zh.md: 7e24b415ff0d6e6d6c0c0f4cb8021b2735f94642
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document:
+  en: 6f5a25a76aff353e
+  zh: 8e850a3b0d3912aa
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/1-requirement-restatement-and-goals:
+  en: a5a2c76e5ea3b77b
+  zh: a5499c13c7034024
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/1-requirement-restatement-and-goals/goals:
+  en: 6c89e678f1605e1f
+  zh: 1eeb5fbbc6127a29
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/1-requirement-restatement-and-goals/non-goals-explicitly-out-of-scope:
+  en: ceada35c14e8a274
+  zh: 48fc2b3de4fb11d9
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/2-current-state-key-facts:
+  en: de133beb2d4627c2
+  zh: 9dd38f66f4c0a24f
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/3-overall-architecture:
+  en: fb04ebca930a379e
+  zh: ad67c88f3f7ae6b3
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/4-work-breakdown:
+  en: f3e296b23d38a33e
+  zh: 2ab487c40fb50076
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/4-work-breakdown/p0-brand-and-identity-closure-the-main-new-work-of-this-pr:
+  en: a938bd9d67561920
+  zh: a74987354e37481a
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/4-work-breakdown/p1-experience-gap-closure:
+  en: 50bfeb1675351e23
+  zh: a67672f080955990
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/4-work-breakdown/p2-verification-loop-executed-after-review-approval:
+  en: 498d0059dbd46dc9
+  zh: 127ed3d5f0205334
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/4-work-breakdown/p3-release-pipeline-later-pr:
+  en: c25d8c4447485f67
+  zh: 5277eb67d2d495a6
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/5-risks-and-mitigations:
+  en: 8e54d4a4766a42fe
+  zh: 81c3015c051bc6a4
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/6-acceptance-criteria:
+  en: d5ab3fbc0fb505ff
+  zh: 4602a673fafcfd16
+/tianmacoder-web-electron-desktop-client-migration-design-pr-document/7-implementation-order-and-commit-split:
+  en: e643cb8f15217028
+  zh: e29645c98e788236

@@ -43,8 +43,8 @@ export function importSources(source: string): string[] {
   const from = /import\s+(?:type\s+\{\}|type\s+[^'";\n]+|\{[^}]*\}|[\w$*\s,]+?)\s+from\s+['"]([^'"]+)['"]/g
   const bare = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g
   return [
-    ...[...source.matchAll(from)].map(match => match[1]!),
-    ...[...source.matchAll(bare)].map(match => match[1]!),
+    ...[...source.matchAll(from)].flatMap(match => match[1] === undefined ? [] : [match[1]]),
+    ...[...source.matchAll(bare)].flatMap(match => match[1] === undefined ? [] : [match[1]]),
   ]
 }
 
@@ -53,7 +53,7 @@ export function seamKey(specifier: string): string | undefined {
   if (specifier === '@deepseek-ai/cordis') return 'cordis'
   if (specifier === '@deepseek-ai/schemastery') return 'schemastery'
   const match = specifier.match(/^@deepseek-ai\/(dsh-[\w-]+)/)
-  return match === null ? undefined : match[1]!
+  return match?.[1]
 }
 
 /**

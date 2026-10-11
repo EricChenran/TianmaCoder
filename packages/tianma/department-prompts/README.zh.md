@@ -162,7 +162,7 @@ kind: "package-reference"
 - **技能里的 `scripts/lib/` 要强制入仓**——仓库级 `.gitignore` 忽略所有 `lib/` 目录，因此新增或改动该目录下的文件必须 `git add -f`；漏掉的话仓库与随包副本会缺那五个模块，`webdemo.mjs` 直接起不来。
 
 <a id="dev-note"></a>
-### 开发注记
+### 开发备注
 
 <details>
 <summary>为什么规则是提示词节而不是技能</summary>

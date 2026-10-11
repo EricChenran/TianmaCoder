@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/README.md
-README.md: 303828df60e9b32afee5e5e14e4450d10776a669
-README.zh.md: a719d943003778d31b1a39213fbea347e067b0a4
+/:
+  en: 486332a81ebbb276
+  zh: b5c1b95c3bbfe7fe
+/tianma-tianma-integration-family:
+  en: 0ab6d7d911b2d8fa
+  zh: eb6bca63d86e0043
+/tianma-tianma-integration-family/summary:
+  en: da89f3ad5314a1a1
+  zh: 8580fa6add79b526
+/tianma-tianma-integration-family/table-of-contents:
+  en: 4ef5a52ceabbbdf3
+  zh: 12dc027999dece6e
+/tianma-tianma-integration-family/packages:
+  en: f394ce1dd26c603a
+  zh: 56f9956e39c10008
+/tianma-tianma-integration-family/composition:
+  en: 7653781759f7c270
+  zh: ca5f141f0f9a8bcd
+/tianma-tianma-integration-family/dev-note:
+  en: f2ccb21e53f0769d
+  zh: 8bea0a723ecc9f40

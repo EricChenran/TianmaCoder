@@ -14,6 +14,13 @@
     "types": ["node"]
   },
   "include": [
+    // The native/renderer keyboard fixture imports only these Cordis-free Desktop modules.
+    "apps/desktop/tests/keyboard.spec.ts",
+    "apps/desktop/src/keyboard.ts",
+    "apps/desktop/src/keybindings.ts",
+    "apps/desktop/src/browser-guests.ts",
+    "apps/desktop/src/ipc.ts",
+    "apps/desktop/src/update-overlay.ts",
     "apps/desktop/tests/**/*.client.spec.tsx",
     // Source-subpath test imports can arrive through workspace links whose
     // realpath semantics vary by host. Load package CSS declarations directly.
@@ -33,6 +40,7 @@
     "packages/client/tsdown.client.ts",
     "scripts/client-build-environment.ts",
     "scripts/bundle-input-isolation.ts",
+    "scripts/experimental-package-policy.ts",
     "scripts/*.client.spec.ts",
     "scripts/client-bundle-css.spec.ts",
     "scripts/client-bundle-purity.spec.ts"
@@ -44,8 +52,12 @@
     "packages/client/*/tests/**/*.host.spec.ts"
   ],
   "references": [
+    { "path": "./packages/experimental/client-ui-cot-translation/tsconfig.client.json" },
+    { "path": "./packages/client/product-analytics/tsconfig.client.json" },
     { "path": "./apps/desktop/tsconfig.client.json" },
+    { "path": "./packages/util/atomic-write" },
     { "path": "./packages/experimental/client-ui-voice-input" },
+    { "path": "./packages/experimental/client-ui-claude-code-mods" },
 
     { "path": "./packages/client/ui-sidebar-terminal" },
     { "path": "./packages/api/terminal-controller/tsconfig.client.json" },
@@ -65,6 +77,7 @@
     { "path": "./packages/client/ui-primitives" },
     { "path": "./packages/client/modules" },
     { "path": "./packages/experimental/inspector/tsconfig.client.json" },
+    { "path": "./packages/experimental/session-inspector" },
     { "path": "./packages/client/hmr" },
     { "path": "./packages/client/connection/tsconfig.client.json" },
     { "path": "./packages/client/file-upload/tsconfig.client.json" },
@@ -78,6 +91,8 @@
     { "path": "./packages/tianma/oa-account-ui" },
     { "path": "./packages/test-support/client-runtime" },
     { "path": "./packages/test-support/remote-mock" },
+    { "path": "./packages/client/shortcuts/tsconfig.client.json" },
+    { "path": "./packages/client/ui-shortcuts" },
     { "path": "./packages/client/ui-layout" },
     { "path": "./packages/client/ui-sidebar" },
     { "path": "./packages/client/ui-brand-official" },
@@ -112,6 +127,7 @@
     { "path": "./packages/client/ui-settings-plugins" },
     { "path": "./packages/client/ui-settings-shell" },
     { "path": "./packages/client/ui-settings-agent-loop" },
+    { "path": "./packages/client/ui-settings-session-log" },
     { "path": "./packages/client/ui-settings-subagent" },
     { "path": "./packages/client/ui-settings-web-search" },
     { "path": "./packages/client/ui-user-questions" },
@@ -122,7 +138,7 @@
     { "path": "./packages/client/ui-settings/tsconfig.client.json" },
     { "path": "./packages/client/ui-settings-general/tsconfig.client.json" },
     { "path": "./packages/client/ui-settings-models" },
-    { "path": "./packages/client/ui-plugin-manager" },
+    { "path": "./packages/client/ui-plugin-manager/tsconfig.client.json" },
     { "path": "./packages/client/ui-settings-plugin-inventory" },
     { "path": "./packages/client/locale/tsconfig.client.json" },
     { "path": "./packages/client/ui-renderer" },

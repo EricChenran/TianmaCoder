@@ -32,7 +32,7 @@ export interface HookTrustService {
   /**
    * Evaluate one hook command.
    * @param command - the hook command string.
-   * @param source - provenance recorded with a decision.
+   * @param source - the caller that recorded the decision.
    * @returns the admission decision.
    */
   evaluate(command: string, source: string): TrustDecision
@@ -40,7 +40,7 @@ export interface HookTrustService {
    * Record a decision for one hook command.
    * @param command - the hook command string.
    * @param state - the decision.
-   * @param source - provenance recorded with the decision.
+   * @param source - the caller that recorded the decision.
    */
   decide(command: string, state: 'approved' | 'denied', source: string): void
   /** Whether one command has any record. */

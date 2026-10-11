@@ -15,7 +15,7 @@ import { delimiter, extname, isAbsolute, resolve } from 'node:path'
 import type { Duplex } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
 import type * as NodePty from 'node-pty'
-import type { IPtyForkOptions } from 'node-pty'
+import type { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty'
 import { createLazyRequire } from '@deepseek-ai/dsh-lazy-require'
 import { SubprocessRuntime, SubprocessExecutableNotFoundError } from '@deepseek-ai/dsh-subprocess'
 import type {
@@ -31,7 +31,7 @@ import {
   spawnSubprocess,
   validateSubprocessSpec,
 } from './spawn.ts'
-import { prepareManagedProcessBinding } from './output.ts'
+import { logSpillFailure, prepareManagedProcessBinding } from './output.ts'
 import type { LocalSubprocessHandle, SpawnInternals } from './spawn.ts'
 import {
   launchLinuxScope,
@@ -83,6 +83,9 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
       }
     }, 'local subprocess teardown')
   }
+
+  /** Spill failures reach the plugin logger; the log line is the only trace of why a result has no spill path. */
+  private readonly reportSpillFailure = logSpillFailure(this.ctx.logger, 'subprocess-local')
 
   private terminateForHostExit(): void {
     for (const handle of this.live) {
@@ -181,10 +184,11 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     const env = targetEnvironment(spec)
     const containmentMode = this.selectContainmentMode('ordinary')
     let handle: LocalSubprocessHandle
+    const internals: SpawnInternals = { ...this.internals, onSpillFailure: this.reportSpillFailure }
     if (containmentMode === 'fallback') {
-      handle = spawnSubprocess(spec, this.internals)
+      handle = spawnSubprocess(spec, internals)
     } else {
-      const binding = prepareManagedProcessBinding(this.internals)
+      const binding = prepareManagedProcessBinding(internals)
       const launch = containmentMode === 'linux-scope'
         ? launchLinuxScope(spec, env)
         : launchWindowsJob(spec, env)
@@ -266,14 +270,20 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     const inspector = this.terminalInspector ?? createProcessInspector()
     const containmentMode = this.selectContainmentMode('terminal')
     const env = targetEnvironment(spec)
-    const activity = prepareShellActivity(spec, env, this.internals.platform ?? process.platform)
+    const platform = this.internals.platform ?? process.platform
+    const activity = prepareShellActivity(spec, env, platform)
     const launch = activity === undefined ? spec : { ...spec, argv: activity.argv, env: activity.env }
-    const options: IPtyForkOptions = {
+    const options: IPtyForkOptions | IWindowsPtyForkOptions = {
       name: spec.terminalType,
       rows: spec.rows,
       cols: spec.cols,
       cwd: spec.cwd,
       env: { ...activity?.env ?? env, TERM: spec.terminalType },
+      // Windows' own console host (the standby pool runs Server 2022 and
+      // Windows 10 22H2) renders the persistent-pwsh prompt tail in a form the
+      // readiness path cannot match; the console host node-pty ships emits it
+      // verbatim, see [Agent Note](../../../../.agents/notes/implemented/bug-fix/2026-09-28-pty-bundled-console-host.md).
+      ...(platform === 'win32' ? { useConptyDll: true } : {}),
     }
     let scope: ReturnType<typeof prepareLinuxTerminalScope> | undefined
     let terminal: NodePty.IPty
@@ -305,7 +315,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
       terminal,
       inspector,
       spec.graceMs,
-      this.internals.platform ?? process.platform,
+      platform,
       owner,
       scope?.resolveOutcome,
       activity,

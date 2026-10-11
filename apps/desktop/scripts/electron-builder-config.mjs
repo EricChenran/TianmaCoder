@@ -1,7 +1,8 @@
+import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
 import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -50,7 +51,6 @@ export function createElectronBuilderConfig(
   preparedRuntimeVersion = undefined,
 ) {
   const appId = resolveDesktopAppId(env)
-  const policy = resolveDesktopPolicyEnvironment(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
@@ -58,12 +58,12 @@ export function createElectronBuilderConfig(
     throw new Error('desktop package: DSH_DESKTOP_UNSIGNED must be 0 or 1')
   }
   const unsigned = env.DSH_DESKTOP_UNSIGNED === '1'
-  if (unsigned && resolvedPlatform !== 'win32') throw new Error('desktop package: unsigned builds require Windows')
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
+  const policy = packagesMacOS && unsigned ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
-  const macOSSigning = packagesMacOS ? resolveMacOSSigningEnvironment(env) : undefined
-  if (packagesMacOS) resolveMacOSNotarizationEnvironment(env)
+  const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
+  if (packagesMacOS && !unsigned) resolveMacOSNotarizationEnvironment(env)
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
   let primaryRuntimeDestination
   let dshDestination
@@ -101,12 +101,13 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'TianmaCoder', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
-      dshMandatoryUpdatePolicy: policy,
+      ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
     productName: 'TianmaCoder',
-    artifactName: 'tianmacoder-${version}-${os}-${arch}.${ext}',
+    // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
+    artifactName: `tianmacoder-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
     asar: true,
     electronDist: buildPaths.electron,
@@ -129,6 +130,7 @@ export function createElectronBuilderConfig(
       'lib/welcome/**/*',
       'lib/preload-app.cjs',
       'lib/preload-mandatory.cjs',
+      'lib/preload-platform-account.cjs',
       'lib/preload-update-dialog.cjs',
       'lib/preload-welcome.cjs',
       'renderer/**/*',
@@ -141,26 +143,35 @@ export function createElectronBuilderConfig(
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
       { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
+      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
     ],
     mac: {
       icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
       category: 'public.app-category.developer-tools',
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: { CFBundleLocalizations: ['en', 'zh_CN'] },
-      identity: macOSSigning?.signingIdentity,
-      forceCodeSigning: true,
+      // Ad-hoc signing keeps the modified Electron executable runnable without a Developer ID.
+      identity: unsigned ? '-' : macOSSigning?.signingIdentity,
+      forceCodeSigning: !unsigned,
       hardenedRuntime: true,
       extendInfo: { NSMicrophoneUsageDescription: 'TianmaCoder uses your microphone to transcribe speech into message drafts.' },
-      // ASAR-unpacked native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.
+      entitlements: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
+      entitlementsInherit: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
+      // Prepared runtime files retain their signatures; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
-      notarize: true,
-      target: ['dmg', 'zip'],
+      notarize: !unsigned,
+      target: unsigned ? ['dmg'] : ['dmg', 'zip'],
     },
     dmg: {
-      sign: true,
+      sign: !unsigned,
       writeUpdateInfo: false,
     },
     beforePack: async context => {
+      const office = await officePackageDirectories(buildPaths.dsh, { platform: resolvedPlatform, arch: resolvedArch })
+      const patterns = office.map(directory => `**/${relative(buildPaths.dsh, directory).split(sep).join('/')}/**/*`)
+      const existing = context.packager.config.asarUnpack ?? []
+      context.packager.config.asarUnpack = [...(typeof existing === 'string' ? [existing] : existing), ...patterns]
       if (packagesWindows) windowsCode = await prepareWindowsAsarUnpack(context, buildPaths.dsh)
       if (windowsSigner !== undefined) {
         primaryRuntimeDestination = join(context.appOutDir, 'resources', 'runtime', 'primary-runtime')
@@ -193,7 +204,7 @@ export function createElectronBuilderConfig(
         })
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
       }
-      if (context.electronPlatformName !== 'darwin') return
+      if (context.electronPlatformName !== 'darwin' || unsigned) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
       if (update !== undefined) {
         await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
@@ -202,7 +213,7 @@ export function createElectronBuilderConfig(
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
-      if (!artifact.file.endsWith('.dmg')) return
+      if (unsigned || !artifact.file.endsWith('.dmg')) return
       return notarizeMacOSDiskImageArtifact(
         artifact,
         env,

@@ -22,7 +22,7 @@ export type { CalibrationFactorSnapshot } from './factor.ts'
 
 /** Persisted document shape. */
 export interface CalibrationPersisted {
-  readonly version: 1
+  readonly version: number
   readonly factor: CalibrationFactorSnapshot
 }
 
@@ -41,7 +41,11 @@ export interface UsageSample {
  */
 export function scanSessionUsages(events: ReadonlyArray<{
   type: string
-  data: { message?: { stream?: ReadonlyArray<{ type: string; usage?: { totalTokens?: number; inputTokens?: number; outputTokens?: number } }> } }
+  data: {
+    message?: {
+      stream?: ReadonlyArray<{ type: string; usage?: { totalTokens?: number; inputTokens?: number; outputTokens?: number } }>
+    }
+  }
 }>): UsageSample[] {
   const samples: UsageSample[] = []
   for (const event of events) {
@@ -134,6 +138,7 @@ export class UsageCalibrator {
    * @returns how many samples were recorded.
    */
   recordSession(session: Session, estimateTokens: (index: number) => number): number {
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing synchronous read; migration to the async reader is deferred.
     const samples = scanSessionUsages(session.snapshotEvents() as never)
     samples.forEach((sample, index) => {
       this.record(estimateTokens(index), sample.totalTokens)

@@ -119,9 +119,9 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.effect(() => {
     const meter = ctx.tokenMeter
-    const original = meter.measure
+    const original = meter.measure.bind(meter)
     meter.measure = (session: Session, requestHeader) => {
-      const measurement = original.call(meter, session, requestHeader)
+      const measurement = original(session, requestHeader)
       const multiplier = calibrator.sessionMultiplier(session)
       return multiplier === 1 ? measurement : rescaleMeasurement(measurement, multiplier)
     }

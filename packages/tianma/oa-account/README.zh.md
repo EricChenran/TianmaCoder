@@ -108,7 +108,7 @@ kind: "package-reference"
 - **资料写入覆盖账户所有者可改的字段**（`name`、`phone`、`avatar`）；改密码是后端另一条流程，未实现。
 
 <a id="dev-note"></a>
-### 开发者注记
+### 开发备注
 
 <details>
 <summary>维护者工作背景 —— 点击展开</summary>

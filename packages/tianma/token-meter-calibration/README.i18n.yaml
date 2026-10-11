@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/token-meter-calibration/README.md
-README.md: 9851d326558c425962a0e120656a028da4d696f9
-README.zh.md: 909f495057a0a42ead3a7bc8ecc959a92d9f1762
+/:
+  en: 0545ea16aea0d718
+  zh: 29ee5f0fd1786d4e
+/tianma-dsh-token-meter-calibration:
+  en: 077a8349e5f83911
+  zh: 75b7f28ce4985497
+/tianma-dsh-token-meter-calibration/summary:
+  en: 4c11d9447a5f3593
+  zh: 4190274cba2b4738
+/tianma-dsh-token-meter-calibration/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-token-meter-calibration/use-this-package:
+  en: a32a970eda57ec1d
+  zh: c9f143609b0e95c1
+/tianma-dsh-token-meter-calibration/understand-the-implementation:
+  en: 058da2ed8edbbd5b
+  zh: 9921fcb796a1a7ee
+/tianma-dsh-token-meter-calibration/understand-the-implementation/source-map:
+  en: 5465c941830e816e
+  zh: dd1f718603b2f801
+/tianma-dsh-token-meter-calibration/understand-the-implementation/invariant-ownership:
+  en: 92fef2005c7a22ca
+  zh: 906fad2a00629744
+/tianma-dsh-token-meter-calibration/further-exploration:
+  en: ae73344b3adf7cd3
+  zh: 9b3fd4186ec34562
+/tianma-dsh-token-meter-calibration/model-experience:
+  en: c39d41c207599497
+  zh: 4135d93f2d5bdd5e
+/tianma-dsh-token-meter-calibration/model-experience/kv-cache-effect:
+  en: 8120de2e0e695870
+  zh: fd4e21418e46531d
+/tianma-dsh-token-meter-calibration/known-limitations-and-deferred-work:
+  en: ec2301dba58e158c
+  zh: 6d51a6f7b5d81a56
+/tianma-dsh-token-meter-calibration/known-limitations-and-deferred-work/dev-note:
+  en: a9c86b949acfc739
+  zh: fdc87c2d3a19448e

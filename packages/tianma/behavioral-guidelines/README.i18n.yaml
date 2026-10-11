@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/behavioral-guidelines/README.md
-README.md: a248b4eb0fe6c5c7829aa520edf81ec26adef31e
-README.zh.md: 0fa7558aa9737d38c9f0e06e6f77787f93e8fb66
+/:
+  en: d9d1285b2442e270
+  zh: 4ab14cd361db4837
+/tianma-dsh-behavioral-guidelines:
+  en: 139be22751dd30fc
+  zh: 0887d1b786903c28
+/tianma-dsh-behavioral-guidelines/summary:
+  en: 25d8d492c7af281d
+  zh: 80d037ecfbc1e9d3
+/tianma-dsh-behavioral-guidelines/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-behavioral-guidelines/use-this-package:
+  en: a0322f3ade9a8d4d
+  zh: c703842a47938d9f
+/tianma-dsh-behavioral-guidelines/understand-the-implementation:
+  en: 1f6a3db5aa39cf95
+  zh: 44c4a088199181f0
+/tianma-dsh-behavioral-guidelines/understand-the-implementation/source-map:
+  en: 1c7f13ea613d99de
+  zh: c77d2e4d637de921
+/tianma-dsh-behavioral-guidelines/understand-the-implementation/invariant-ownership:
+  en: 79dc581300af15e8
+  zh: 9044a15cb0e6868f
+/tianma-dsh-behavioral-guidelines/further-exploration:
+  en: 173c57934c64bef2
+  zh: 604dcf8f85278d84
+/tianma-dsh-behavioral-guidelines/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-behavioral-guidelines/model-experience/behavioral-section:
+  en: 98b4c276deb348c6
+  zh: 05e69f177d674faa
+/tianma-dsh-behavioral-guidelines/model-experience/behavioral-section/what-the-model-sees:
+  en: 68bb15c90ea87e2a
+  zh: 308399fc721011ab
+/tianma-dsh-behavioral-guidelines/model-experience/behavioral-section/token-effect:
+  en: da27135f00a33df2
+  zh: 37cc6530ea7db315
+/tianma-dsh-behavioral-guidelines/model-experience/behavioral-section/kv-cache-effect:
+  en: 5c23291454aa539b
+  zh: 61217f94576800a2
+/tianma-dsh-behavioral-guidelines/known-limitations-and-deferred-work:
+  en: 3574e49d8d1f72e5
+  zh: 4854e4acc96b5e2f
+/tianma-dsh-behavioral-guidelines/known-limitations-and-deferred-work/dev-note:
+  en: 90453bfe5cdf5f1b
+  zh: 9794b733a1d62889

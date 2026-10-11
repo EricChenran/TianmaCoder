@@ -44,11 +44,11 @@ export interface Config {
 export function apply(ctx: Context, config: Config = {}): void {
   const maxChars = config.maxChars ?? 4_096
   ctx.on('agent/created', ({ agent }) => {
-    const systemPrompt = (agent.ctx as Context).systemPrompt
-    if (systemPrompt === undefined) return
+    const systemPrompt = agent.ctx.systemPrompt
     systemPrompt.context({
       name: SECTION_NAME,
       order: SECTION_ORDER,
+      // oxlint-disable-next-line typescript/no-deprecated -- Existing synchronous read; migration to the async reader is deferred.
       text: () => renderRehydrationSection(buildFileStateView(agent.session.snapshotEvents()), maxChars),
     })
   })

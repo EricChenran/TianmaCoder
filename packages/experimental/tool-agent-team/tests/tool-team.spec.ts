@@ -21,6 +21,7 @@ import { resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
 import { serialize } from '@deepseek-ai/dsh-llm-deepseek/src/serialize.ts'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { mountWorkingDirectoryFixture } from '../../../subagent/subagent/tests/working-directory-fixture.ts'
 import TeamService from '../../agent-team/src/index.ts'
 import * as toolTeam from '../src/index.ts'
 
@@ -67,6 +68,7 @@ async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legac
   const ctx = new Context()
   contexts.add(ctx)
   await mountAgentLoopTestDependencies(ctx)
+  await mountWorkingDirectoryFixture(ctx)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
@@ -200,6 +202,7 @@ describe('dsh-tool-team', () => {
     expect(JSON.parse(text(tasks))).toMatchObject({ tasks: [{ id: task.id, ownerName: member.target }] })
     const sent = await execute(ctx, lead, 'send_message', { target: member.target, message: 'review the diff' })
     expect(sent.isError).toBe(false)
+    expect(JSON.parse(text(sent))).toEqual({ sent: true })
     const interrupted = await execute(ctx, lead, 'interrupt_agent', { target: listed[1]!.target })
     expect(interrupted.isError).toBe(false)
     await child.whenIdle()
@@ -238,12 +241,12 @@ describe('dsh-tool-team', () => {
     expect(renderPrompt(childAssembly)).toBe(leadPrompt)
     expect(renderContextSnapshot(childAssembly)).not.toContain('team:identity')
     expect(child.session.deriveMessages().some(message => message.content.some(block =>
-      block.type === 'text' && block.text === '<system-reminder>\nYou are teammate "tool-worker".\n</system-reminder>\n\n'))).toBe(true)
+      block.type === 'text' && block.text === '<system-reminder>\nYou are teammate "tool-worker".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n'))).toBe(true)
     const initialPrompt = child.session.snapshotEvents().find(event => event.type === 'user/message'
       && event.data.source.kind === 'user')
     expect(initialPrompt?.type === 'user/message'
       ? initialPrompt.data.content.flatMap(block => block.type === 'text' ? [block.text] : [])
-      : []).toEqual(['<system-reminder>\nYou are teammate "tool-worker".\n</system-reminder>\n\n', 'stay available'])
+      : []).toEqual(['<system-reminder>\nYou are teammate "tool-worker".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n', 'stay available'])
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
       name: 'nested', description: 'not allowed', prompt: 'no',
@@ -279,14 +282,14 @@ describe('dsh-tool-team', () => {
       expect(JSON.stringify(childRequest.messages)).not.toContain('Parent task')
     }
     expect(childRequest.messages.at(-1)?.content.slice(0, 2)).toEqual([
-      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\n</system-reminder>\n\n' },
+      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n' },
       { type: 'text', text: 'Review the work' },
     ])
     await using persisted = await ctx.sessionPersistence.open(childId, 'read')
     const { events } = await persisted.read()
     const initial = events.findLast(event => event.type === 'user/message' && event.data.source.kind === 'user')
     expect(initial?.type === 'user/message' ? initial.data.content : []).toEqual([
-      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\n</system-reminder>\n\n' },
+      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n' },
       { type: 'text', text: 'Review the work' },
     ])
   })
@@ -377,7 +380,7 @@ describe('dsh-tool-team', () => {
     })
     const childId = spawnedChildId(ctx, lead, spawned)
     await waitNoAgent(ctx, childId)
-    const reminder = '<system-reminder>\nYou are teammate "reviewer".\n</system-reminder>\n\n'
+    const reminder = '<system-reminder>\nYou are teammate "reviewer".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n'
     const first = serializeRequest(adapter.requests[0]!).messages
     expect(first.at(-1)?.content.slice(0, 2)).toEqual([{ type: 'text', text: reminder }, { type: 'text', text: 'Review the work' }])
     expect(adapter.requests[1]!.messages.filter(message => message.content.some(block =>
@@ -419,7 +422,7 @@ describe('dsh-tool-team', () => {
     expect(spawned.isError, text(spawned)).toBe(false)
     await waitNoAgent(ctx, spawnedChildId(ctx, lead, spawned))
     expect(serializeRequest(adapter.requests[0]!).messages.at(-1)?.content).toEqual([
-      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\n</system-reminder>\n\n' },
+      { type: 'text', text: '<system-reminder>\nYou are teammate "reviewer".\nYour Team Lead is named "lead".\nUse list_agents({}) to find your teammates and their names.\nTo message your Team Lead, use send_message({ target: "lead", message: "..." }).\nTo message another teammate, use send_message({ target: "<teammate name>", message: "..." }).\n</system-reminder>\n\n' },
       { type: 'text', text: 'Review the work' },
     ])
   })
@@ -481,10 +484,10 @@ describe('dsh-tool-team', () => {
     expect(text(roster)).toBe(JSON.stringify(JSON.parse(text(roster))))
     const peer = await execute(ctx, child, 'send_message', { target: 'lead', message: 'progress report' })
     expect(peer.isError).toBe(false)
-    expect(JSON.parse(text(peer))).toMatchObject({ status: 'accepted' })
+    expect(JSON.parse(text(peer))).toEqual({ sent: true })
     const followup = await execute(ctx, child, 'send_message', { target: 'lead', message: 'review the report' })
     expect(followup.isError).toBe(false)
-    expect(JSON.parse(text(followup))).toMatchObject({ status: 'accepted' })
+    expect(JSON.parse(text(followup))).toEqual({ sent: true })
     await lead.whenIdle()
 
     const created = await execute(ctx, lead, 'team_task_create', {
@@ -663,7 +666,8 @@ describe('dsh-tool-team', () => {
     toolTeam.apply(ctx, {})
     expect((await assembly(ctx, lead)).tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
-    const ordinary = await ctx.subagents.startContinuable({
+    const ordinary = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'ordinary child',
       request: { prompt: [{ type: 'text', text: 'finish' }], parent: lead },
@@ -693,7 +697,7 @@ describe('dsh-tool-team', () => {
       content: [{ type: 'text', text: 'resume with Team scope' }],
       signal: SIGNAL,
     })
-    expect(receipt.status).toBe('accepted')
+    expect(receipt.messageId).toEqual(expect.any(String))
     const resumed = await waitRunning(ctx, childId)
     expect((await assembly(ctx, resumed)).tools.map(schema => schema.name)
       .filter(name => TOOL_NAMES.includes(name)).sort()).toEqual(TOOL_NAMES)

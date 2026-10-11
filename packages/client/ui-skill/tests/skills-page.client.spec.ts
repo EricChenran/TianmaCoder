@@ -112,7 +112,7 @@ async function harness(options: {
   const invalidateCatalog = vi.fn()
   const openSkillFile = vi.fn()
   const ports: SkillsPagePorts = { loadCatalog, invalidateCatalog, openSkillFile }
-   let page: SkillsPageController | undefined
+  let page: SkillsPageController | undefined
   const fiber = ctx.plugin({ inject: [], apply: (scope) => { page = new SkillsPageController(scope, ports) } })
   const dispose = async (): Promise<void> => { await fiber.dispose() }
   onTestFinished(dispose)

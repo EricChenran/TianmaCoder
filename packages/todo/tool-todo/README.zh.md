@@ -71,7 +71,7 @@ agent 每次更新都发送完整列表；新列表替换旧列表，因此没�
 
 - **整表替换、日志承载状态。** 模型重新发送整个列表；`todo/write` 快照存放在事件溯源的会话日志上，持久性、回放与恢复重建都来自日志而非服务。
 - **单一所有者。** 列表属于调用 agent 会话；不存在共享或 swarm 作用域，非 agent 调用方会被拒绝。
-- **部署策略，而非编码规则。** `allowParallelInProgress` 是必填组合选择，因为工具无法观测运行时并发；持久日志不变式刻意不跟随它，因此一种策略下写入的日志在切换到另一种策略后仍可回放。
+- **部署策略，而非编码规则。** `allowParallelInProgress` 是必填组合选择，因为工具无法观测运行时并发。
 - **校验确保日志快照如实反映输入。** schema 层拒绝未知键、`execute` 层拒绝空或重复 content，使持久快照与模型自认为写入的内容一致。
 
 [todo_write 工具 Agent Note](../../../.agents/notes/archived/feature/2026-06-29-todo-write-tool.md) 记录原始设计与备选方案；[并行 in-progress Agent Note](../../../.agents/notes/archived/feature/2026-07-26-todo-parallel-in-progress.md) 记录该策略决策。
@@ -83,7 +83,6 @@ agent 每次更新都发送完整列表；新列表替换旧列表，因此没�
 | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、工具注册、`todos` 投影单元 |
 | [`src/types.ts`](src/types.ts) | `todos` 投影键声明及其载荷类型的唯一归属地 |
 | [`src/client.ts`](src/client.ts) | 客户端命名空间对类型出口的再导出 |
-| [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件：校验持久整表快照与开放轮次归属 |
 
 ### 导出形状
 
@@ -94,10 +93,6 @@ agent 每次更新都发送完整列表；新列表替换旧列表，因此没�
 当组合挂载 `ctx.sessionProjections`（[`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.zh.md)）时，本包在注入的子插件中注册 `todos` 单元：投影即有效计划——最新的整份 `todo/write` 列表，首次写入前为 `null`，下一轮次开始时清空，而 `turn/end` 保留刚完成的清单。该键在此处合并进 `SessionProjectionMap`；载体通过历史尾页与 `session/projection` 推送帧提供该值。未挂载注册表的组合不受影响；单元注册见 [src/index.ts](src/index.ts)。
 
 它旁边还注册第二个单元 `todoStaleness`，即该计划与已完成工作之间的偏差——自最近一次写入以来提交的步数，以及清单是否仍有未完成条目。无人更新的清单会被读作当前状态，而没有任何折叠能判断工作究竟推进到哪一条：条目不具备可供工具调用匹配的身份。这个标记就是载体能给出的诚实信号。它在每个步边界重新发布（每步一个整数），并在轮次开始时与它所描述的 `todos` 值一起回到 `{ stepsSinceWrite: 0, unfinished: false }`。已全部完成的清单一律报告 `unfinished: false`，无论多旧，因此完成的清单不会触发该标记。
-
-### 持久日志不变式
-
-不变式伴生插件注册到 `ctx.invariants`，先分别校验既有会话与新公布会话一次，再为实时追加推进按会话提交的轮次轨迹。它会拒绝畸形条目、空或重复 content、未知状态，以及开放轮次之外的持久 `todo/write`；核心 session 通用处理声明合并事件，而本生产包拥有 todo 专用规则。它刻意不约束有多少条目处于 `in_progress`，因为那是工具按部署制定的策略，而非持久数据规则。
 
 ### 调用机制
 
@@ -128,7 +123,7 @@ agent 每次更新都发送完整列表；新列表替换旧列表，因此没�
 
 #### 模型看到什么
 
-模型会看到生成的 [`todo_write` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-todo)：一个对象，含一个必填的 `todos` 数组，元素为 `{ content, status }`，其中 `status` 为 `pending`、`in_progress` 或 `completed`。描述是组合后的整表指令，其活跃状态条款跟随 `allowParallelInProgress`。
+模型会看到生成的 [`todo_write` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-todo)：一个对象，含一个必填的 `todos` 数组，元素为 `{ content, status }`，其中 `status` 为 `pending`、`in_progress` 或 `completed`。`todos` 描述说明每次调用都会替换整个列表；工具描述中的活跃状态条款跟随 `allowParallelInProgress`。
 
 #### Token 影响
 

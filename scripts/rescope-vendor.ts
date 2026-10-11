@@ -91,6 +91,31 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx', upstream: ['cordis'] },
   { file: 'packages/client/ui-agent-preset/src/client/PresetGuideDialog.tsx', upstream: ['cordis'] },
   { file: 'packages/client/ui-agent-preset/src/client/index.ts', upstream: ['cordis'] },
+  // The end-to-end specs assert the shipped agent-preset ids, where `cordis`
+  // names the preset rather than a package reference.
+  { file: 'apps/cli/tests/optional-bundle-transitions.e2e.ts', upstream: ['cordis'] },
+  { file: 'apps/web/tests/agent-preset-selection.e2e.ts', upstream: ['cordis'] },
+  { file: 'apps/web/tests/developer-tools-settings.e2e.ts', upstream: ['cordis'] },
+  // Three identifier classes keep the bare name legitimately: the `cordis`
+  // agent-preset id, the `cordis/inspect-*` event names, and the short labels
+  // the architecture gate returns for a specifier. Renaming any of them would
+  // rewrite product data rather than a package reference.
+  { file: 'docs/subsystems/schedule.md', upstream: ['cordis'] },
+  { file: 'docs/subsystems/schedule.zh.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.md', upstream: ['cordis'] },
+  { file: 'docs/upgrade-guide/v0.2.0-rc.2/schedule-bundle-retired/guide.zh.md', upstream: ['cordis'] },
+  { file: 'docs/user/guide/schedule.md', upstream: ['cordis'] },
+  { file: 'docs/user/guide/schedule.zh.md', upstream: ['cordis'] },
+  { file: 'packages/bundle/web-app/cordis.patch.yml', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/src/client/CreatePluginMenuItem.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/components.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/create-plugin-menu-item.client.spec.tsx', upstream: ['cordis'] },
+  { file: 'packages/client/ui-agent-preset/tests/section-store.client.spec.ts', upstream: ['cordis'] },
+  { file: 'packages/extensions/cordis-host-runner/tests/inspect-registry.spec.ts', upstream: ['cordis'] },
+  { file: 'scripts/verify-architecture.spec.ts', upstream: ['cordis', 'schemastery'] },
+  { file: 'scripts/verify-architecture.ts', upstream: ['cordis', 'schemastery'] },
+  { file: 'snapshots/session/cordis-inspect-liveness/client-fixture.mjs', upstream: ['cordis'] },
+  { file: 'snapshots/session/cordis-inspect-timeout/client-fixture.mjs', upstream: ['cordis'] },
   { file: 'packages/client/ui-agent-preset/tests/apply.client.spec.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-agent-preset/tests/locales.client.spec.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-agent-preset/tests/section.client.spec.tsx', upstream: ['cordis'] },
@@ -135,6 +160,7 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'packages/extensions/ui-cordis/src/client/CordisActionRow.tsx', upstream: ['cordis'] },
   { file: 'packages/extensions/ui-cordis/src/client/CordisDefineRow.tsx', upstream: ['cordis'] },
   { file: 'packages/extensions/ui-cordis/src/client/CordisPanel.tsx', upstream: ['cordis'] },
+  { file: 'packages/extensions/ui-cordis/src/client/CordisPreparingRow.tsx', upstream: ['cordis'] },
   { file: 'packages/extensions/ui-cordis/src/client/CordisRunRow.tsx', upstream: ['cordis'] },
   { file: 'packages/extensions/ui-cordis/src/client/locales.ts', upstream: ['cordis'] },
 ]
@@ -151,7 +177,6 @@ const POSTCONDITIONS: readonly PostCondition[] = [
   { file: 'vendor/hmr/package.json', text: '"name": "@deepseek-ai/cordis-plugin-hmr"', count: 1 },
   { file: 'scripts/cordis-walk.ts', text: '@deepseek-ai\\/cordis', count: 1 },
   { file: 'scripts/cordis-walk.ts', text: '!== \'@deepseek-ai/cordis\'', count: 1 },
-  { file: 'scripts/gen-scoped-events.ts', text: '=== \'@deepseek-ai/cordis\'', count: 1 },
   { file: 'packages/typert/generator/src/analyzer.ts', text: '!== \'@deepseek-ai/cordis\'', count: 2 },
   { file: 'scripts/check-workspace-constraints.ts', text: '?.[\'@deepseek-ai/cordis\']', count: 2 },
   { file: 'packages/boot/app-boot/tsdown.config.ts', text: '[\'@deepseek-ai/cordis-plugin-include\']', count: 1 },
@@ -229,7 +254,7 @@ const EXACT_EDITS: readonly ExactEdit[] = [
     id: 'vendor-readme-preamble',
     file: 'vendor/README.md',
     find: 'All vendored packages keep their **original npm names** (they are resolved through pnpm workspaces) and are marked `private: true` — they are never published from this repo.',
-    replace: 'All vendored packages use the **`@deepseek-ai` scope** (`cordis` → `@deepseek-ai/cordis`, `@cordisjs/plugin-<x>` → `@deepseek-ai/cordis-plugin-<x>`). The manifest table records upstream versions and source commits; each package manifest carries its Harness release version and publication metadata. Repository-owned runtime dependencies use `workspace:^`, so local builds resolve the pinned workspace packages and publication substitutes release ranges.',
+    replace: 'All vendored packages use the **`@deepseek-ai` scope** (`cordis` → `@deepseek-ai/cordis`, `@cordisjs/plugin-<x>` → `@deepseek-ai/cordis-plugin-<x>`). The manifest table records upstream versions and source commits; each package manifest carries its Harness release version and publication metadata. References to vendored packages use `workspace:~`, so local builds resolve the workspace packages and published ranges permit patch updates within the same minor version.',
     expect: 1,
   },
   {
@@ -244,7 +269,7 @@ const EXACT_EDITS: readonly ExactEdit[] = [
     id: 'root-agents-vendored-name-contract',
     file: 'AGENTS.md',
     find: 'vendored packages keep upstream names and are `private: true`. `cordis` is a peerDependency (+ dev) of every harness package.',
-    replace: 'vendored packages are rescoped ([mapping](docs/rescope.md)) and `private: true`. `@deepseek-ai/cordis` is a peerDependency (+ dev) of every harness package.',
+    replace: 'vendor is [rescoped](docs/rescope.md) and `private: true`. Harness packages declare `@deepseek-ai/cordis` in `peerDependencies`/`devDependencies`.',
     expect: 1,
   },
   {

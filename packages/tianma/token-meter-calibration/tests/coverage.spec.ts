@@ -29,11 +29,11 @@ afterAll(removeStateDir)
 function withEnv(name: string, value: string | undefined, body: () => void): void {
   const previous = process.env[name]
   try {
-    if (value === undefined) delete process.env[name]
+    if (value === undefined) Reflect.deleteProperty(process.env, name)
     else process.env[name] = value
     body()
   } finally {
-    if (previous === undefined) delete process.env[name]
+    if (previous === undefined) Reflect.deleteProperty(process.env, name)
     else process.env[name] = previous
   }
 }

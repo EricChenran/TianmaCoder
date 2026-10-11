@@ -126,6 +126,7 @@ export class RecencyToolResultPruner extends Service {
     // Tool names live in `tool/call` log events, which are not surface nodes;
     // resolve them from the full event log so whitelist checks see real names.
     const toolNames = new Map<string, string>()
+    // oxlint-disable-next-line typescript/no-deprecated -- Existing synchronous read; migration to the async reader is deferred.
     for (const event of session.snapshotEvents()) {
       if (event.type === 'tool/call') toolNames.set(event.data.callId, event.data.name)
     }

@@ -2,7 +2,7 @@
 
 [English](tianma.md) | 中文
 
-[Tianma 包族](../../packages/tianma)以纯组合方式把 ZCode 的上下文压缩质量机制移植进 dsh：独立插件加一个 profile patch bundle，不触碰上游 `@deepseek-ai/dsh-*` 包。每个能力作为 `@tianma/dsh-bundle` 的一行挂载，因此可独立回退；上游行 id 漂移导致覆盖过期时，`scripts/verify-profile-patches.ts` 会让 CI 失败。
+[Tianma 包族](../../packages/tianma)以纯组合方式把 ZCode 的上下文压缩质量机制移植进 dsh：独立插件加一个 profile patch bundle，不触碰上游 `@deepseek-ai/dsh-*` 包。每个能力作为 `@tianma/dsh-bundle` 的一行挂载，因此可独立回退；上游行 id 漂移导致覆盖过期时，`scripts/verify-profile-patches.ts` 会让 CI 失败。随附的 `web` profile 在 base 与 web-app 之后列出该 bundle，因此每个 Desktop 与 Web 安装都会运行这些能力。
 
 来源：[`packages/tianma/`](../../packages/tianma)
 

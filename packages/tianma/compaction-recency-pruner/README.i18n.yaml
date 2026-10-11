@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/compaction-recency-pruner/README.md
-README.md: ce9c71be30d6d4edc24715b52e81913613f7a09b
-README.zh.md: 20dea7aa81baa2fd116ee4c6a12a46f2b37c9107
+/:
+  en: c1ad5efeaea97a85
+  zh: fbc1ce9a3035fce3
+/tianma-dsh-compaction-recency-pruner:
+  en: 46333fc31f05acb8
+  zh: a1e5e317cc8b7332
+/tianma-dsh-compaction-recency-pruner/summary:
+  en: df85275e91c85c65
+  zh: 08fdccba0a6596b4
+/tianma-dsh-compaction-recency-pruner/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/tianma-dsh-compaction-recency-pruner/use-this-package:
+  en: 7481567758f4bb3e
+  zh: bfcb3bd9308ef6c2
+/tianma-dsh-compaction-recency-pruner/understand-the-implementation:
+  en: 58b0f056c519ca09
+  zh: aca377ecc54564cf
+/tianma-dsh-compaction-recency-pruner/understand-the-implementation/source-map:
+  en: e5b80238de7b875b
+  zh: 7c10d2b91dabcebb
+/tianma-dsh-compaction-recency-pruner/understand-the-implementation/invariant-ownership:
+  en: 0143b54a80a2d06b
+  zh: 6d1ef80ceb9219e2
+/tianma-dsh-compaction-recency-pruner/further-exploration:
+  en: fc678d767519df33
+  zh: 7aaef53eb761dd63
+/tianma-dsh-compaction-recency-pruner/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-compaction-recency-pruner/model-experience/cleared-old-tool-result:
+  en: c02513450dbbb27b
+  zh: 1804a6d58dff409e
+/tianma-dsh-compaction-recency-pruner/model-experience/cleared-old-tool-result/what-the-model-sees:
+  en: 6343b53194ccc1af
+  zh: f79c4bd0bf19d438
+/tianma-dsh-compaction-recency-pruner/model-experience/cleared-old-tool-result/token-effect:
+  en: 73855f69a0358151
+  zh: 566ed39ebf8fd661
+/tianma-dsh-compaction-recency-pruner/model-experience/cleared-old-tool-result/kv-cache-effect:
+  en: 875dbd1fa1c13a79
+  zh: 3bb23cbf64df0736
+/tianma-dsh-compaction-recency-pruner/known-limitations-and-deferred-work:
+  en: f5fa794ad472a383
+  zh: a3b3491b623bfca0
+/tianma-dsh-compaction-recency-pruner/known-limitations-and-deferred-work/dev-note:
+  en: 5e86c0bbf12b3fef
+  zh: a2674a0dc4271c27

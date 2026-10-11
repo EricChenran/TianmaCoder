@@ -1,6 +1,52 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/oa-account-ui/README.md
-README.md: 2c422ffcd2fb749f198c4feaa671aee5d36a6738
-README.zh.md: 89aeb25898f65bd3e2ae76974628acc5afba8727
+/:
+  en: b75ccd92465ff2ea
+  zh: b75ccd92465ff2ea
+/tianma-dsh-oa-account-ui:
+  en: 189695ccb54b3a02
+  zh: b7f0f2a2d006e89b
+/tianma-dsh-oa-account-ui/summary:
+  en: 2b928ce5b8b7332f
+  zh: 96e660101ffadc85
+/tianma-dsh-oa-account-ui/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 31819dbf6d290b2f
+/tianma-dsh-oa-account-ui/use-this-package:
+  en: e96e7d0af0bd4320
+  zh: 64a55cb6316cd0cd
+/tianma-dsh-oa-account-ui/understand-the-implementation:
+  en: 2a258fea8792ab01
+  zh: 9ecda754cfcf3d13
+/tianma-dsh-oa-account-ui/understand-the-implementation/source-map:
+  en: 88e496aa6aacc362
+  zh: c00653082938c208
+/tianma-dsh-oa-account-ui/understand-the-implementation/invariant-ownership:
+  en: e81c37f8213a1ccd
+  zh: 2fe03d901de4dd5c
+/tianma-dsh-oa-account-ui/further-exploration:
+  en: 80f73fc0e79a37c0
+  zh: 0c402e6e49a0a1bc
+/tianma-dsh-oa-account-ui/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-oa-account-ui/model-experience/oa-account-surfaces:
+  en: 76c87d765954dcc0
+  zh: dc8fb32b16e51c30
+/tianma-dsh-oa-account-ui/model-experience/oa-account-surfaces/what-the-model-sees:
+  en: 6c78c21846bf6b65
+  zh: 75e78d73febd2138
+/tianma-dsh-oa-account-ui/model-experience/oa-account-surfaces/token-effect:
+  en: 1aa853b92b4f1615
+  zh: 42a2491c4840b328
+/tianma-dsh-oa-account-ui/model-experience/oa-account-surfaces/kv-cache-effect:
+  en: 0d76c5f43d685615
+  zh: 565a0fc22553cae5
+/tianma-dsh-oa-account-ui/known-limitations-and-deferred-work:
+  en: 06c62992b85622cd
+  zh: d80b3feb7f7ce95d
+/tianma-dsh-oa-account-ui/known-limitations-and-deferred-work/dev-note:
+  en: 8799608c67407bd7
+  zh: 1f0d94a15a2a33bc

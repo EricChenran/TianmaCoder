@@ -101,7 +101,7 @@ describe('CalibrationFactor', () => {
 
   it('rejects an invalid window and an unsupported snapshot version', () => {
     expect(() => new CalibrationFactor(0)).toThrow(/positive integer/)
-    expect(() => new CalibrationFactor(16, { version: 2 as never, sampleCount: 1, factor: 1 }))
+    expect(() => new CalibrationFactor(16, { version: 2, sampleCount: 1, factor: 1 }))
       .toThrow(/unsupported snapshot version/)
   })
 })

@@ -55,7 +55,7 @@ function parsePatch(path: string): PatchOp[] {
   // verifier never evaluates them, so strip the tag marker and keep the raw
   // scalar. Ids and names are always plain strings, which survive intact.
   const sanitized = raw.replaceAll(/!!js\s+/g, '')
-  const document = load(sanitized) as unknown
+  const document = load(sanitized)
   if (document === undefined || document === null) return []
   if (!Array.isArray(document)) {
     throw new Error(`${path}: patch document must be a YAML list of operations`)

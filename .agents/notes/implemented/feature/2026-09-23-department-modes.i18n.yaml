@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-23-department-modes.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-23-department-modes.md
-2026-09-23-department-modes.md: 197cca695b62da7970e61578780369e4f5408cf2
-2026-09-23-department-modes.zh.md: d787df6b99fe24aa5b1286ba1b37debb5b803480
+/agent-note-department-modes-inject-their-rules-as-prompt-sections:
+  en: 98e4b49b1403d71f
+  zh: c4bfa496f9ecb950
+/agent-note-department-modes-inject-their-rules-as-prompt-sections/problem:
+  en: 457f3df634bfc12a
+  zh: c55a61cea7543a22
+/agent-note-department-modes-inject-their-rules-as-prompt-sections/decision:
+  en: d7fd039ab85290a5
+  zh: efc696ad1a170bbf
+/agent-note-department-modes-inject-their-rules-as-prompt-sections/alternatives-considered:
+  en: cf23c4610833e37d
+  zh: 03d7fbe81f53d490
+/agent-note-department-modes-inject-their-rules-as-prompt-sections/consequences:
+  en: 195219721707e950
+  zh: 81bb0d6912e863e4

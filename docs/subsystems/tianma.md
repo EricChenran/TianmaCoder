@@ -2,7 +2,7 @@
 
 English | [中文](tianma.zh.md)
 
-The [Tianma packages](../../packages/tianma) port ZCode's context-compaction quality mechanisms into dsh through composition only: independent plugins plus one profile patch bundle, with upstream `@deepseek-ai/dsh-*` packages untouched. Every capability mounts as one `@tianma/dsh-bundle` row, so each is independently revertible and `scripts/verify-profile-patches.ts` fails CI when an upstream row-id drift would leave an override stale.
+The [Tianma packages](../../packages/tianma) port ZCode's context-compaction quality mechanisms into dsh through composition only: independent plugins plus one profile patch bundle, with upstream `@deepseek-ai/dsh-*` packages untouched. Every capability mounts as one `@tianma/dsh-bundle` row, so each is independently revertible and `scripts/verify-profile-patches.ts` fails CI when an upstream row-id drift would leave an override stale. The shipped `web` profile lists that bundle after the base and web-app bundles, so every Desktop and Web installation runs these capabilities.
 
 Source: [`packages/tianma/`](../../packages/tianma)
 

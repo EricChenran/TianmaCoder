@@ -119,7 +119,7 @@ describe('plugin wiring', () => {
     // plugin registers its agent/created listener without throwing and that
     // the section name/order constants are stable contract.
     const ctx = new Context()
-    expect(() => plugin.apply(ctx, { maxChars: 1024 })).not.toThrow()
+    expect(() =>{  plugin.apply(ctx, { maxChars: 1024 }) }).not.toThrow()
     expect(plugin.SECTION_NAME).toBe('tianma:file-rehydration')
     expect(plugin.SECTION_ORDER).toBe(200)
   })

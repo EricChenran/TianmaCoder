@@ -5,14 +5,24 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { Welcome } from '../src/client/WelcomePage.tsx'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
-import type { WelcomeSaveResult } from '../src/welcome-api.ts'
+import type { WelcomeNotice, WelcomeSaveResult } from '../src/welcome-api.ts'
+import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 
 const html = readFileSync(join(import.meta.dirname, '../renderer/welcome.html'), 'utf8')
 afterEach(cleanup)
+const signedOut: AccountView = { links: { usageUrl: 'http://localhost/usage', topUpUrl: 'http://localhost/top_up' }, status: 'signed-out', attempt: null }
+
 
 function mount(language = 'zh-CN') {
   cleanup()
   const api = {
+    takeNotice: vi.fn(async (): Promise<WelcomeNotice | undefined> => undefined),
+    analytics: vi.fn(async (_event: string, _attributes: object) => {}),
+    analyticsEnabled: async () => false,
+    onAccountState: vi.fn((_listener: (state: AccountView) => void) => () => {}),
+    startSignIn: vi.fn(async (): Promise<AccountView> => signedOut),
+    cancelSignIn: vi.fn(async (): Promise<AccountView> => signedOut),
+    copySignInLink: vi.fn(async () => undefined),
     ...resolveDesktopLocale(language),
     saveApiKey: vi.fn<(value: string) => Promise<WelcomeSaveResult>>().mockResolvedValue({ ok: true }),
     skip: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),

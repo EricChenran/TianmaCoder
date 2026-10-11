@@ -55,7 +55,7 @@ No invariant companion is published because the ledger owns no derived relation:
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [hooks bridges](../../hooks/README.md) — the Claude Code/Codex hook runners this ledger is built to gate
+- [hooks bridges](../../experimental/hooks-claude-code/README.md) — the Claude Code/Codex hook runners this ledger is built to gate
 
 -----
 

@@ -1,6 +1,91 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
-README.md: c9b72ac3c0cf35d7a79c18d444da23bdc175d696
-README.zh.md: 018313883eac93a03e7a9ecb702fe3a3cb5a712d
+/tianmacoder-desktop:
+  en: 2e30a1547325932d
+  zh: f81b064229586b76
+/tianmacoder-desktop/terminal-command:
+  en: bef92953c237363f
+  zh: d21d6effd21b8c00
+/tianmacoder-desktop/closing-the-window-and-quitting:
+  en: 989f2af7f715021c
+  zh: 906171c71dc57020
+/tianmacoder-desktop/key-technical-decisions:
+  en: 0eb445b77b95edaf
+  zh: 95f3beba97b6a35e
+/tianmacoder-desktop/key-technical-decisions/bundled-workspace-dependencies:
+  en: 2b049b4f104be1c2
+  zh: 1e8f3a9f7eb15e2b
+/tianmacoder-desktop/bundled-command-runtime:
+  en: 09f0b75af9f0ed14
+  zh: 60bbc2e67d5e87a8
+/tianmacoder-desktop/installation-ownership:
+  en: 22153a298a6662e1
+  zh: 3600803c8c9d0274
+/tianmacoder-desktop/installation-ownership/runtime-and-plugin-activation:
+  en: c94d01a641ce0577
+  zh: 7294ec2f500b6fdc
+/tianmacoder-desktop/installation-ownership/host-environment:
+  en: 84a9cc7ca9455aa8
+  zh: 4091b8aa8231b74a
+/tianmacoder-desktop/develop:
+  en: 503b44fc6e4fbc1f
+  zh: 68bc3a669dd3218a
+/tianmacoder-desktop/develop/startup-onboarding:
+  en: a51346b8d880ddba
+  zh: 7913214c1c66063c
+/tianmacoder-desktop/develop/welcome-window-appearance:
+  en: ae319a496639b38d
+  zh: ef044103240ac9da
+/tianmacoder-desktop/package:
+  en: 4cd8a8da6977928d
+  zh: 9f624855a2edac37
+/tianmacoder-desktop/package/release-versions:
+  en: d938302f92fc3a1a
+  zh: 29df50bc8791baa7
+/tianmacoder-desktop/package/local-macos-dmg-without-release-signing:
+  en: af78d930539d4674
+  zh: 15e52809b000a39d
+/tianmacoder-desktop/package/local-official-bundles-from-a-loopback-registry:
+  en: 5f05072ec82cc62d
+  zh: a3d63b58d1ef2db7
+/tianmacoder-desktop/package/runtime-file-selection:
+  en: 0722aacdc85a51c4
+  zh: 2a9e1a275072f0a6
+/tianmacoder-desktop/package/upload-updates:
+  en: f48baa680e841b0d
+  zh: 25ded1aeaac6dad1
+/tianmacoder-desktop/package/unsigned-windows-test-installer:
+  en: fb6de542360dbae7
+  zh: 0e17d7765fb10c48
+/tianmacoder-desktop/package/windows-installer-interface:
+  en: 81dc52b33bfad12b
+  zh: 2d5916e54e01ef41
+/tianmacoder-desktop/package/windows-ev-signing:
+  en: 64836513eb7eda6e
+  zh: 6ebb9184a7aa51de
+/tianmacoder-desktop/package/desktop-runtime-preparation:
+  en: 9a71990bee9867a7
+  zh: 76c5c1fdff6e6908
+/tianmacoder-desktop/updates:
+  en: 41d0f50eb7173342
+  zh: ce940ef3cbcc6fa5
+/tianmacoder-desktop/updates/local-desktop-settings:
+  en: 2e57457c44c85b5f
+  zh: 5b8510a3dc4c6c9d
+/tianmacoder-desktop/updates/mandatory-update-policy:
+  en: 54596bef0706d305
+  zh: 48737302dcf3c939
+/tianmacoder-desktop/updates/local-updater-qualification:
+  en: bc50fd8a4d96c227
+  zh: fb0a6ce80c31cda6
+/tianmacoder-desktop/low-level-development-overrides:
+  en: 0b225f914142ef0b
+  zh: 9ffd07768d37824e
+/tianmacoder-desktop/known-limitations:
+  en: 5b77213c86bbcfb6
+  zh: b34bf21773bb852b
+/tianmacoder-desktop/dev-note:
+  en: 8e26b460ba31f21b
+  zh: fbcd0307b3867125

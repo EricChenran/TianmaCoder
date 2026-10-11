@@ -1,6 +1,85 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
-README.md: eed862dde58933cc0759d8cd232e3375b1bcda7f
-README.zh.md: cc1039194eec42b0440853cfd4ccd4dc16e0358c
+/:
+  en: ec08d9cb5dc6862f
+  zh: fb0dd19b996dba97
+/tianma-dsh-department-prompts:
+  en: 994c2699629b0295
+  zh: bc75ee520c5f8f98
+/tianma-dsh-department-prompts/summary:
+  en: 281736c35c6c4a85
+  zh: cf276a2ac5fbb995
+/tianma-dsh-department-prompts/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: fdb6e058f7d240b2
+/tianma-dsh-department-prompts/use-this-package:
+  en: 5b4bd52a73dd5ce1
+  zh: 484e4495fb04ee6d
+/tianma-dsh-department-prompts/understand-the-implementation:
+  en: 64f78224f7d22918
+  zh: a732553ce22d54e7
+/tianma-dsh-department-prompts/understand-the-implementation/source-map:
+  en: 694d832a97134dc9
+  zh: ee95beecd779b820
+/tianma-dsh-department-prompts/further-exploration:
+  en: 4a1dc47d905730ba
+  zh: d699dd1976957fa6
+/tianma-dsh-department-prompts/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-department-prompts/model-experience/department-rules:
+  en: 1a7d4baa0d0fa7a8
+  zh: 5fb4780141f14781
+/tianma-dsh-department-prompts/model-experience/department-rules/what-the-model-sees:
+  en: a96837bd94edfaba
+  zh: bd73f1a9cb089fc9
+/tianma-dsh-department-prompts/model-experience/department-rules/token-effect:
+  en: c9dfdd3bcd84df41
+  zh: 1d8adcc6b259dad4
+/tianma-dsh-department-prompts/model-experience/department-rules/kv-cache-effect:
+  en: 1b8f499f8f868701
+  zh: c865ca57d5ebf3f0
+/tianma-dsh-department-prompts/model-experience/bundled-skill:
+  en: f36083b8af060671
+  zh: 6f7745fc34b86140
+/tianma-dsh-department-prompts/model-experience/bundled-skill/what-the-model-sees:
+  en: 24efbf9805efe212
+  zh: b30d2f8b6caf6e81
+/tianma-dsh-department-prompts/model-experience/bundled-skill/token-effect:
+  en: 12b2f6025b2b2c9f
+  zh: ce58a3fb63c0fb35
+/tianma-dsh-department-prompts/model-experience/bundled-skill/kv-cache-effect:
+  en: 493f941b8b9f8727
+  zh: 12d8ee9e3cba8e08
+/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only:
+  en: df13b93af59748ce
+  zh: 1c3681861e3c075a
+/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/what-the-model-sees:
+  en: d962ed1286801705
+  zh: d82116736cbd7103
+/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/token-effect:
+  en: 936dc79ce424c15f
+  zh: d374c2b15c117dc3
+/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/kv-cache-effect:
+  en: f4aaf1b1c37e15e1
+  zh: 82b20050d1d6279b
+/tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill:
+  en: 65e7b3a0a6b649de
+  zh: c1ea417316ccdf52
+/tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill/what-the-model-sees:
+  en: 276e5d837a06177d
+  zh: b1b9db67de38e811
+/tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill/token-effect:
+  en: f3400bb299177bba
+  zh: 57c96a5ee4a57172
+/tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill/kv-cache-effect:
+  en: 493f941b8b9f8727
+  zh: 12d8ee9e3cba8e08
+/tianma-dsh-department-prompts/known-limitations-and-deferred-work:
+  en: d1db49f7e25530f0
+  zh: eae7d1e17a2e594a
+/tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
+  en: fe3fe2ab0b4c37e1
+  zh: 501c74d8c2155493

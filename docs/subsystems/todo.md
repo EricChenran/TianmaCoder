@@ -2,7 +2,7 @@
 
 English | [中文](todo.zh.md)
 
-The durable todo vocabulary owned by [`@deepseek-ai/dsh-tool-todo`](../../packages/todo/tool-todo/README.md). The model-facing tool replaces one agent session's whole list; the package also owns the event declaration, replay projection, and invariant companion. Tool behavior and configuration are on the [package README](../../packages/todo/tool-todo/README.md).
+The durable todo vocabulary owned by [`@deepseek-ai/dsh-tool-todo`](../../packages/todo/tool-todo/README.md). The model-facing tool replaces one agent session's whole list; the package also owns the event declaration and replay projection. Tool behavior and configuration are on the [package README](../../packages/todo/tool-todo/README.md).
 
 Source: [`packages/todo/tool-todo/src/types.ts`](../../packages/todo/tool-todo/src/types.ts)
 
@@ -48,6 +48,6 @@ interface TodoStaleness {
 
 The `todos` projection unit carries the plan; `todoStaleness` carries its drift. Entries have no identity a tool call could be matched against, so nothing can derive which task the work reached — the drift is what a carrier shows instead when steps keep committing and the list does not move. A turn start resets both: the plan to `null`, the drift to zero with no unfinished work. A fully completed list reports `unfinished: false` however old it is.
 
-## Durable event and invariant
+## Durable event
 
-The package declaration-merges `todo/write: { todos: TodoItem[] }` into `SessionEventMap`. The event is log-only and carries the complete replacement list; the generated [persistence catalog](../persistence-catalog.md#todowrite--log-only) records its declaration site. The package's invariant companion validates existing and newly announced sessions in one pass, then tracks committed turn boundaries incrementally so every live `todo/write` is checked before append without rescanning the log.
+The package declaration-merges `todo/write: { todos: TodoItem[] }` into `SessionEventMap`. The event is log-only and carries the complete replacement list; the generated [persistence catalog](../persistence-catalog.md#todowrite--log-only) records its declaration site.

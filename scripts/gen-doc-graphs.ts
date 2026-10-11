@@ -17,6 +17,14 @@ import {
   graphNodeId as nodeId,
   type PackageGraphNode,
 } from './package-graph.ts'
+import { rewriteTranslationLinkLocales } from './translation-links.ts'
+import {
+  generatedRegions,
+  parseTranslationPairingManifest,
+  renderGeneratedRegion,
+  spliceGeneratedRegion,
+  translationPairSourcePredicate,
+} from './translation-pairing.ts'
 import { TypeScriptProject } from './ts-project.ts'
 
 const root = resolve(import.meta.dirname, '..')
@@ -116,12 +124,35 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Maintains the session density ratio and the rolling reported/estimated factor, corrects ctx.tokenMeter.measure, and persists the factor under the harness home. Registered by the Tianma token-meter-calibration package.',
   },
   {
+    key: 'cotTranslation',
+    pkg: 'experimental-client-ui-cot-translation',
+    title: 'Reasoning translation Remote',
+    mode: 'service',
+    note: 'Serves reasoning translations, reuses saved results, and joins ordinary Session activation for uncached inactive Sessions.',
+  },
+  {
+    key: 'translator',
+    pkg: 'experimental-translator',
+    title: 'Anonymous text translation',
+    mode: 'service',
+    consumers: ['experimental-client-ui-cot-translation'],
+    note: 'Resolves Google or Bing requests and retains shared experimental records through the active Session writer.',
+  },
+  {
     key: 'hmr',
     pkg: 'hmr',
     title: 'Serialized module and configuration reloads',
     mode: 'core',
     consumers: ['app-boot'],
     note: 'Owns module and exact configuration watchers; application mutations share its queue and automatic reloads await the application file lock.',
+  },
+  {
+    key: 'pluginRegistryProbe',
+    pkg: 'client-ui-plugin-manager',
+    title: 'Host registry response comparison',
+    mode: 'core',
+    consumers: ['client-ui-plugin-manager'],
+    note: 'Races public registry responses on the Host; the Client owns the initial registry recommendation.',
   },
   {
     key: 'pluginManager',
@@ -146,6 +177,24 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'core',
     consumers: ['api-gateway', 'host-frontend-static'],
     note: 'Owns browser authentication and shared HTTP request dispatch; API adapters register endpoints and streams.',
+  },
+  {
+    key: 'worktrees',
+    pkg: 'experimental-worktree',
+    title: 'Git worktree creation',
+    mode: 'seam',
+    implementations: ['experimental-worktree'],
+    consumers: ['experimental-tool-worktree'],
+    note: 'Explicit experimental creation from a pinned local commit. Existing write permissions govern checkout and shared Git metadata; the working-directory service owns the resulting Session directory.',
+  },
+  {
+    key: 'workingDirectory',
+    pkg: 'working-directory',
+    title: 'Session working directory',
+    mode: 'seam',
+    implementations: ['working-directory'],
+    consumers: ['tool-working-directory', 'tool-fs', 'tool-bash', 'tool-pwsh', 'subagent', 'sdk-jsonrpc-server'],
+    note: 'One Session projection owns the effective execution directory. The filesystem validates changes; user context reports them while original metadata and write grants stay fixed.',
   },
   {
     key: 'mcpResources',
@@ -235,7 +284,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'session',
     title: 'In-memory session store',
     mode: 'core',
-    consumers: ['agent-loop', 'agent', 'session-persistence', 'session-query', 'session-query-sqlite', 'subagent-in-process-driver', 'invariants', 'message-feedback'],
+    consumers: ['agent-loop', 'agent', 'session-persistence', 'session-query', 'session-query-sqlite', 'subagent', 'message-feedback'],
     note: 'Owns append-only Session instances and emits the durable session event feed.',
   },
   {
@@ -323,14 +372,6 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Carries the picking seam onto the wire: capability gating, cancellation, and the seam-coded failures a browser directory flow discriminates on.',
   },
   {
-    key: 'invariants',
-    pkg: 'invariants',
-    title: 'Package-owned invariant registry',
-    mode: 'core',
-    consumers: ['session', 'agent', 'scope', 'agent-loop'],
-    note: 'Companion subpaths register owner-local checks; the service owns selection, uniqueness, child fibers, and package-attributed failures.',
-  },
-  {
     key: 'typert',
     pkg: 'typert-registry',
     title: 'Runtime type registry',
@@ -388,6 +429,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the settings controller exposes value-free views and write-only storage.',
   },
   {
+    key: 'deepseekAccount',
+    pkg: 'deepseek-account',
+    title: 'DeepSeek account',
+    mode: 'seam',
+    implementations: ['deepseek-account-platform'],
+    consumers: ['api-account-controller', 'llm-deepseek'],
+    note: 'The Host owns browser authorization and local credentials; UI consumers receive state without tokens.',
+  },
+  {
     key: 'oaAccount',
     pkg: 'oa-account',
     title: 'Tianma OA account',
@@ -404,6 +454,21 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: [],
     consumers: ['llm-pi-ai'],
     note: 'Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol.',
+  },
+  {
+    key: 'productAnalytics',
+    pkg: 'client-product-analytics',
+    title: 'Desktop interaction collection',
+    mode: 'service',
+    note: 'Accepts selected Desktop events, enriches available login identity, and observes live compaction under the live Host collection policy.',
+  },
+  {
+    key: 'otel',
+    pkg: 'otel',
+    title: 'Shared OTel reporting channels',
+    mode: 'service',
+    consumers: ['host-product-telemetry-otel', 'session-telemetry-otel'],
+    note: 'Product analytics and Session feedback adapters create independent reporting channels through one injected service.',
   },
   {
     key: 'productTelemetry',
@@ -552,15 +617,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'session-projection-cache',
     title: 'Persisted projection cache',
     mode: 'core',
-    consumers: ['api-session-controller', 'session-query', 'session-reference', 'subagent'],
-    note: 'Durably checkpoints projection unit states per session (throttled + turn/end/detach mandatory points) and serves the cold-read ladder: cache row + persistence tail replay, so listings never load full logs.',
+    consumers: ['api-session-controller', 'session-query', 'session-reference'],
+    note: 'Durably checkpoints projection unit states per session (throttled + turn/end/detach mandatory points), serves cached projection views, and accelerates prepared-Session projection hydration.',
   },
   {
     key: 'skills',
     pkg: 'skill',
     title: 'Skill provider registry',
     mode: 'seam',
-    implementations: ['skill-badge', 'skill-filesystem', 'skill-office'],
+    implementations: ['sandbox-windows-acl', 'skill-badge', 'skill-filesystem', 'skill-office'],
     consumers: ['tool-skill'],
     note: 'Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies.',
   },
@@ -569,7 +634,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent',
     title: 'Agent service',
     mode: 'core',
-    consumers: ['agent-loop', 'acp', 'subagent-in-process-driver'],
+    consumers: ['agent-loop', 'acp', 'subagent'],
     note: 'Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation.',
   },
   {
@@ -587,6 +652,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'bundle',
     consumers: ['base', 'sdk-minimal'],
     note: 'The one concrete loop plugin; extension packages depend on dsh-agent events and services, not on this package.',
+  },
+  {
+    key: 'schedule',
+    pkg: 'schedule',
+    title: 'Host scheduled messages',
+    mode: 'core',
+    note: 'Stores tasks independently of Session activation and queues due messages in the original Session.',
   },
   {
     key: 'goals',
@@ -708,7 +780,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'seam',
     implementations: ['subagent-spawn-in-process', 'subagent-fork-in-process', 'subagent-acp', 'subagent-codex', 'subagent-claude-code', 'subagent-dsh-sdk'],
     consumers: ['tool-subagent', 'tool-subagent-control', 'tool-ralph'],
-    note: 'Providers implement transports; the service also owns optional Activation-based continuation orchestration, tool-subagent selects one-shot or continuable delegation, tool-subagent-control delivers follow-ups, and tool-ralph requires one fresh structured-output route.',
+    note: 'Providers prepare local children or execute external tasks; one activation manager owns both lifecycles. The delegation tool selects a backend, control tools deliver local follow-ups, and workflows await activation results.',
   },
   {
     key: 'speechToText',
@@ -724,8 +796,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'experimental-agent-team',
     title: 'Agent Teams coordination domain',
     mode: 'core',
-    consumers: ['experimental-tool-agent-team', 'experimental-client-ui-agent-team'],
-    note: 'Owns the implicit-root roster, durable peer mailbox, shared task DAG, continuable-child lifecycle, and generated Team Remote methods; tool-agent-team contributes model controls and client-ui-agent-team mounts the browser contribution.',
+    consumers: ['experimental-tool-agent-team'],
+    note: 'Owns the implicit-root roster, direct peer inbox delivery, shared task DAG, and continuable-child lifecycle; tool-agent-team contributes model controls.',
+  },
+  {
+    key: 'claudeCodeMods',
+    pkg: 'experimental-claude-code-mods',
+    title: 'Claude Code mods bridge',
+    mode: 'core',
+    note: 'Loads mods that defineMod plugins add, raises their hook chains from harness extension points, and draws the band above the prompt over its Remote.',
   },
   {
     key: 'inspector',
@@ -740,8 +819,8 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Background job registry',
     mode: 'seam',
     implementations: ['jobs-local'],
-    consumers: ['tool-bash', 'tool-pwsh', 'tool-terminal', 'tool-subagent', 'tool-jobs', 'api-job-controller'],
-    note: 'Producers (background bash/pwsh, PTY sends, and subagent delegations) register running work; record-declaring jobs additionally stream raw output for non-consuming observers; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry.',
+    consumers: ['tool-bash', 'tool-pwsh', 'tool-terminal', 'tool-jobs', 'api-job-controller'],
+    note: 'Producers (background bash/pwsh and PTY sends) register running work; record-declaring jobs additionally stream raw output for non-consuming observers; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry.',
   },
   {
     key: 'web',
@@ -1415,13 +1494,13 @@ function renderEventRelations(pkgs: Pkg[], events: readonly EventEntry[]): strin
   lines.push(
     'This matrix shows which packages dispatch each harness-owned event and which packages listen to it. Events are many-to-many, so the dense relation data is presented as a table rather than one large graph. Receiver and event-name types also cover contained dispatch sites that deliberately bypass `ctx.emit`, such as subagent lifecycle containment.',
     '',
-    '| Event | Mode | Declared in | Dispatchers | Listeners |',
-    '| --- | --- | --- | --- | --- |',
   )
+  const rows = ['| Event | Mode | Declared in | Dispatchers | Listeners |', '| --- | --- | --- | --- | --- |']
   for (const event of [...events].sort((a, b) => a.name.localeCompare(b.name))) {
     const relation = relations.get(event.name) ?? { dispatchers: new Map<string, Set<string>>(), listeners: new Set<string>() }
-    lines.push(`| \`${event.name}\` | \`${event.mode}\` | ${sourceLink(event.source)} | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
+    rows.push(`| \`${event.name}\` | \`${event.mode}\` | ${sourceLink(event.source)} | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
   }
+  lines.push(renderGeneratedRegion('event-producer-consumer:events', rows.join('\n')))
   // Every declared event needs a dispatcher: zero means dead vocabulary or an
   // unrecognized semantic dispatch form. Listener-free extension points remain
   // valid. Client-declared events are exempt: the relation scan seeds the HOST
@@ -1443,12 +1522,18 @@ function renderEventRelations(pkgs: Pkg[], events: readonly EventEntry[]): strin
   const declared = new Set(events.map(event => event.name))
   const extra = [...relations.keys()].filter(event => !declared.has(event)).sort()
   if (extra.length > 0) {
-    lines.push('', '## Non-harness or undeclared event strings seen in package source', '', '| Event string | Dispatchers | Listeners |', '| --- | --- | --- |')
+    const extraRows = ['| Event string | Dispatchers | Listeners |', '| --- | --- | --- |']
     for (const event of extra) {
       const relation = relations.get(event)
       if (!relation) continue
-      lines.push(`| \`${event}\` | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
+      extraRows.push(`| \`${event}\` | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
     }
+    lines.push(
+      '',
+      '## Non-harness or undeclared event strings seen in package source',
+      '',
+      renderGeneratedRegion('event-producer-consumer:undeclared', extraRows.join('\n')),
+    )
   }
   lines.push('', ...maintenanceFooter(maintenance))
   return lines.join('\n')
@@ -1551,7 +1636,7 @@ function renderToolPipeline(): string {
   const maintenance = 'curated Mermaid flow; exact tool schemas and event signatures live in generated catalogs'
   return [
     ...generatedHeader('Tool Execution Pipeline'),
-    'This graph shows where policy, hooks, sandboxing, filesystem guards, result rewriting, final-outcome observation, and UI rendering run without changing the loop. The `tools/pre-execute` waterfall runs first, monotonic guards run next, and the `tools/execute` and `tools/post-execute` waterfalls follow; the three waterfalls may transform a call. Definition-owned `finalizeContent` and `tools/result` run afterward.',
+    'This graph shows where policy, hooks, sandboxing, filesystem guards, result rewriting, final-outcome observation, and UI rendering run without changing the loop. The `tools/pre-execute` waterfall runs first, monotonic guards run next, and the `tools/execute` and `tools/post-execute` waterfalls follow; the three waterfalls may transform a call. Definition-owned `projectContent` installs prepared content before post-execute; `finalizeContent` and `tools/result` run afterward.',
     '',
     '```mermaid',
     'flowchart TD',
@@ -1566,6 +1651,7 @@ function renderToolPipeline(): string {
     '  toolBody["Registered tool execute() body"]',
     `  fsGate["${mermaidCode('fs/write-intent')} or ${mermaidCode('fs/edit-intent')}<br/>tool-fs mutations only"]`,
     `  owned["Tool-owned session events<br/>${mermaidCode('todo/write')}, ${mermaidCode('fs/observed')}, ${mermaidCode('hook/invoked')}, ${mermaidCode('hook/result')}, ${mermaidCode('tool/ptc-dispatch')}"]`,
+    '  project["ToolDefinition.projectContent<br/>execution-prepared text and images"]',
     `  post["${mermaidCode('tools/post-execute')} waterfall<br/>accept, block, replace, add context"]`,
     '  normalized["Registry outer normalization<br/>pipeline/result snapshot throws become isError"]',
     '  finalize["ToolDefinition.finalizeContent<br/>last content-only invariant"]',
@@ -1587,13 +1673,15 @@ function renderToolPipeline(): string {
     '  approval -->|allowed-once| guards',
     '  approval -->|rejected, cancelled, unavailable| denied',
     '  approval -.->|throw| normalized',
-    '  denied --> post',
+    '  denied --> project',
     '  pre -.->|throw| normalized',
     '  toolBody --> fsGate',
     '  fsGate --> toolBody',
     '  toolBody --> owned',
     '  toolBody --> around',
-    '  around --> post',
+    '  around --> project',
+    '  project --> post',
+    '  project -.->|throw| normalized',
     '  around -.->|wrapper throws| normalized',
     '  post -.->|throw| normalized',
     '  post --> finalize',
@@ -1622,7 +1710,29 @@ function renderDocs(): GraphDoc[] {
     { rel: 'docs/tool-execution-pipeline.md', content: renderToolPipeline() },
   ]
   docs.unshift({ rel: 'docs/graph-atlas.md', content: renderIndex(docs) })
+  const events = docs.find(doc => doc.rel === 'docs/event-producer-consumer.md')
+  if (events !== undefined) docs.push(spliceChineseRegions(events))
   return docs
+}
+
+/**
+ * Splice a generated page's regions into its authored Chinese counterpart,
+ * localizing paired-document links; the surrounding Chinese prose stays authored.
+ */
+function spliceChineseRegions(doc: GraphDoc): GraphDoc {
+  const rel = doc.rel.replace(/\.md$/, '.zh.md')
+  const context = {
+    repoRoot: root,
+    sourcePath: rel,
+    isTranslationPairSource: translationPairSourcePredicate(parseTranslationPairingManifest(
+      readFileSync(resolve(root, 'scripts/translation-pairing.manifest.json'), 'utf8'),
+    )),
+  }
+  let content = readFileSync(resolve(root, rel), 'utf8')
+  for (const region of generatedRegions(doc.content)) {
+    content = spliceGeneratedRegion(content, rewriteTranslationLinkLocales(region.text, context).content)
+  }
+  return { rel, content }
 }
 
 function renderIndex(docs: GraphDoc[]): string {
