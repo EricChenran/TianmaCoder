@@ -230,7 +230,9 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // resolve at install time, before the build produces lib/bin.js.
   '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
   // Startup and runtime share the advertised URL parser.
-  '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js'],
+  // The Tianma department presets ship with this bundle as selectable patches;
+  // they stay out of dsh.bundle.patch, which every web profile loads unconditionally.
+  '@deepseek-ai/dsh-web-app': ['lib/public-url-*.js', 'presets/department-tech.patch.yml', 'presets/department-business.patch.yml'],
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],
@@ -382,6 +384,9 @@ export function checkExperimentalNameExceptions(manifests: readonly WorkspaceMan
 
 function isReleaseMemberDirectory(dir: string): boolean {
   // The SSH carrier is distributed as executable archives, never as an npm application.
+  // The Tianma product packages ship inside this fork's application and are never
+  // published, so release-member manifest requirements do not apply to them.
+  if (dir.startsWith('packages/tianma/')) return false
   if (dir === 'packages/ssh/ssh-helper-runtime') return false
   return standardReleaseMemberDirectory.test(dir) || isPublicExperimentalPackageDirectory(dir)
 }

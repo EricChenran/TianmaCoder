@@ -648,7 +648,7 @@ importers:
   apps/desktop:
     dependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:*
+        specifier: workspace:~
         version: link:../../vendor/cordis
       '@deepseek-ai/dsh-api-gateway':
         specifier: workspace:*
@@ -14389,134 +14389,134 @@ importers:
   packages/tianma/behavioral-guidelines:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/system-prompt
 
   packages/tianma/bundle:
     dependencies:
       '@tianma/dsh-behavioral-guidelines':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../behavioral-guidelines
       '@tianma/dsh-compaction-file-rehydrator':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../compaction-file-rehydrator
       '@tianma/dsh-compaction-recency-pruner':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../compaction-recency-pruner
       '@tianma/dsh-compaction-summarize':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../compaction-summarize
       '@tianma/dsh-hooks-trust':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../hooks-trust
       '@tianma/dsh-token-meter-calibration':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../token-meter-calibration
 
   packages/tianma/compaction-file-rehydrator:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-agent':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/agent
       '@deepseek-ai/dsh-llm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/session
       '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/system-prompt
 
   packages/tianma/compaction-recency-pruner:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/cordis-plugin-include':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/include
       '@deepseek-ai/cordis-plugin-loader':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/loader
       '@deepseek-ai/dsh-compaction':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../compaction/compaction
       '@deepseek-ai/dsh-compaction-image-offload':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../compaction/compaction-image-offload
       '@deepseek-ai/dsh-llm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/session
       '@deepseek-ai/dsh-session-projection':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../session/session-projection
       '@deepseek-ai/dsh-token-meter':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/token-meter
 
   packages/tianma/compaction-summarize:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-agent':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/agent
       '@deepseek-ai/dsh-compaction':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../compaction/compaction
       '@deepseek-ai/dsh-compaction-basic':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../compaction/compaction-basic
       '@deepseek-ai/dsh-llm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/session
       '@deepseek-ai/dsh-session-projection':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../session/session-projection
       '@deepseek-ai/dsh-token-meter':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/token-meter
       '@deepseek-ai/dsh-util-values':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../util/values
 
   packages/tianma/department-prompts:
     dependencies:
       '@deepseek-ai/dsh-home-paths':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../util/home-paths
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-shell-env':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../shell/shell-env
       '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/system-prompt
 
   packages/tianma/hooks-trust:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
 
   packages/tianma/oa-account:
@@ -14529,16 +14529,16 @@ importers:
         version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-api-session-controller':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../api/session-controller
       '@deepseek-ai/dsh-credentials':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../credentials/credentials
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../typert/protocol
 
   packages/tianma/oa-account-ui:
@@ -14589,19 +14589,19 @@ importers:
   packages/tianma/token-meter-calibration:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-llm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/session
       '@deepseek-ai/dsh-token-meter':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/token-meter
       '@deepseek-ai/dsh-util-values':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../util/values
 
   packages/todo/tool-todo:
@@ -15645,6 +15645,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
+      '@tianma/dsh-department-prompts':
+        specifier: workspace:*
+        version: link:../../packages/tianma/department-prompts
 
   vendor/cordis:
     dependencies:

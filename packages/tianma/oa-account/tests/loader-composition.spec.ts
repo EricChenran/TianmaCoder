@@ -131,7 +131,7 @@ describe('oa-account real Loader composition through cordis.yml', () => {
         if (specifier === '@tianma/dsh-oa-account') return OaAccountService
         throw new Error(`unexpected Loader import: ${specifier}`)
       },
-    } as unknown as NonNullable<typeof context.loader.internal>
+    } as never
     await context.loader.create({
       name: 'cordis:include',
       config: { path: pathToFileURL(configPath).href },

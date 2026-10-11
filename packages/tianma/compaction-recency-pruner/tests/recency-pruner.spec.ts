@@ -92,7 +92,7 @@ describe('recency-pruner configuration', () => {
   })
 
   it('rejects unknown keys and an impossible threshold', () => {
-    expect(() => resolveConfig({ nope: 1 } as unknown as RecencyPruneConfig))
+    expect(() => resolveConfig({ nope: 1 } as RecencyPruneConfig))
       .toThrow(/unknown key "nope"/)
     expect(() => resolveConfig({ keepRecentResults: 0 })).toThrow(/keepRecentResults .* positive integer/)
     // threshold 30 cannot exceed marker (~32) + minCharsSaved 5.
@@ -177,7 +177,7 @@ describe('RecencyToolResultPruner replacement shape', () => {
     expect(result.cleared).toHaveLength(1)
     const replacement = test.snapshotEvents().at(-1)!
     expect(replacement.type).toBe('tool/result')
-    const message = test.deriveEventMessage(replacement) as unknown as { content: ContentBlock[] }
+    const message = test.deriveEventMessage(replacement) as { content: readonly ContentBlock[] }
     expect(message.content).toEqual([{ type: 'text', text: CLEARED_MARKER }])
   })
 
@@ -192,7 +192,7 @@ describe('RecencyToolResultPruner replacement shape', () => {
     const pruneAt = events.findIndex(event => event.type === 'compaction/prune')
     expect(pruneAt).toBeGreaterThanOrEqual(0)
     expect(events[pruneAt + 1]!.type).toBe('tool/result')
-    const shadow = events[pruneAt] as unknown as { data: { shadowedTokenCount: number } }
+    const shadow = events[pruneAt] as { data: { shadowedTokenCount: number } }
     expect(shadow.data.shadowedTokenCount).toBeGreaterThan(0)
   })
 
@@ -209,7 +209,7 @@ describe('RecencyToolResultPruner replacement shape', () => {
     service().pruneSession(test)
 
     const replacement = test.snapshotEvents().at(-1)!
-    const message = test.deriveEventMessage(replacement) as unknown as { content: ContentBlock[] }
+    const message = test.deriveEventMessage(replacement) as { content: readonly ContentBlock[] }
     expect(message.content[0]).toEqual({ type: 'text', text: CLEARED_MARKER })
     expect(message.content[1]!.type).toBe('image')
   })
@@ -221,7 +221,9 @@ describe('RecencyToolResultPruner service registration', () => {
     new SessionProjectionRegistry(ctx)
     void new TokenMeter(ctx)
     const pruner = new RecencyToolResultPruner(ctx, SMALL)
-    const seam = ctx.get('toolResultPruner') as unknown as RecencyToolResultPruner
+    const seam = ctx.get('toolResultPruner')
+    expect(seam).toBeInstanceOf(RecencyToolResultPruner)
+    if (!(seam instanceof RecencyToolResultPruner)) throw new Error('toolResultPruner is not the recency pruner')
     expect(seam.config).toEqual(pruner.config)
     expect(typeof seam.pruneSession).toBe('function')
   })
@@ -231,10 +233,11 @@ describe('RecencyToolResultPruner service registration', () => {
     new SessionProjectionRegistry(ctx)
     void new TokenMeter(ctx)
     await ctx.plugin(RecencyToolResultPruner, { keepRecentResults: 3 })
-    const pruner = ctx.get('toolResultPruner') as unknown as RecencyToolResultPruner
-    expect(pruner.config.keepRecentResults).toBe(3)
-    expect(pruner.config.thresholdChars).toBe(DEFAULTS.thresholdChars)
-    expect(pruner.config.minCharsSaved).toBe(DEFAULTS.minCharsSaved)
+    const registered = ctx.get('toolResultPruner')
+    if (!(registered instanceof RecencyToolResultPruner)) throw new Error('toolResultPruner is not the recency pruner')
+    expect(registered.config.keepRecentResults).toBe(3)
+    expect(registered.config.thresholdChars).toBe(DEFAULTS.thresholdChars)
+    expect(registered.config.minCharsSaved).toBe(DEFAULTS.minCharsSaved)
   })
 })
 

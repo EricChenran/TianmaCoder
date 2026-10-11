@@ -36,9 +36,9 @@
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
     "lib/public-url-*.js",
-    "lib/types/**/*.d.ts",
     "presets/department-tech.patch.yml",
-    "presets/department-business.patch.yml"
+    "presets/department-business.patch.yml",
+    "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
   "dsh": {
