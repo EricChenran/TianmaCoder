@@ -1400,6 +1400,9 @@ importers:
       '@deepseek-ai/dsh-user-questions':
         specifier: workspace:*
         version: link:../../interaction/user-questions
+      '@tianma/dsh-oa-account':
+        specifier: workspace:*
+        version: link:../../tianma/oa-account
       zod:
         specifier: ^4.4.3
         version: 4.4.3
