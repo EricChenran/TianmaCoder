@@ -78,6 +78,18 @@
   white-space: nowrap;
 }
 
+.stale {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-state-warn-label);
+  background: var(--dsw-alias-state-warn-tertiary);
+  white-space: nowrap;
+}
+
 .chevron {
   display: grid;
   flex: none;

@@ -10,7 +10,7 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { TodoItem } from './types.ts'
+import type { TodoItem, TodoStaleness } from './types.ts'
 // Type-only: resolves the required ctx.sessionProjections service declaration.
 import type {} from '@deepseek-ai/dsh-session-projection'
 // The `todos` projection-key declaration lives in src/types.ts (its one home);
@@ -108,6 +108,15 @@ const todosProjectionSchema: ZodType<TodoItem[] | null> = zod.union([
   zod.null(),
 ])
 
+/** Wire payload schema of the `todoStaleness` projection (the fold's whole value). */
+const stalenessProjectionSchema: ZodType<TodoStaleness> = zod.object({
+  stepsSinceWrite: zod.number(),
+  unfinished: zod.boolean(),
+})
+
+/** The staleness a turn boundary resets both keys to (no standing list to age). */
+const FRESH_STALENESS: TodoStaleness = { stepsSinceWrite: 0, unfinished: false }
+
 /**
  * Register the `todo_write` tool on `ctx.tools` and the `todos` unit on
  * `ctx.sessionProjections`.
@@ -131,6 +140,26 @@ export function apply(ctx: Context, config: Config): void {
     },
     wire: { viewSchema: todosProjectionSchema, view: state => state },
     stateVersion: 2,
+  })
+  // Drift fold: how many steps ran since the newest whole-list write, and
+  // whether that list still has open work. It is the one thing a carrier can
+  // show about a list the model stopped updating, and it is derived here rather
+  // than in the client because the client never folds domain events. A step
+  // boundary republishes; every other event keeps the reference.
+  ctx.sessionProjections.register<'todoStaleness', TodoStaleness>({
+    key: 'todoStaleness',
+    stateSchema: stalenessProjectionSchema,
+    init: () => FRESH_STALENESS,
+    apply: (state, event) => {
+      if (event.type === 'todo/write') {
+        return { stepsSinceWrite: 0, unfinished: event.data.todos.some(todo => todo.status !== 'completed') }
+      }
+      if (event.type === 'turn/start') return FRESH_STALENESS
+      if (event.type === 'step/start') return { stepsSinceWrite: state.stepsSinceWrite + 1, unfinished: state.unfinished }
+      return state
+    },
+    wire: { viewSchema: stalenessProjectionSchema, view: state => state },
+    stateVersion: 1,
   })
   ctx.tools.register(defineTool({
     name: 'todo_write',

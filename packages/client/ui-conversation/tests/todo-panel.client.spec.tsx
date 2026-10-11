@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/client'
+import type { TodoItem, TodoStaleness } from '@deepseek-ai/dsh-tool-todo/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { TodoDockProps } from '../src/client/skeleton/TodoPanel.tsx'
 import { TodoDock, TodoPanel, todoDockEntry } from '../src/client/skeleton/TodoPanel.tsx'
@@ -104,12 +104,45 @@ describe('TodoPanel', () => {
   })
 })
 
-/** Dock props stub: the adapter reads the 'todos' projection only; the rest of the owner share is unused. */
-function dockProps(store: ReturnType<typeof createSnapshotStore<{ value: readonly TodoItem[] | null | undefined }>>): TodoDockProps {
-  const useProjection = (_key: string, selector?: (v: unknown) => unknown) =>
-    bindSnapshotSelector(store)(s => (selector ?? (v => v))(s.value))
+/** Dock props stub: the adapter reads the 'todos' and 'todoStaleness' projections; the rest of the owner share is unused. */
+function dockProps(
+  store: ReturnType<typeof createSnapshotStore<{ value: readonly TodoItem[] | null | undefined }>>,
+  staleness?: ReturnType<typeof createSnapshotStore<{ value: TodoStaleness | undefined }>>,
+): TodoDockProps {
+  const useProjection = (key: string, selector?: (v: unknown) => unknown) => {
+    if (key === 'todoStaleness') {
+      return staleness === undefined
+        ? undefined
+        : bindSnapshotSelector(staleness)(s => (selector ?? ((v: unknown) => v))(s.value))
+    }
+    return bindSnapshotSelector(store)(s => (selector ?? ((v: unknown) => v))(s.value))
+  }
   return { useProjection, t } as unknown as TodoDockProps
 }
+
+describe('TodoPanel staleness marker', () => {
+  it('stays quiet while the plan is young', () => {
+    render(<TodoPanel todos={LIST} staleness={{ stepsSinceWrite: 9, unfinished: true }} t={t} />)
+    expect(screen.queryByTestId('todo-stale')).toBeNull()
+  })
+
+  it('says how long an unfinished plan has gone unupdated', () => {
+    render(<TodoPanel todos={LIST} staleness={{ stepsSinceWrite: 42, unfinished: true }} t={t} />)
+    expect(screen.getByText('已 42 步未更新')).toBeTruthy()
+    expect(screen.getByTestId('todo-stale').getAttribute('title'))
+      .toBe('任务清单由模型自行维护，可能落后于实际进度')
+  })
+
+  it('never marks a fully completed plan, however old', () => {
+    render(<TodoPanel todos={[{ content: '都完了', status: 'completed' }]} staleness={{ stepsSinceWrite: 99, unfinished: false }} t={t} />)
+    expect(screen.queryByTestId('todo-stale')).toBeNull()
+  })
+
+  it('renders without a staleness value at all', () => {
+    render(<TodoPanel todos={LIST} t={t} />)
+    expect(screen.queryByTestId('todo-stale')).toBeNull()
+  })
+})
 
 describe('TodoDock', () => {
   it('reads the host-computed todos projection and follows pushed updates', () => {
@@ -122,6 +155,18 @@ describe('TodoDock', () => {
     // The pre-first-write whole value (null) retires the strip (the panel owns no data).
     act(() => { store.set({ value: null }) })
     expect(screen.queryByTestId('todo-panel')).toBeNull()
+  })
+
+  it('follows the host-computed staleness projection beside the list', () => {
+    const todos = createSnapshotStore<{ value: readonly TodoItem[] | null | undefined }>({ value: LIST })
+    const staleness = createSnapshotStore<{ value: TodoStaleness | undefined }>({ value: undefined })
+    render(<TodoDock {...dockProps(todos, staleness)} />)
+    // A composition whose host never publishes the key shows the plan alone.
+    expect(screen.queryByTestId('todo-stale')).toBeNull()
+    act(() => { staleness.set({ value: { stepsSinceWrite: 12, unfinished: true } }) })
+    expect(screen.getByText('已 12 步未更新')).toBeTruthy()
+    act(() => { staleness.set({ value: { stepsSinceWrite: 0, unfinished: false } }) })
+    expect(screen.queryByTestId('todo-stale')).toBeNull()
   })
 
   it('registers before the goal and queue entries', () => {
