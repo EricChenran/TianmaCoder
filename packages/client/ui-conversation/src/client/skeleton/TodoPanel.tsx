@@ -5,7 +5,7 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 // the `todos` projection-key merge (single source, no consumer-side restated
 // declare) and the payload type. Type-only by construction — the outlet is
 // free of host value imports, so no host Context merge enters this program.
-import type { TodoItem } from '@deepseek-ai/dsh-tool-todo/client'
+import type { TodoItem, TodoStaleness } from '@deepseek-ai/dsh-tool-todo/client'
 import {
   IconChecklistOutlineRegular, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, StateDot,
   type StateDotState,
@@ -13,9 +13,18 @@ import {
 import { NS } from '../locales.ts'
 import css from './TodoPanel.module.css'
 
+/**
+ * Steps after which the standing plan is old enough to say so. The panel is a
+ * mirror of the model's last write, so the marker is the only signal that the
+ * list has fallen behind the work; below this count it would be noise.
+ */
+const STALE_STEPS = 10
+
 export interface TodoPanelProps {
   /** The session's current plan (empty renders nothing) — selected by the dock adapter. */
   todos: readonly TodoItem[]
+  /** Drift of that plan from the committed steps; absent while the host publishes none. */
+  staleness?: TodoStaleness | undefined
   /** The dock entry's locale seat, passed down as a plain prop. */
   t: TodoDockProps['t']
 }
@@ -62,9 +71,13 @@ function progressLabel(todos: readonly TodoItem[], t: TodoPanelProps['t']): stri
   ].join('\u2002·\u2002')
 }
 
-export function TodoPanel({ todos, t }: TodoPanelProps) {
+export function TodoPanel({ todos, staleness, t }: TodoPanelProps) {
   const [collapsed, setCollapsed] = useState(true)
   if (todos.length === 0) return null
+  // Only an unfinished list can be behind: a fully completed checklist is the
+  // finished state, however long ago it was written.
+  const aged = staleness !== undefined && staleness.unfinished && staleness.stepsSinceWrite >= STALE_STEPS
+  const staleLabel = aged ? t('todo.stale', { steps: staleness.stepsSinceWrite }) : null
 
   return (
     <section className={css.root} data-testid="todo-panel" aria-label={t('todo.title')}>
@@ -78,6 +91,9 @@ export function TodoPanel({ todos, t }: TodoPanelProps) {
           <span className={css.lead} aria-hidden><IconChecklistOutlineRegular /></span>
           <span className={css.title}>{t('todo.title')}</span>
           <span className={css.progress}>{progressLabel(todos, t)}</span>
+          {staleLabel === null ? null : (
+            <span className={css.stale} data-testid="todo-stale" title={t('todo.stale.hint')}>{staleLabel}</span>
+          )}
           <span className={css.chevron} aria-hidden>
             {collapsed ? <IconChevronUpOutlineRegular /> : <IconChevronDownOutlineRegular />}
           </span>
@@ -105,7 +121,8 @@ export type TodoDockProps = PropsRuntime<'conversation.input.dock'> & PropsLocal
 /** Renders the current todo projection, or nothing when it is absent. */
 export function TodoDock({ useProjection, t }: TodoDockProps) {
   const todos = useProjection('todos')
-  return <TodoPanel todos={todos ?? []} t={t} />
+  const staleness = useProjection('todoStaleness')
+  return <TodoPanel todos={todos ?? []} staleness={staleness} t={t} />
 }
 
 /** Registers the projected todo dock. */

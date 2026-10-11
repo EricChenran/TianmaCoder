@@ -103,6 +103,7 @@ describe('todos projection provider', () => {
     const projections = await bench.tailProjections()
     expect(projections).toBeDefined()
     expect('todos' in (projections?.values ?? {})).toBe(false)
+    expect('todoStaleness' in (projections?.values ?? {})).toBe(false)
   })
 
   it('drops the key when the tool-todo fiber unloads (HMR safety)', async () => {
@@ -112,5 +113,53 @@ describe('todos projection provider', () => {
     expect((await bench.tailProjections())?.values.todos).toBeNull()
     await fiber.dispose()
     expect('todos' in ((await bench.tailProjections())?.values ?? {})).toBe(false)
+  })
+})
+
+describe('todoStaleness projection provider', () => {
+  it('starts fresh and carries no unfinished work before the first write', async () => {
+    const bench = await harness(true)
+    seedMessage(bench.session)
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 0, unfinished: false })
+  })
+
+  it('counts committed steps since the newest write and reports unfinished work', async () => {
+    const bench = await harness(true)
+    const session = bench.session
+    seedMessage(session)
+    session.append('turn/start', { turn: 1 })
+    session.append('todo/write', {
+      todos: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }],
+    })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('step/start', { turn: 1, step: 2 })
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 2, unfinished: true })
+  })
+
+  it('resets the age on the next write and drops it on the next turn', async () => {
+    const bench = await harness(true)
+    const session = bench.session
+    seedMessage(session)
+    session.append('turn/start', { turn: 1 })
+    session.append('todo/write', { todos: [{ content: 'a', status: 'pending' }] })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('step/start', { turn: 1, step: 2 })
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 2, unfinished: true })
+    // A later write is the new baseline: the age restarts from it.
+    session.append('todo/write', { todos: [{ content: 'a', status: 'pending' }] })
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 0, unfinished: true })
+    // The next turn retires the standing plan, so there is nothing left to age.
+    session.append('turn/start', { turn: 2 })
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 0, unfinished: false })
+  })
+
+  it('never ages a fully completed list', async () => {
+    const bench = await harness(true)
+    const session = bench.session
+    seedMessage(session)
+    session.append('turn/start', { turn: 1 })
+    session.append('todo/write', { todos: [{ content: 'a', status: 'completed' }] })
+    session.append('step/start', { turn: 1, step: 1 })
+    expect((await bench.tailProjections())?.values.todoStaleness).toEqual({ stepsSinceWrite: 1, unfinished: false })
   })
 })

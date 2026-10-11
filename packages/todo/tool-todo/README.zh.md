@@ -93,6 +93,8 @@ agent 每次更新都发送完整列表；新列表替换旧列表，因此没�
 
 当组合挂载 `ctx.sessionProjections`（[`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.zh.md)）时，本包在注入的子插件中注册 `todos` 单元：投影即有效计划——最新的整份 `todo/write` 列表，首次写入前为 `null`，下一轮次开始时清空，而 `turn/end` 保留刚完成的清单。该键在此处合并进 `SessionProjectionMap`；载体通过历史尾页与 `session/projection` 推送帧提供该值。未挂载注册表的组合不受影响；单元注册见 [src/index.ts](src/index.ts)。
 
+它旁边还注册第二个单元 `todoStaleness`，即该计划与已完成工作之间的偏差——自最近一次写入以来提交的步数，以及清单是否仍有未完成条目。无人更新的清单会被读作当前状态，而没有任何折叠能判断工作究竟推进到哪一条：条目不具备可供工具调用匹配的身份。这个标记就是载体能给出的诚实信号。它在每个步边界重新发布（每步一个整数），并在轮次开始时与它所描述的 `todos` 值一起回到 `{ stepsSinceWrite: 0, unfinished: false }`。已全部完成的清单一律报告 `unfinished: false`，无论多旧，因此完成的清单不会触发该标记。
+
 ### 持久日志不变式
 
 不变式伴生插件注册到 `ctx.invariants`，先分别校验既有会话与新公布会话一次，再为实时追加推进按会话提交的轮次轨迹。它会拒绝畸形条目、空或重复 content、未知状态，以及开放轮次之外的持久 `todo/write`；核心 session 通用处理声明合并事件，而本生产包拥有 todo 专用规则。它刻意不约束有多少条目处于 `in_progress`，因为那是工具按部署制定的策略，而非持久数据规则。
