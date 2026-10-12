@@ -45,13 +45,14 @@ kind: "package-reference"
 
 ### 后端契约注记
 
-实际后端与规范在三处不一致，由 wire 层吸收，且每一处都经过对真实后端的验证而非假设：
+实际后端与规范在四处不一致，由 wire 层吸收，且每一处都经过对真实后端的验证而非假设：
 
 | 规范 | 实际后端 | 本包 |
 |---|---|---|
 | `captcha_code` | `captcha` | 两种写法都发送，任一契约都能认证 |
 | `image` | `img` | 两个键都接受 |
 | refresh 返回 `token`、`refresh_token`、`user` | 只返回 `token` | 保留已存 refresh token，并改为重新读取资料 |
+| `avatar` 等可选资料列为文本 | 本人从未填写时，`phone`、`department`、`position`、`level`、`avatar` 为 `null` | 按"文本或 null"读取，并把 `null` 投影为空串——界面本来就是这么读"没人设过"的值的 |
 
 ### 源码导览
 

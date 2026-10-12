@@ -139,6 +139,24 @@ describe('payload validation', () => {
       .rejects.toThrow(/sign-in payload was not understood/)
   })
 
+  it('reads an account whose optional profile columns came back null', async () => {
+    // The shipped backend answers `null`, not text, for a column its holder
+    // never filled in, which is how an account without an avatar signs in.
+    const sparse = { ...WIRE_USER, phone: null, department: null, position: null, level: null, avatar: null }
+    stubFetch(() => Promise.resolve(envelope(200, { code: 200, message: 'ok', data: { token: 'a', refresh_token: 'r', user: sparse } })))
+    const signedIn = await postSignIn(BASE, { account: 'a', password: 'b', captchaId: 'c', captcha: 'd' }, 5_000)
+    expect(signedIn.user).toMatchObject({ phone: '', department: '', position: '', level: '', avatar: '' })
+    stubFetch(() => Promise.resolve(envelope(200, { code: 200, message: 'ok', data: sparse })))
+    expect((await fetchProfile(BASE, 'token', 5_000)).avatar).toBe('')
+  })
+
+  it('refuses a required account column the backend left null', async () => {
+    stubFetch(() => Promise.resolve(envelope(200, { code: 200, message: 'ok', data: { ...WIRE_USER, status: null } })))
+    await expect(fetchProfile(BASE, 'token', 5_000)).rejects.toThrow(/profile payload was not understood/)
+    stubFetch(() => Promise.resolve(envelope(200, { code: 200, message: 'ok', data: { ...WIRE_USER, code: null } })))
+    await expect(fetchProfile(BASE, 'token', 5_000)).rejects.toThrow(/profile payload was not understood/)
+  })
+
   it('refuses a refresh payload with an empty token', async () => {
     stubFetch(() => Promise.resolve(envelope(200, { code: 200, message: 'ok', data: { token: '' } })))
     await expect(postRefresh(BASE, 'refresh', 5_000)).rejects.toThrow(/refresh payload was not understood/)

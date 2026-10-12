@@ -45,13 +45,14 @@ The session is one grant record, `tianma-oa-account/session`, written through `c
 
 ### Backend contract notes
 
-The shipped backend differs from the specification in three places the wire layer absorbs, and each is exercised against the live backend rather than assumed:
+The shipped backend differs from the specification in four places the wire layer absorbs, and each is exercised against the live backend rather than assumed:
 
 | Specification | Shipped backend | This package |
 |---|---|---|
 | `captcha_code` | `captcha` | sends both spellings, so either contract authenticates |
 | `image` | `img` | accepts either key |
 | `refresh` returns `token`, `refresh_token`, and `user` | returns `token` alone | keeps the stored refresh token and re-reads the profile instead |
+| `avatar` and the other optional profile columns carry text | `phone`, `department`, `position`, `level`, and `avatar` are `null` for a holder who never filled them in | reads text-or-null and projects `null` to an empty string, which is how the surfaces already read a value nobody set |
 
 ### Source map
 

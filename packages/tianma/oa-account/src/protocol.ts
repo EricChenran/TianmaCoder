@@ -75,17 +75,23 @@ const envelope = zod.object({
   data: zod.unknown(),
 })
 
+/**
+ * One profile column the shipped backend answers with `null` until its holder
+ * fills it in, read as text-or-null and projected to an empty string.
+ */
+const optionalText = zod.string().nullable()
+
 /** Wire shape of one account holder. */
 const wireUser = zod.object({
   id: zod.number(),
   account: zod.string(),
   name: zod.string(),
   code: zod.string(),
-  phone: zod.string(),
-  department: zod.string(),
-  position: zod.string(),
-  level: zod.string(),
-  avatar: zod.string(),
+  phone: optionalText,
+  department: optionalText,
+  position: optionalText,
+  level: optionalText,
+  avatar: optionalText,
   hire_date: zod.string(),
   employment_type: zod.string(),
   role: zod.string(),
@@ -420,7 +426,9 @@ export async function fetchStats(base: URL, token: string, timeoutMs: number, si
 }
 
 /**
- * Project one wire account holder onto the service vocabulary.
+ * Project one wire account holder onto the service vocabulary. An optional
+ * profile column the backend left `null` becomes an empty string, which is how
+ * the surfaces already read a value their holder never set.
  * @param raw - the validated wire payload.
  * @returns the account holder.
  */
@@ -430,11 +438,11 @@ function toUser(raw: zod.infer<typeof wireUser>): OaUser {
     account: raw.account,
     name: raw.name,
     code: raw.code,
-    phone: raw.phone,
-    department: raw.department,
-    position: raw.position,
-    level: raw.level,
-    avatar: raw.avatar,
+    phone: raw.phone ?? '',
+    department: raw.department ?? '',
+    position: raw.position ?? '',
+    level: raw.level ?? '',
+    avatar: raw.avatar ?? '',
     hireDate: raw.hire_date,
     employmentType: raw.employment_type,
     role: raw.role,
