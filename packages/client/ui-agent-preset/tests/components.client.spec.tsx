@@ -107,10 +107,15 @@ describe('the new-session chip', () => {
     ] }, undefined, undefined, enabled)
 
     fireEvent.click(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem')).toHaveLength(enabled ? 5 : 3)
+    // Developer tools decide which development modes the roster offers at all.
     expect(screen.getByRole('menuitem', { name: /^Standard mode/ })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: /^mine/ })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: /^PTC mode/ }) !== null).toBe(enabled)
+    // Minimal and Creator stay behind the disclosure either way, so the picker
+    // opens on the everyday choices and reveals the rest on request.
+    expect(screen.queryByRole('menuitem', { name: /^Creator mode/ })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /^Minimal mode/ })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(en.presetMore) }))
     expect(screen.queryByRole('menuitem', { name: /^Minimal mode/ }) !== null).toBe(enabled)
     fireEvent.click(screen.getByRole('menuitem', { name: /^Creator mode/ }))
     expect(actions.select).toHaveBeenCalledWith('cordis')

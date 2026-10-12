@@ -58,5 +58,8 @@
     ".notice: border-radius: 8px",
     ".rowItem: border-radius: 12px",
     ".glyph: border-radius: 8px"
+  ],
+  "ui-conversation/src/client/skeleton/TodoPanel.module.css": [
+    ".stale: border-radius: 6px"
   ]
 }
