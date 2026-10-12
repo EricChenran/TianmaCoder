@@ -3,6 +3,11 @@
     - id: web-search-error-fixture
       name: './web-search-error-fixture.mjs'
 
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: deepseek-official
+
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'
   config:

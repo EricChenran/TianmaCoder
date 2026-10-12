@@ -4354,6 +4354,38 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-perplexity -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-web-search-serp -->
+<a id="deepseek-aidsh-web-search-serp"></a>
+
+## `@deepseek-ai/dsh-web-search-serp`
+
+- `inject`: `web`
+- `source`: [`packages/web/web-search-serp/src/index.ts:54`](../packages/web/web-search-serp/src/index.ts)
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills the shipped defaults). */
+export interface Config {
+  /** Engines to query, in result-merge order. Defaults to every supported engine. */
+  engines?: SerpEngineId[]
+  /** Endpoint override by engine, for a mirror or a test double. Omitted engines use their default. */
+  endpoints?: Partial<Record<SerpEngineId, string>>
+  /** Per-search budget (ms), covering every engine request that search starts. Defaults to 8000. */
+  timeoutMs?: number
+  /** Minimum gap (ms) between two requests to one engine host. `0` disables throttling. Defaults to 1000. */
+  minIntervalMs?: number
+  /** Largest number of rows read from one engine's page. Defaults to 10. */
+  maxResultsPerEngine?: number
+  /** Largest fetched document the parsers read. Defaults to 2000000. */
+  maxHtmlChars?: number
+  /** User agent sent with every engine request. Defaults to a browser identity. */
+  userAgent?: string
+}
+
+/** Stable ids of the engines this provider scrapes. */
+export type SerpEngineId = 'baidu' | 'bing' | 'so360'
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-serp -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-webhook-github -->
 <a id="deepseek-aidsh-webhook-github"></a>
 

@@ -1,0 +1,64 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/web/web-search-serp/README.md
+/:
+  en: b989eafedddece02
+  zh: d246a2a7b851f95d
+/deepseek-ai-dsh-web-search-serp:
+  en: 49341ea09f0672c2
+  zh: 3e00f764d37a2f08
+/deepseek-ai-dsh-web-search-serp/summary:
+  en: d58a586de368703d
+  zh: ff83a2f37e6c0f90
+/deepseek-ai-dsh-web-search-serp/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: d7d5cf21ecd8490a
+/deepseek-ai-dsh-web-search-serp/use-this-package:
+  en: 4140f3ffe957bd68
+  zh: fbd7b5ba32ab5d28
+/deepseek-ai-dsh-web-search-serp/use-this-package/when-to-choose-it:
+  en: 488c006379c1eb4d
+  zh: 9c8ef92f7af4e99a
+/deepseek-ai-dsh-web-search-serp/use-this-package/minimal-configuration:
+  en: 453cd8354485e5db
+  zh: 5245daae39085195
+/deepseek-ai-dsh-web-search-serp/use-this-package/what-a-search-returns:
+  en: 9eae7ffe06d526fe
+  zh: 0f01eb9d3e4449a1
+/deepseek-ai-dsh-web-search-serp/use-this-package/failures-and-recovery:
+  en: 830b1461087f3ad6
+  zh: 3961ccef462061b5
+/deepseek-ai-dsh-web-search-serp/understand-the-implementation:
+  en: 9842c69ad3636bb3
+  zh: 502de0d25765664e
+/deepseek-ai-dsh-web-search-serp/understand-the-implementation/design-philosophy:
+  en: e022185548eb5266
+  zh: 55e2d8cca746c6a4
+/deepseek-ai-dsh-web-search-serp/understand-the-implementation/source-map:
+  en: 941a97764d2c5bee
+  zh: 539c39debf385ce8
+/deepseek-ai-dsh-web-search-serp/understand-the-implementation/request-flow:
+  en: fc8df1701d48baab
+  zh: 0a5b759311ee6618
+/deepseek-ai-dsh-web-search-serp/further-exploration:
+  en: 925aaab4df21b97c
+  zh: 1130409e0720b06a
+/deepseek-ai-dsh-web-search-serp/model-experience:
+  en: 03362f3c0fe97d8b
+  zh: e9c302d853f232fb
+/deepseek-ai-dsh-web-search-serp/model-experience/kv-cache-effect:
+  en: 40294c1c31b74824
+  zh: 4bb49aaea7bdc270
+/deepseek-ai-dsh-web-search-serp/known-limitations-and-deferred-work:
+  en: c0181ca78427b8f5
+  zh: 22a647f3533b3d51
+/deepseek-ai-dsh-web-search-serp/known-limitations-and-deferred-work/dev-note:
+  en: 7f775cc79dbce94b
+  zh: bf61a58a9c0d5536
+/deepseek-ai-dsh-web-search-serp/known-limitations-and-deferred-work/dev-note/open-resolving-engine-wrapper-urls:
+  en: 31b04f97d48636ae
+  zh: b3fb50c65af9442e
+/deepseek-ai-dsh-web-search-serp/known-limitations-and-deferred-work/dev-note/open-an-engine-challenge-marker-as-configuration:
+  en: 4cb2b9205cff05d0
+  zh: c050eff5d9c91627

@@ -479,20 +479,27 @@
 
     # The shared base enables the stable model-facing web_search and web_fetch
     # tools. The Web app disables this host row and composes both tools per agent
-    # preset; products with a stricter network policy override tool-web. DeepSeek
-    # search resolves the same DEEPSEEK_API_KEY
-    # credential the Models page manages for chat, at each search; its Messages
-    # endpoint is configured independently from the model route, so it takes its own
-    # base-URL override. Anonymous fetch accepts only public HTTP(S) destinations,
-    # resolves and validates every destination, and pins every actual connection.
-    # Search is a full auxiliary model request with server-side retrieval, so this
-    # shipped DeepSeek route gets 60s while the provider-neutral tool default
-    # remains 30s.
+    # preset; products with a stricter network policy override tool-web. Search is
+    # engine-scraping: it reads Baidu, Bing, and 360 result pages over plain HTTP, so
+    # the shipped search path needs no vendor search API, no credential, and no
+    # auxiliary model request. `web-search-serp` owns that mechanism; a deployer
+    # selects engines, endpoints, and politeness there. The DeepSeek auxiliary-search
+    # route stays mounted as the opt-in alternative: set `web.searchProvider` back to
+    # `deepseek-official` and search resolves the same DEEPSEEK_API_KEY credential the
+    # Models page manages for chat, at each search, against its own Messages endpoint
+    # (independent of the model route, so it takes its own base-URL override).
+    # Anonymous fetch accepts only public HTTP(S) destinations, resolves and validates
+    # every destination, and pins every actual connection. Scraping three engines
+    # concurrently can outlast a single fast request, so this shipped route gets 60s
+    # while the provider-neutral tool default remains 30s.
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: deepseek-official
+        searchProvider: serp
         fetchProvider: http
+
+    - id: web-search-serp
+      name: '@deepseek-ai/dsh-web-search-serp'
 
     - id: web-search-deepseek
       name: '@deepseek-ai/dsh-web-search-deepseek'

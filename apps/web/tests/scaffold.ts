@@ -669,13 +669,18 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ...options.toolsMode === undefined ? [] : [{ id: 'tools', config: { mode: options.toolsMode } }],
     ...options.deepSeekSearch === undefined
       ? []
-      : [{
-        id: 'web-search-deepseek',
-        config: {
-          apiKeyEnv: options.deepSeekSearch.apiKeyEnv,
-          baseURL: options.deepSeekSearch.baseURL,
+      : [
+        // The shipped search path is engine scraping, so a scenario that injects the
+        // DeepSeek search fixture selects that provider explicitly.
+        { id: 'web', config: { searchProvider: 'deepseek-official' } },
+        {
+          id: 'web-search-deepseek',
+          config: {
+            apiKeyEnv: options.deepSeekSearch.apiKeyEnv,
+            baseURL: options.deepSeekSearch.baseURL,
+          },
         },
-      }],
+      ],
     { id: 'llm-deepseek', disabled: mode !== 'record' && !maskDeepSeekCredential },
   ]
 
