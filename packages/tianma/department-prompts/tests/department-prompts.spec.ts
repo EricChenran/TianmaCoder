@@ -177,12 +177,22 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(plugin.departmentPrompt(department)).toContain(department === 'tech' ? '# 技术部工作规范' : '# 商务部工作规范')
   })
 
-  it('requires isolated resources before parallel technical verification', () => {
+  it('keeps acceptance user-directed after lightweight delivery checks', () => {
     const text = plugin.departmentPrompt('tech')
-    expect(text).toContain('浏览器：端到端验证与截图核对优先交由资源隔离的子 Agent')
-    expect(text).toContain('无法确认工作区、服务实例、浏览器用户数据目录与 Chrome 调试端口隔离时，由主 Agent 串行执行')
-    expect(text).toContain('共享资源上的构建、类型检查、启动服务与浏览器截图审计默认串行')
-    expect(text).toContain('由单一 Agent 独占其 Chrome 会话')
+    expect(text).toContain('交付前只做少量、直接相关的基础检查')
+    expect(text).toContain('在询问验收方式前不启动应用')
+    expect(text).toContain('询问用户由 Agent 执行端到端验证，还是由用户自行验证')
+    expect(text).toContain('用户选择自行验证时，启动项目并提供可访问的入口')
+    expect(text).toContain('前端改动的基础检查不要求默认截图')
+    expect(text).toContain('浏览器验证；按真实页面交互验证，截图用于视觉判读')
+    expect(text).toContain('验证关注项（只有用户选择 Agent 端到端验收时才逐档实测）')
+    expect(text).not.toContain('验证方式（交付前逐页执行）')
+    expect(text).not.toContain('端到端验证已由独立子 Agent 并行跑过')
+    expect(text).not.toContain('前端初步验收已做过：无头浏览器按')
+    expect(text).toContain('用户选择 Agent 验证后')
+    expect(text).toContain('交付前只完成少量、与当前改动直接相关的基础检查')
+    expect(text).toContain('若用户选择自行验证：项目已启动并提供入口、必要操作前提及停止方式')
+    expect(text).toContain('并行执行规则：多个 Agent 并行构建或操作同一 Chrome 实例')
   })
 
   it('publishes the bundled 公文 skill byte for byte where the interpreter reads it', () => {
