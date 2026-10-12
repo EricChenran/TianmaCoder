@@ -177,6 +177,14 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(plugin.departmentPrompt(department)).toContain(department === 'tech' ? '# 技术部工作规范' : '# 商务部工作规范')
   })
 
+  it('requires isolated resources before parallel technical verification', () => {
+    const text = plugin.departmentPrompt('tech')
+    expect(text).toContain('浏览器：端到端验证与截图核对优先交由资源隔离的子 Agent')
+    expect(text).toContain('无法确认工作区、服务实例、浏览器用户数据目录与 Chrome 调试端口隔离时，由主 Agent 串行执行')
+    expect(text).toContain('共享资源上的构建、类型检查、启动服务与浏览器截图审计默认串行')
+    expect(text).toContain('由单一 Agent 独占其 Chrome 会话')
+  })
+
   it('publishes the bundled 公文 skill byte for byte where the interpreter reads it', () => {
     const skillDir = join(temporaryDirectory(), 'skill')
     expect(plugin.materializeDepartmentSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
