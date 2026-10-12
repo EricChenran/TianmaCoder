@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { packIco, TRAY_ICON_PATHS, TRAY_ICON_SIZES, unpackIco, type IcoEntry } from '../scripts/render-tray-icon.ts'
+import { packIco, renderTrayIconEntries, TRAY_ICON_PATHS, TRAY_ICON_SIZES, unpackIco, type IcoEntry } from '../scripts/render-tray-icon.ts'
 
 /** Smallest valid-looking PNG stream: signature plus an IHDR chunk declaring the given edge. */
 function pngStub(width: number, height = width): Buffer {
@@ -35,9 +35,11 @@ describe('tray icon packaging', () => {
     expect(() => unpackIco(forged)).toThrow('declares 20 but holds 16x16')
   })
 
-  it('ships one crisp bitmap per supported display scale in the committed tray icon', () => {
+  it('ships one crisp bitmap per supported display scale in the committed tray icon', async () => {
     const entries = unpackIco(readFileSync(TRAY_ICON_PATHS.output))
     expect(entries.map(entry => entry.size)).toEqual([...TRAY_ICON_SIZES])
     for (const entry of entries) expect(entry.png.length).toBeGreaterThan(100)
+    const svg = readFileSync(TRAY_ICON_PATHS.source)
+    await expect(renderTrayIconEntries(svg)).resolves.toEqual(entries)
   })
 })

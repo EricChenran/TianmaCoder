@@ -8,8 +8,10 @@
   </defs>
   <rect x="0" y="0" width="1024" height="1024" rx="44" fill="#FBFBFB"/>
   <rect x="0" y="0" width="1024" height="1024" rx="44" fill="url(#sheen)"/>
-  <g transform="translate(160 160) scale(5.5)">
-  <path d="M12 96L40 32L55 96L83 32L97 96" stroke="#86E100" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M106 32L116 68" stroke="#86E100" stroke-width="15" stroke-linecap="round"/>
+  <g id="tray-glyph">
+    <g transform="translate(160 160) scale(5.5)">
+      <path d="M12 96L40 32L55 96L83 32L97 96" stroke="#86E100" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M106 32L116 68" stroke="#86E100" stroke-width="15" stroke-linecap="round"/>
+    </g>
   </g>
 </svg>

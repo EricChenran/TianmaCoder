@@ -24,6 +24,7 @@ function statusHarness(startTime?: number) {
 describe('RunningStatus', () => {
   it('waits for an open Turn start before allocating its clock', () => {
     const view = statusHarness()
+    expect(view.content()?.querySelector('svg[viewBox="0 0 128 94"]')).not.toBeNull()
     expect(view.content()?.textContent).toBe('深度求索中')
     expect(vi.getTimerCount()).toBe(0)
     view.set(1_000)
