@@ -936,6 +936,48 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
   })
 
+  it('clicks explicit viewport coordinates without probing the page', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'click', args: { x: 12.6, y: 34.2 },
+    }) as { x: number; y: number; clicked: boolean }
+    expect(result).toEqual({ x: 13, y: 34, clicked: true })
+    const record = lastRecord()
+    expect(record.executedScripts).toEqual([])
+    expect(record.inputEvents).toEqual([
+      { type: 'mouseMove', x: 13, y: 34 },
+      { type: 'mouseDown', x: 13, y: 34, button: 'left', clickCount: 1 },
+      { type: 'mouseUp', x: 13, y: 34, button: 'left', clickCount: 1 },
+    ])
+  })
+
+  it('searches same-origin frames and reports the ones a selector could not reach', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true, x: 40, y: 60, frameDepth: 1 }
+    const clicked = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'click', args: { selector: '#inner' },
+    }) as { x: number; y: number; clicked: boolean }
+    expect(clicked).toEqual({ x: 40, y: 60, clicked: true })
+    const script = lastRecord().executedScripts.at(-1) ?? ''
+    expect(script).toContain('contentDocument')
+    expect(script).toContain('#inner')
+    lastRecord().jsResult = { found: false, opaqueFrames: 2 }
+    const failure = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { selector: '#inner' },
+    }).catch((error: unknown) => error as { code?: string; message?: string })
+    expect(failure?.code).toBe('browser_element_not_found')
+    expect(failure?.message).toContain('2 cross-origin frame(s) were not searched')
+    lastRecord().jsResult = { found: true, tag: 'button', frameDepth: 1, box: { x: 1, y: 2, width: 3, height: 4 } }
+    const info = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'elementInfo', args: { selector: '#inner' },
+    }) as { insideFrame?: boolean; tag?: string }
+    expect(info).toMatchObject({ insideFrame: true, tag: 'button' })
+    await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'click', args: {} }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
   it('rejects an unknown command with a structured code', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }

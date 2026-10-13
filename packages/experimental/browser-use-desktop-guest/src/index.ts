@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number }; downloads?: Array<{ filename?: string; state?: string; receivedBytes?: number; totalBytes?: number; savePath?: string; tabId?: string }>; running?: number }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number }; downloads?: Array<{ filename?: string; state?: string; receivedBytes?: number; totalBytes?: number; savePath?: string; tabId?: string }>; running?: number; insideFrame?: boolean }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -217,29 +217,47 @@ export function apply(ctx: Context, input: Config): void {
       {
         name: 'browser_click',
         rawName: 'click',
-        description: 'Click the element matching a CSS selector or a ref from the last browser_snapshot.',
-        input: z.object({ selector: z.string().optional(), ref: z.string().optional() }),
+        description: 'Click a CSS selector, a ref from the last browser_snapshot, or explicit viewport coordinates; selectors are searched through same-origin frames.',
+        input: z.object({
+          selector: z.string().optional(), ref: z.string().optional(),
+          x: z.number().optional(), y: z.number().optional(),
+        }),
         run: async (agent, parsed) => {
-          const { selector, ref } = z.object({ selector: z.string().optional(), ref: z.string().optional() }).parse(parsed)
+          const { selector, ref, x, y } = z.object({
+            selector: z.string().optional(), ref: z.string().optional(),
+            x: z.number().optional(), y: z.number().optional(),
+          }).parse(parsed)
           const result = await executeOnLease(agent, 'click', {
             ...(selector === undefined ? {} : { selector }),
             ...(ref === undefined ? {} : { ref }),
+            ...(x === undefined ? {} : { x }),
+            ...(y === undefined ? {} : { y }),
           })
-          return { content: [{ type: 'text', text: `Clicked ${selector ?? ref} at ${String(result.x)}, ${String(result.y)}` }] }
+          const target = selector ?? ref ?? `${String(x)}, ${String(y)}`
+          return { content: [{ type: 'text', text: `Clicked ${target} at ${String(result.x)}, ${String(result.y)}` }] }
         },
       },
       {
         name: 'browser_hover',
         rawName: 'hover',
-        description: 'Hover the mouse over the element matching a CSS selector or a ref from the last browser_snapshot.',
-        input: z.object({ selector: z.string().optional(), ref: z.string().optional() }),
+        description: 'Hover a CSS selector, a ref from the last browser_snapshot, or explicit viewport coordinates; selectors are searched through same-origin frames.',
+        input: z.object({
+          selector: z.string().optional(), ref: z.string().optional(),
+          x: z.number().optional(), y: z.number().optional(),
+        }),
         run: async (agent, parsed) => {
-          const { selector, ref } = z.object({ selector: z.string().optional(), ref: z.string().optional() }).parse(parsed)
+          const { selector, ref, x, y } = z.object({
+            selector: z.string().optional(), ref: z.string().optional(),
+            x: z.number().optional(), y: z.number().optional(),
+          }).parse(parsed)
           const result = await executeOnLease(agent, 'hover', {
             ...(selector === undefined ? {} : { selector }),
             ...(ref === undefined ? {} : { ref }),
+            ...(x === undefined ? {} : { x }),
+            ...(y === undefined ? {} : { y }),
           })
-          return { content: [{ type: 'text', text: `Hovered ${selector ?? ref} at ${String(result.x)}, ${String(result.y)}` }] }
+          const target = selector ?? ref ?? `${String(x)}, ${String(y)}`
+          return { content: [{ type: 'text', text: `Hovered ${target} at ${String(result.x)}, ${String(result.y)}` }] }
         },
       },
       {

@@ -997,11 +997,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     const selector = typeof source.selector === 'string' ? source.selector : undefined
     if (selector === undefined || selector.length === 0) return undefined
-    const probed = await view.webContents.evaluateInIsolatedWorld(
-      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
-        el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
-        return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
-    ) as { found: boolean; x?: number; y?: number }
+    const probed = await view.webContents.evaluateInIsolatedWorld(elementProbeScript(selector, false)) as AgentProbeResult
     if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') return undefined
     return { x: Math.round(probed.x), y: Math.round(probed.y) }
   }
@@ -1206,30 +1202,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       return Promise.reject(new ShellBrowserControlError('desktop browser: elementInfo requires a ref or CSS selector', 'browser_invalid_args'))
     }
     const probed = await view.webContents.evaluateInIsolatedWorld(
-      `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { found: false };
-        el.scrollIntoView({ block: 'center' });
-        const r = el.getBoundingClientRect();
-        const style = getComputedStyle(el);
-        return {
-          found: true,
-          tag: el.tagName.toLowerCase(),
-          role: el.getAttribute('role') ?? undefined,
-          name: el.getAttribute('aria-label') ?? el.getAttribute('name') ?? undefined,
-          text: ((el.innerText ?? '') + '').slice(0, 200) || undefined,
-          value: typeof el.value === 'string' ? el.value : undefined,
-          checked: typeof el.checked === 'boolean' ? el.checked : undefined,
-          disabled: el.disabled === true,
-          visible: r.width >= 2 && r.height >= 2 && style.visibility !== 'hidden' && style.display !== 'none',
-          box: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) },
-        };
-      })()`,
-    ) as { found: boolean } & Record<string, unknown>
+      elementProbeScript(selector, true),
+    ) as AgentProbeResult
     if (!probed.found) {
-      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+      return Promise.reject(new ShellBrowserControlError(
+        `desktop browser: element not found for ${JSON.stringify(selector)}${opaqueFrameNote(probed)}`, 'browser_element_not_found'))
     }
-    return { selector, source: 'page', ...probed }
+    return {
+      selector, source: 'page', ...probed,
+      ...(probed.frameDepth === undefined || probed.frameDepth === 0 ? {} : { insideFrame: true }),
+    }
   }
 
   /**
@@ -1261,7 +1243,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
     const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
     let point: { x: number; y: number }
-    if (ref !== undefined) {
+    if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+      // Explicit coordinates reach content a selector cannot address, such as a
+      // cross-origin frame or a canvas surface.
+      point = { x: Math.round(parsed.x), y: Math.round(parsed.y) }
+    } else if (ref !== undefined) {
       const cached = refs.get(ref)
       if (cached === undefined) {
         return Promise.reject(new ShellBrowserControlError(`desktop browser: ref ${JSON.stringify(ref)} is stale or unknown; run snapshot again`, 'browser_element_not_found'))
@@ -1269,15 +1255,12 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       point = cached
     } else {
       if (selector === undefined || selector.length === 0) {
-        return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a ref or CSS selector', 'browser_invalid_args'))
+        return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a ref, a CSS selector, or x and y', 'browser_invalid_args'))
       }
-      const probed = await view.webContents.evaluateInIsolatedWorld(
-        `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
-          el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
-          return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
-      ) as { found: boolean; x?: number; y?: number }
+      const probed = await view.webContents.evaluateInIsolatedWorld(elementProbeScript(selector, false)) as AgentProbeResult
       if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') {
-        return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+        return Promise.reject(new ShellBrowserControlError(
+          `desktop browser: element not found for ${JSON.stringify(selector)}${opaqueFrameNote(probed)}`, 'browser_element_not_found'))
       }
       point = { x: Math.round(probed.x), y: Math.round(probed.y) }
     }
@@ -1457,6 +1440,77 @@ function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'met
     if (mapped !== undefined && !names.includes(mapped)) names.push(mapped)
   }
   return names
+}
+
+/** Frames the element probe descends into before giving up. */
+const AGENT_FRAME_MAX_DEPTH = 4
+
+/** What {@link elementProbeScript} reports back. */
+interface AgentProbeResult {
+  found: boolean
+  x?: number
+  y?: number
+  /** 0 for the top-level document, higher inside a nested frame. */
+  frameDepth?: number
+  /** Same-origin frames that could not be entered because the page is cross-origin. */
+  opaqueFrames?: number
+  [key: string]: unknown
+}
+
+/**
+ * Build the isolated-world probe that finds one selector anywhere in the part of
+ * the frame tree the page can reach. Same-origin frames are entered and their
+ * offsets added, so the reported point is in top-level viewport coordinates; a
+ * cross-origin frame is counted as opaque rather than silently skipped.
+ * @param selector - CSS selector to find.
+ * @param facts - whether to also read the element's facts (tag, role, text, box).
+ * @returns A self-contained script evaluating to an {@link AgentProbeResult}.
+ */
+function elementProbeScript(selector: string, facts: boolean): string {
+  return `(() => {
+  const target = ${JSON.stringify(selector)};
+  let opaque = 0;
+  const walk = (doc, offsetX, offsetY, depth) => {
+    if (doc === null || depth > ${String(AGENT_FRAME_MAX_DEPTH)}) return null;
+    let el = null;
+    try { el = doc.querySelector(target); } catch (error) { return null; }
+    if (el !== null) {
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      const base = { found: true, x: r.x + r.width / 2 + offsetX, y: r.y + r.height / 2 + offsetY, frameDepth: depth };
+      if (!${String(facts)}) return base;
+      const style = doc.defaultView.getComputedStyle(el);
+      return Object.assign(base, {
+        tag: el.tagName.toLowerCase(),
+        role: el.getAttribute('role') ?? undefined,
+        name: el.getAttribute('aria-label') ?? el.getAttribute('name') ?? undefined,
+        text: ((el.innerText ?? '') + '').slice(0, 200) || undefined,
+        value: typeof el.value === 'string' ? el.value : undefined,
+        checked: typeof el.checked === 'boolean' ? el.checked : undefined,
+        disabled: el.disabled === true,
+        visible: r.width >= 2 && r.height >= 2 && style.visibility !== 'hidden' && style.display !== 'none',
+        box: { x: Math.round(r.x + offsetX), y: Math.round(r.y + offsetY), width: Math.round(r.width), height: Math.round(r.height) },
+      });
+    }
+    for (const frame of doc.querySelectorAll('iframe, frame')) {
+      let child = null;
+      try { child = frame.contentDocument; } catch (error) { child = null; }
+      if (child === null) { opaque += 1; continue; }
+      const fr = frame.getBoundingClientRect();
+      const hit = walk(child, offsetX + fr.x, offsetY + fr.y, depth + 1);
+      if (hit !== null) return hit;
+    }
+    return null;
+  };
+  const hit = walk(document, 0, 0, 0);
+  return hit !== null ? hit : { found: false, opaqueFrames: opaque };
+})()`
+}
+
+/** @returns the clause naming the cross-origin frames a probe could not search. */
+function opaqueFrameNote(probed: AgentProbeResult): string {
+  const opaque = probed.opaqueFrames ?? 0
+  return opaque === 0 ? '' : ` (${String(opaque)} cross-origin frame(s) were not searched)`
 }
 
 /** @returns The value as a plain record, or an empty record for anything that is not an object. */
