@@ -28,7 +28,7 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent'> & {
     capturePage(): Promise<AgentGuestCapture>
   }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
@@ -85,9 +85,52 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     switch (request.command) {
       case 'navigate': return this.navigate(view, request.args)
       case 'screenshot': return this.screenshot(view)
+      case 'getState': return this.state(view)
+      case 'type': return this.type(view, request.args)
+      case 'press': return this.press(view, request.args)
+      case 'scroll': return this.scroll(view, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
+  }
+
+  /** Current page facts without navigating. */
+  private state(view: AgentGuestView): ShellBrowserJson {
+    if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
+    return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
+  }
+
+  /** Insert trusted text into the focused element of the guest page. */
+  private async type(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const text = argsObject(args).text
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new ShellBrowserControlError('desktop browser: type requires a non-empty text', 'browser_invalid_args')
+    }
+    await view.webContents.insertText(text)
+    return { typed: text.length }
+  }
+
+  /** Send one trusted key press (rawKeyDown + keyUp) with the given key code. */
+  private press(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const key = argsObject(args).key
+    if (typeof key !== 'string' || key.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: press requires a key code', 'browser_invalid_args'))
+    }
+    view.webContents.sendInputEvent({ type: 'rawKeyDown', keyCode: key })
+    view.webContents.sendInputEvent({ type: 'keyUp', keyCode: key })
+    return Promise.resolve({ pressed: key })
+  }
+
+  /** Scroll the guest page by the given deltas around the viewport center. */
+  private scroll(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const deltaX = typeof parsed.deltaX === 'number' ? parsed.deltaX : 0
+    const deltaY = typeof parsed.deltaY === 'number' ? parsed.deltaY : 0
+    if (deltaX === 0 && deltaY === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: scroll requires a non-zero delta', 'browser_invalid_args'))
+    }
+    view.webContents.sendInputEvent({ type: 'mouseWheel', x: 40, y: 40, deltaX, deltaY })
+    return Promise.resolve({ scrolled: { deltaX, deltaY } })
   }
 
   /** Navigate to one allowlisted URL and report the settled page facts. */
@@ -175,7 +218,11 @@ function isApplicationHost(url: URL, hostUrl: string | undefined): boolean {
 }
 
 function requestArgsUrl(args: ShellBrowserJson): string | undefined {
-  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
-  const url = (args as { readonly url?: unknown }).url
+  const url = argsObject(args).url
   return typeof url === 'string' ? url : undefined
+}
+
+function argsObject(args: ShellBrowserJson): Record<string, unknown> {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return {}
+  return args as Record<string, unknown>
 }

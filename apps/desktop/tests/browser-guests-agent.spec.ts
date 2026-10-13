@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WebContents } from 'electron'
 import type { AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
 import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
 
 /** Recorded navigation outcome of one fake guest. */
 interface FakeGuestRecord {
   loadedUrls: string[]
+  insertedTexts: string[]
+  inputEvents: object[]
   closed: number
   destroyed: boolean
   emptyCapture: boolean
@@ -31,8 +34,11 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
 } => {
   class FakeView implements FakeWrappedGuest {
     loadedUrls: string[] = []
+    insertedTexts: string[] = []
+    inputEvents: object[] = []
     closed = 0
     destroyed = false
+    emptyCapture = false
     bounds: Array<{ x: number; y: number; width: number; height: number }> = []
     lastPreferences: unknown
     currentUrl = 'about:blank'
@@ -52,6 +58,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         getTitle: () => 'Example',
         close: () => { this.closed += 1 },
         isDestroyed: () => this.destroyed,
+        insertText: async (text: string): Promise<void> => { this.insertedTexts.push(text) },
+        sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]): void => { this.inputEvents.push(event) },
         capturePage: async () => ({
           isEmpty: () => this.emptyCapture,
           toPNG: () => Buffer.from('png-bytes'),
@@ -59,8 +67,6 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
       }
       FakeView.instances.push(this)
     }
-
-    emptyCapture = false
 
     attach(window: AgentGuestHostWindow): void {
       window.contentView.addChildView({ setBounds: this.setBounds })
@@ -79,6 +85,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
       const view = new FakeView({ webPreferences: {} })
       return {
         loadedUrls: view.loadedUrls,
+        insertedTexts: view.insertedTexts,
+        inputEvents: view.inputEvents,
         get closed() { return view.closed },
         get destroyed() { return view.destroyed },
         get emptyCapture() { return view.emptyCapture },
@@ -90,6 +98,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           getTitle: () => view.webContents.getTitle(),
           close: () => { view.webContents.close() },
           isDestroyed: () => view.webContents.isDestroyed(),
+          insertText: async (text) => { await view.webContents.insertText(text) },
+          sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { view.webContents.sendInputEvent(event) },
           capturePage: async () => view.webContents.capturePage(),
         },
         attach: (target) => { view.attach(target) },
