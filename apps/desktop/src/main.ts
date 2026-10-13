@@ -58,6 +58,7 @@ import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
 import { AgentBrowserGuests } from './browser-guests-agent.ts'
 import type { DesktopAgentBrowserPane } from '@deepseek-ai/dsh-client-ui-agent-browser/types'
+import type { AgentDownloadEvent } from './agent-downloads.ts'
 import { ShellBrowserControlEndpoint } from './browser-control-main.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
@@ -474,6 +475,33 @@ async function main(): Promise<void> {
           ? undefined : browserGuests.ownedGuest(mainWindow.webContents, tabId),
       },
       deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
+      downloads: {
+        watch: (partition, listener) => {
+          const guestSession = session.fromPartition(partition)
+          const onWillDownload = (
+            _event: Electron.Event, item: Electron.DownloadItem, web: Electron.WebContents,
+          ): void => {
+            // One stable id per download: the item has none, so key it by origin and arrival.
+            const id = `${web.id}:${item.getURL()}:${String(Date.now())}`
+            const publish = (state: AgentDownloadEvent['state']): void => {
+              listener({
+                id,
+                filename: item.getFilename(),
+                url: item.getURL(),
+                state,
+                receivedBytes: item.getReceivedBytes(),
+                totalBytes: item.getTotalBytes(),
+                ...(item.getSavePath() === '' ? {} : { savePath: item.getSavePath() }),
+              })
+            }
+            publish('progressing')
+            item.on('updated', (_updated, state) => { publish(state === 'interrupted' ? 'interrupted' : 'progressing') })
+            item.once('done', (_done, state) => { publish(state) })
+          }
+          guestSession.on('will-download', onWillDownload)
+          return () => { guestSession.off('will-download', onWillDownload) }
+        },
+      },
       emit: (event) => {
         controlReference.current?.emit(event.name, event.payload, event.leaseId)
         const payload = event.payload as {

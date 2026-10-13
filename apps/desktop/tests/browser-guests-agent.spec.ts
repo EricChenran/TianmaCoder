@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { WebContents } from 'electron'
 import type { AgentRecorderPort, AgentRecordingResult } from '../src/agent-recorder.ts'
+import type { AgentDownloadEvent, AgentDownloadWatcher } from '../src/agent-downloads.ts'
 import type { AgentClaimedWebContents, AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
 import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
 import { AGENT_TAB_LIMIT } from '../src/browser-tab-residency.ts'
@@ -242,6 +243,30 @@ function makeFakeRecorder(): {
   }
 }
 
+/** Download source a test can drive directly. */
+function makeFakeDownloads(): {
+  watcher: AgentDownloadWatcher
+  emit: (event: AgentDownloadEvent) => void
+  watched: string[]
+  unwatched: number
+} {
+  const listeners = new Set<(event: AgentDownloadEvent) => void>()
+  const watched: string[] = []
+  const state = { unwatched: 0 }
+  return {
+    watched,
+    get unwatched() { return state.unwatched },
+    watcher: {
+      watch: (partition, listener) => {
+        watched.push(partition)
+        listeners.add(listener)
+        return () => { listeners.delete(listener); state.unwatched += 1 }
+      },
+    },
+    emit: (event: AgentDownloadEvent) => { for (const listener of [...listeners]) listener(event) },
+  }
+}
+
 interface Harness {
   guests: AgentBrowserGuests
 }
@@ -259,6 +284,7 @@ function makeGuests(overrides?: {
   createRecorder?: () => AgentRecorderPort
   recordingsDir?: string
   deviceScaleFactor?: () => number
+  downloads?: AgentDownloadWatcher
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -282,6 +308,7 @@ function makeGuests(overrides?: {
     ...(overrides?.createRecorder === undefined ? {} : { createRecorder: overrides.createRecorder }),
     ...(overrides?.recordingsDir === undefined ? {} : { recordingsDir: overrides.recordingsDir }),
     ...(overrides?.deviceScaleFactor === undefined ? {} : { deviceScaleFactor: overrides.deviceScaleFactor }),
+    ...(overrides?.downloads === undefined ? {} : { downloads: overrides.downloads }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -850,6 +877,63 @@ describe('AgentBrowserGuests', () => {
       type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'screenshot', args: {},
     }) as { sizeCorrected: boolean }
     expect(unscaled.sizeCorrected).toBe(true)
+  })
+
+  it('tracks the lease downloads and reports their saved paths', async () => {
+    const downloads = makeFakeDownloads()
+    const { guests } = makeGuests({ downloads: downloads.watcher })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    expect(downloads.watched).toEqual(['partition-ws'])
+    const idle = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'downloads', args: { action: 'list' },
+    }) as { downloads: unknown[]; running: number }
+    expect(idle).toEqual({ downloads: [], running: 0 })
+    const file = { id: 'd1', filename: 'report.pdf', url: 'https://example.com/report.pdf' }
+    downloads.emit({ ...file, state: 'progressing', receivedBytes: 10, totalBytes: 100 })
+    const running = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'downloads', args: { action: 'list' },
+    }) as { downloads: Array<{ filename: string; state: string }>; running: number }
+    expect(running.running).toBe(1)
+    expect(running.downloads[0]).toMatchObject({ filename: 'report.pdf', state: 'progressing' })
+    downloads.emit({
+      ...file, state: 'completed', receivedBytes: 100, totalBytes: 100, savePath: 'C:\\Users\\me\\Downloads\\report.pdf',
+    })
+    const settled = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'downloads', args: { action: 'list' },
+    }) as { downloads: Array<{ state: string; savePath?: string }>; running: number }
+    expect(settled.running).toBe(0)
+    expect(settled.downloads).toHaveLength(1)
+    expect(settled.downloads[0]).toMatchObject({ state: 'completed', savePath: 'C:\\Users\\me\\Downloads\\report.pdf' })
+    await guests.release({ leaseId })
+    expect(downloads.unwatched).toBe(1)
+    await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'downloads', args: { action: 'list' } }))
+      .rejects.toMatchObject({ code: 'browser_lease_unknown' })
+  })
+
+  it('waits for a running download and gives up at the deadline', async () => {
+    const downloads = makeFakeDownloads()
+    const { guests } = makeGuests({ downloads: downloads.watcher })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const file = { id: 'd1', filename: 'archive.zip', url: 'https://example.com/archive.zip' }
+    downloads.emit({ ...file, state: 'progressing', receivedBytes: 1, totalBytes: 10 })
+    const started = Date.now()
+    const timedOut = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'downloads', args: { action: 'wait', timeoutMs: 150 },
+    }) as { running: number }
+    expect(timedOut.running).toBe(1)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(140)
+    // A download that settles mid-wait returns before the deadline.
+    const waiting = guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'downloads', args: { action: 'wait', timeoutMs: 5_000 },
+    })
+    setTimeout(() => {
+      downloads.emit({ ...file, state: 'completed', receivedBytes: 10, totalBytes: 10, savePath: 'C:\\tmp\\archive.zip' })
+    }, 20)
+    const settled = await waiting as { running: number; downloads: Array<{ state: string }> }
+    expect(settled.running).toBe(0)
+    expect(settled.downloads[0]?.state).toBe('completed')
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'downloads', args: { action: 'nope' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
   })
 
   it('rejects an unknown command with a structured code', async () => {

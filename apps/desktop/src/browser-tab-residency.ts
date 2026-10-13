@@ -26,6 +26,8 @@ export interface AgentTabResidencyCandidate {
   readonly operationActive: boolean
   /** A screenshot is capturing this tab. */
   readonly captureActive: boolean
+  /** A download started from this tab is still running. */
+  readonly downloadActive: boolean
 }
 
 /**
@@ -41,6 +43,7 @@ export function isAgentTabProtected(candidate: AgentTabResidencyCandidate): bool
     || candidate.visible
     || candidate.operationActive
     || candidate.captureActive
+    || candidate.downloadActive
 }
 
 /**

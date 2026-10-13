@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, aria, elementInfo, screenshot, viewport, record, state, click, hover, fill, check, type, press, scroll, cuaKeypress, cuaScroll, cuaDrag, back, forward, reload, select, wait, tabs, copy, paste): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
+Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, aria, elementInfo, screenshot, viewport, record, downloads, state, click, hover, fill, check, type, press, scroll, cuaKeypress, cuaScroll, cuaDrag, back, forward, reload, select, wait, tabs, copy, paste): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
 
 ## Table of Contents
 
@@ -98,6 +98,7 @@ Results append to the main Session history; the tool catalog itself is static.
 
 - **Chromium HTTP(S) only** — the shell's navigation allowlist rejects other schemes; file targets stay with document-preview flows.
 - **Claimed tabs are borrowed** — `listUserTabs` and `claim` reach the pages the human already has open in the Sidebar. Commands then drive that same page, and the pool never closes it: finalizing a claimed tab or releasing the lease leaves the page exactly as it was.
+- **Downloads are tracked per lease** — a download is attributed to the tab that was active when it started, and the residency limit will not close a tab while one of its downloads runs. The list covers the current lease only.
 - **Refs go stale** — element refs from `browser_snapshot` address the page as it was when the snapshot ran, so a navigation or re-render invalidates them and an action on a stale ref fails with an element-not-found error.
 - **Suspension is a residency marker** — the `suspend` and `resume` actions move a background tab in and out of the protected set that the 32-tab residency limit consults. A suspended tab's guest stays loaded and is released only when the pool closes a tab to stay within the limit.
 - **Live browser state** — Session replay restores recorded conversation data, not the guest process or page; the tab pool lives only as long as the Session runtime.

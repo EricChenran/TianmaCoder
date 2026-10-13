@@ -10,6 +10,9 @@ import {
   AGENT_RECORD_FRAME_INTERVAL_MS, agentRecordingsDir, createCanvasRecorder, pruneRecordings,
   type AgentRecorderPort, type AgentRecordingResult,
 } from './agent-recorder.ts'
+import {
+  downloadSummary, isDownloadRunning, type AgentDownloadRecord, type AgentDownloadWatcher,
+} from './agent-downloads.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
@@ -63,6 +66,15 @@ export const SCREENSHOT_SETTLE_MS = 120
 
 /** Empty captures a screenshot retries before reporting the failure. */
 export const AGENT_CAPTURE_ATTEMPTS = 3
+
+/** Default deadline for waiting on the lease's running downloads. */
+export const AGENT_DOWNLOAD_WAIT_MS = 30_000
+
+/** How often the download wait re-reads the lease's running downloads. */
+export const AGENT_DOWNLOAD_POLL_MS = 100
+
+/** Downloads tracked per lease before the oldest finished ones are dropped. */
+export const AGENT_DOWNLOAD_MAX_RECORDS = 50
 
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
@@ -192,6 +204,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   #recording: AgentRecording | undefined
   /** Last finished recording, so the model can report its path after stopping. */
   #lastRecording?: { path: string; bytes: number; frames: number; durationMs: number }
+  /** Downloads observed per lease, oldest first. */
+  readonly #downloads = new Map<string, AgentDownloadRecord[]>()
+  /** Download subscriptions held per lease, released with it. */
+  readonly #downloadWatchers = new Map<string, () => void>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -219,6 +235,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly recordingsDir?: string
     /** Display scale factor captured pixels carry; defaults to one device-independent pixel per pixel. */
     readonly deviceScaleFactor?: () => number
+    /** Source of guest download facts; absent means downloads are neither tracked nor protected. */
+    readonly downloads?: AgentDownloadWatcher
   }) {}
 
   /** @returns The scale factor captured pixels are measured in; one when the shell does not report one. */
@@ -260,7 +278,33 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     this.#leases.set(leaseId, lease)
     this.attachActive(lease)
     this.publishState(leaseId, lease)
+    this.watchDownloads(leaseId, lease)
     return Promise.resolve({ leaseId, tabId })
+  }
+
+  /**
+   * Follow the downloads this lease's partition starts, so the model can report
+   * them and the residency limit never closes a tab mid-download.
+   */
+  private watchDownloads(leaseId: string, lease: GuestLease): void {
+    const watcher = this.options.downloads
+    if (watcher === undefined) return
+    const partition = this.options.partitionFor(lease.workspaceKey)
+    this.#downloadWatchers.set(leaseId, watcher.watch(partition, (event) => {
+      const current = this.#leases.get(leaseId)
+      if (current === undefined) return
+      const records = this.#downloads.get(leaseId) ?? []
+      const existing = records.find(record => record.event.id === event.id)
+      if (existing === undefined) records.push({ event, tabId: current.activeTabId, startedAt: Date.now() })
+      else existing.event = event
+      // Keep the newest records and drop the oldest finished ones first.
+      while (records.length > AGENT_DOWNLOAD_MAX_RECORDS) {
+        const settled = records.findIndex(record => !isDownloadRunning(record.event))
+        if (settled === -1) break
+        records.splice(settled, 1)
+      }
+      this.#downloads.set(leaseId, records)
+    }))
   }
 
   /**
@@ -378,6 +422,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'paste': return this.pasteClipboard(view, request.leaseId)
       case 'tabs': return this.tabsOp(request.leaseId, request.args)
       case 'record': return this.recordOp(request.leaseId, request.args)
+      case 'downloads': return this.downloadsOp(request.leaseId, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -408,7 +453,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
       lease.tabs.set(created, this.newTab(view, Date.now()))
       this.activateTab(lease, created, window)
-      const evicted = this.enforceLimit(lease)
+      const evicted = this.enforceLimit(leaseId, lease)
       return { ...list(), tabId: created, ...(evicted.length === 0 ? {} : { evicted }) }
     }
     if (action === 'close') {
@@ -457,7 +502,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       const created = randomUUID()
       lease.tabs.set(created, this.newTab(wrapClaimedGuest(guest), Date.now(), true))
       this.activateTab(lease, created, window)
-      const evicted = this.enforceLimit(lease)
+      const evicted = this.enforceLimit(leaseId, lease)
       return { ...list(), tabId: created, claimed: tabId, ...(evicted.length === 0 ? {} : { evicted }) }
     }
     if (action === 'finalize') {
@@ -496,13 +541,14 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /**
    * Close unprotected tabs until the lease is back within its residency limit.
-   * @param lease - lease whose pool may exceed {@link AGENT_TAB_LIMIT}.
+   * @param leaseId - lease whose pool may exceed {@link AGENT_TAB_LIMIT}.
+   * @param lease - the lease itself.
    * @returns The closed tab ids, in eviction order.
    */
-  private enforceLimit(lease: GuestLease): string[] {
+  private enforceLimit(leaseId: string, lease: GuestLease): string[] {
     const evicted: string[] = []
     for (;;) {
-      const victim = selectAgentTabVictim(this.residencyCandidates(lease), AGENT_TAB_LIMIT)
+      const victim = selectAgentTabVictim(this.residencyCandidates(leaseId, lease), AGENT_TAB_LIMIT)
       if (victim === null) return evicted
       this.closeTab(lease, victim.tabId)
       evicted.push(victim.tabId)
@@ -510,7 +556,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** @returns Every tab of one lease as residency facts for the limit policy. */
-  private residencyCandidates(lease: GuestLease): AgentTabResidencyCandidate[] {
+  private residencyCandidates(leaseId: string, lease: GuestLease): AgentTabResidencyCandidate[] {
     return [...lease.tabs.entries()].map(([tabId, tab]) => {
       const selected = tabId === lease.activeTabId
       return {
@@ -524,8 +570,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         visible: selected && lease.visible,
         operationActive: tab.operationActive,
         captureActive: tab.captureActive,
+        downloadActive: this.downloadActive(leaseId, tabId),
       }
     })
+  }
+
+  /** @returns whether one tab started a download that is still running. */
+  private downloadActive(leaseId: string, tabId: string): boolean {
+    const records = this.#downloads.get(leaseId)
+    if (records === undefined) return false
+    return records.some(record => record.tabId === tabId && isDownloadRunning(record.event))
   }
 
   /** Point the active pointer at one tab and swap the on-screen bounds between old and new. */
@@ -651,6 +705,39 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const bytes = Buffer.from(result.base64, 'base64')
     await writeFile(path, bytes)
     return { path, bytes: bytes.length }
+  }
+
+  /**
+   * Report the lease's downloads, optionally waiting for the running ones.
+   * @param leaseId - lease whose downloads are reported.
+   * @param args - `action` (`list` or `wait`) and an optional `timeoutMs`.
+   * @returns Every tracked download, oldest first, plus how many are still running.
+   */
+  private async downloadsOp(leaseId: string, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    this.lease(leaseId)
+    const parsed = argsObject(args)
+    const action = typeof parsed.action === 'string' ? parsed.action : 'list'
+    if (action !== 'list' && action !== 'wait') {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: downloads requires action list or wait', 'browser_invalid_args'))
+    }
+    if (action === 'wait') {
+      const requested = typeof parsed.timeoutMs === 'number' ? parsed.timeoutMs : AGENT_DOWNLOAD_WAIT_MS
+      const timeoutMs = Math.min(Math.max(Math.round(requested), 100), 120_000)
+      const deadline = Date.now() + timeoutMs
+      while (Date.now() < deadline && this.runningDownloads(leaseId).length > 0) {
+        await new Promise((resolve) => { setTimeout(resolve, AGENT_DOWNLOAD_POLL_MS) })
+      }
+    }
+    const records = this.#downloads.get(leaseId) ?? []
+    return {
+      downloads: records.map(record => ({ ...downloadSummary(record.event), tabId: record.tabId })),
+      running: this.runningDownloads(leaseId).length,
+    }
+  }
+
+  /** @returns the lease's downloads that are still running. */
+  private runningDownloads(leaseId: string): AgentDownloadRecord[] {
+    return (this.#downloads.get(leaseId) ?? []).filter(record => isDownloadRunning(record.event))
   }
 
   /** Current page facts without navigating. */
@@ -1208,6 +1295,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       return Promise.reject(new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown'))
     }
     this.#leases.delete(request.leaseId)
+    this.#downloadWatchers.get(request.leaseId)?.()
+    this.#downloadWatchers.delete(request.leaseId)
+    this.#downloads.delete(request.leaseId)
     // A recording of this lease ends with it; its partial file is discarded by the recorder.
     const running = this.#recording
     if (running !== undefined && [...lease.tabs.values()].includes(running.tab)) {

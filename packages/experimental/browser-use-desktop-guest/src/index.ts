@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number } }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number }; downloads?: Array<{ filename?: string; state?: string; receivedBytes?: number; totalBytes?: number; savePath?: string; tabId?: string }>; running?: number }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -528,6 +528,30 @@ export function apply(ctx: Context, input: Config): void {
               text: `Dragged ${String(from.x)},${String(from.y)} to ${String(to.x)},${String(to.y)} in ${String(result.dragged?.steps ?? steps ?? 8)} steps`,
             }],
           }
+        },
+      },
+      {
+        name: 'browser_downloads',
+        rawName: 'downloads',
+        description: 'List the downloads this agent browser started, or wait for the running ones to settle and report their saved paths.',
+        input: z.object({ action: z.enum(['list', 'wait']), timeoutMs: z.number().optional() }),
+        run: async (agent, parsed) => {
+          const { action, timeoutMs } = z.object({
+            action: z.enum(['list', 'wait']),
+            timeoutMs: z.number().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'downloads', {
+            action,
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          })
+          const lines = (result.downloads ?? []).map(entry => [
+            entry.filename, entry.state,
+            `${String(entry.receivedBytes ?? 0)}/${String(entry.totalBytes ?? 0)}`,
+            entry.savePath,
+          ].filter((field): field is string => field !== undefined).join('\t'))
+          const running = result.running ?? 0
+          const suffix = running === 0 ? '' : `\n${String(running)} still running`
+          return { content: [{ type: 'text', text: `${lines.join('\n') || '(no downloads)'}${suffix}` }] }
         },
       },
     ]
