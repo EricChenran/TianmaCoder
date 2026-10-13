@@ -306,7 +306,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const leaseId = randomUUID()
     const tabId = randomUUID()
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
-    const bounds = request.bounds ?? { x: 0, y: 0, width: 1, height: 1 }
+    // A request without bounds leaves the guest off screen, not unsized: the page
+    // still needs a viewport, and the parked surface uses it for captures.
+    const bounds = request.bounds ?? { x: 0, y: 0, ...AGENT_VIEWPORT_DEFAULT }
     const now = Date.now()
     const lease: GuestLease = {
       workspaceKey: request.workspaceKey,
@@ -370,7 +372,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
   private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
     if (lease.pane !== undefined) return lease.pane
-    return lease.visible ? lease.bounds : { x: 0, y: 0, width: 1, height: 1 }
+    return lease.visible ? lease.bounds : parkedSurface(lease.viewport)
   }
 
   /** Attach the active tab at its resolved rectangle when a window can host it. */
@@ -706,7 +708,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   ): void {
     const previous = lease.tabs.get(lease.activeTabId)
     if (window !== undefined && !window.isDestroyed() && previous !== undefined && lease.activeTabId !== tabId) {
-      previous.view.attach(window, { x: 0, y: 0, width: 1, height: 1 })
+      previous.view.attach(window, parkedSurface(lease.viewport))
     }
     lease.activeTabId = tabId
     const active = lease.tabs.get(tabId)
@@ -1212,6 +1214,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   private async screenshot(leaseId: string, tab: AgentTab): Promise<ShellBrowserJson> {
     const inFlight = this.#captures.get(leaseId)
     if (inFlight !== undefined) return inFlight
+    // A capture needs a real surface, so a lease nothing is presenting gets its
+    // guest parked at full viewport size before the capture runs.
+    this.attachActive(this.lease(leaseId))
     const pending = this.captureOnce(this.lease(leaseId), tab).finally(() => { this.#captures.delete(leaseId) })
     this.#captures.set(leaseId, pending)
     return pending
@@ -1377,10 +1382,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const width = viewportDimension(parsed.width, AGENT_VIEWPORT_DEFAULT.width, AGENT_VIEWPORT_MIN.width, AGENT_VIEWPORT_MAX.width)
     const height = viewportDimension(parsed.height, AGENT_VIEWPORT_DEFAULT.height, AGENT_VIEWPORT_MIN.height, AGENT_VIEWPORT_MAX.height)
     lease.viewport = { width, height }
-    if (lease.visible || lease.pane !== undefined) {
-      if (lease.visible) lease.bounds = { ...lease.bounds, width, height }
-      this.attachActive(lease)
-    }
+    // The parked surface derives from the viewport, so every lease re-attaches here,
+    // not only the ones a human can see.
+    if (lease.visible) lease.bounds = { ...lease.bounds, width, height }
+    this.attachActive(lease)
     return { width, height, visible: lease.visible }  }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
@@ -1677,6 +1682,17 @@ function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'met
 
 /** Frames the element probe descends into before giving up. */
 const AGENT_FRAME_MAX_DEPTH = 4
+
+/**
+ * Rectangle that parks a guest nothing is showing: it keeps the full viewport so a
+ * capture has a real surface to read, and sits entirely outside the window content
+ * area so it never covers what the human sees.
+ * @param viewport - page viewport the lease asked for.
+ * @returns The off-screen rectangle.
+ */
+function parkedSurface(viewport: { width: number; height: number }): { x: number; y: number; width: number; height: number } {
+  return { x: -viewport.width, y: 0, width: viewport.width, height: viewport.height }
+}
 
 /** What {@link elementProbeScript} reports back. */
 interface AgentProbeResult {

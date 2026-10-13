@@ -412,7 +412,9 @@ describe('AgentBrowserGuests', () => {
     expect(typeof result.leaseId).toBe('string')
     const record = lastRecord()
     expect(record.lastPreferences).toMatchObject({ partition: 'partition-ws-1', sandbox: true, nodeIntegration: false })
-    expect(record.bounds).toEqual([{ x: 0, y: 0, width: 1, height: 1 }])
+    // Off screen, not unsized: the parked surface keeps the default viewport so a
+    // capture has a real surface, while sitting left of the window content.
+    expect(record.bounds).toEqual([{ x: -1280, y: 0, width: 1280, height: 720 }])
   })
 
   it('creates the lease without attachment when no window is available', async () => {
@@ -672,7 +674,7 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
   })
 
-  it('records a viewport for an offscreen lease without attaching it', async () => {
+  it('re-parks an offscreen lease at the viewport it was asked for', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
     const attachments = lastRecord().bounds.length
@@ -680,7 +682,9 @@ describe('AgentBrowserGuests', () => {
       type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 500, height: 400 },
     }) as { width: number; height: number; visible: boolean }
     expect(result).toEqual({ width: 500, height: 400, visible: false })
-    expect(lastRecord().bounds).toHaveLength(attachments)
+    // The parked surface follows the viewport, still entirely outside the content.
+    expect(lastRecord().bounds).toHaveLength(attachments + 1)
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: -500, y: 0, width: 500, height: 400 })
   })
 
   it('reports the PNG pixel size and flags a capture that misses the viewport', async () => {
@@ -1127,6 +1131,32 @@ describe('AgentBrowserGuests', () => {
     expect(alive.tabs[0]?.crashed).toBe(false)
     await guests.release({ leaseId })
     expect(record.crashListeners.size).toBe(0)
+  })
+
+  it('captures a full-size surface while nothing is presenting the lease', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const record = lastRecord()
+    // Nothing presents this lease, so the guest parks off-screen at the full viewport.
+    expect(record.bounds[0]).toEqual({ x: -1280, y: 0, width: 1280, height: 720 })
+    record.pngBytes = pngHeader(1280, 720)
+    const shot = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width: number; height: number; sizeCorrected: boolean }
+    expect(shot).toMatchObject({ width: 1280, height: 720, sizeCorrected: false })
+    const parked = record.bounds.at(-1)
+    expect(parked).toEqual({ x: -1280, y: 0, width: 1280, height: 720 })
+    // Parked means entirely outside the window content, never over what the human sees.
+    expect((parked?.x ?? 0) + (parked?.width ?? 0)).toBeLessThanOrEqual(0)
+    await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'viewport', args: { width: 800, height: 600 },
+    })
+    expect(record.bounds.at(-1)).toEqual({ x: -800, y: 0, width: 800, height: 600 })
+    record.pngBytes = pngHeader(800, 600)
+    const resized = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { sizeCorrected: boolean; width: number }
+    expect(resized).toMatchObject({ width: 800, sizeCorrected: false })
   })
 
   it('rejects an unknown command with a structured code', async () => {
