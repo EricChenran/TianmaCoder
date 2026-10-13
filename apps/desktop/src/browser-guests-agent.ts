@@ -217,7 +217,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly createRecorder?: () => AgentRecorderPort
     /** Directory finished recordings are written to; defaults under the application data directory. */
     readonly recordingsDir?: string
+    /** Display scale factor captured pixels carry; defaults to one device-independent pixel per pixel. */
+    readonly deviceScaleFactor?: () => number
   }) {}
+
+  /** @returns The scale factor captured pixels are measured in; one when the shell does not report one. */
+  private scaleFactor(): number {
+    const read = this.options.deviceScaleFactor
+    const value = read === undefined ? 1 : read()
+    return Number.isFinite(value) && value > 0 ? value : 1
+  }
 
   /** Upper bound for one ARIA snapshot result, applied to the complete emitted value. */
   private ariaLimit(): number {
@@ -348,6 +357,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'check': return this.check(view, request.args)
       case 'press': return this.press(view, request.args)
       case 'scroll': return this.scroll(view, request.args)
+      case 'cuaKeypress': return this.cuaKeypress(view, request.args, refs)
+      case 'cuaScroll': return this.cuaScroll(view, request.args, refs)
+      case 'cuaDrag': return this.cuaDrag(view, request.args, refs)
       case 'click': return this.click(view, request.args, true, refs)
       case 'hover': return this.click(view, request.args, false, refs)
       case 'snapshot': return this.snapshot(view, refs)
@@ -775,6 +787,131 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return { checked: after.found && after.checked === true, changed: true }
   }
 
+  /**
+   * Send one trusted key chord: the named modifiers stay held across a single raw
+   * key down and up. This is the visual path for pages whose shortcuts the DOM
+   * cannot be asked about.
+   * @param view - active tab.
+   * @param args - `key`, optional `modifiers`, and an optional `ref` or `selector` to focus first.
+   * @param refs - ref cache written by the last snapshot.
+   * @returns The chord that was delivered.
+   */
+  private async cuaKeypress(
+    view: AgentGuestView,
+    args: ShellBrowserJson,
+    refs: Map<string, AgentRef>,
+  ): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const key = typeof parsed.key === 'string' ? parsed.key : undefined
+    if (key === undefined || key.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: cuaKeypress requires a key code', 'browser_invalid_args'))
+    }
+    const modifiers = readModifiers(parsed.modifiers)
+    const focus = this.focusArgs(parsed)
+    if (focus !== undefined) await this.click(view, focus, true, refs)
+    for (const modifier of modifiers) view.webContents.sendInputEvent({ type: 'keyDown', keyCode: modifier })
+    view.webContents.sendInputEvent({ type: 'rawKeyDown', keyCode: key, modifiers })
+    view.webContents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers })
+    for (const modifier of [...modifiers].reverse()) view.webContents.sendInputEvent({ type: 'keyUp', keyCode: modifier })
+    return { pressed: key, modifiers }
+  }
+
+  /**
+   * Scroll at one viewport point, for pages whose scroller is not the document.
+   * @param view - active tab.
+   * @param args - `deltaX`/`deltaY` plus an optional `x`/`y`, `ref`, or `selector`.
+   * @param refs - ref cache written by the last snapshot.
+   * @returns The deltas and the point they were delivered at.
+   */
+  private async cuaScroll(
+    view: AgentGuestView,
+    args: ShellBrowserJson,
+    refs: Map<string, AgentRef>,
+  ): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const deltaX = typeof parsed.deltaX === 'number' ? parsed.deltaX : 0
+    const deltaY = typeof parsed.deltaY === 'number' ? parsed.deltaY : 0
+    if (deltaX === 0 && deltaY === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: cuaScroll requires a non-zero delta', 'browser_invalid_args'))
+    }
+    const point = await this.resolvePoint(view, parsed, refs)
+    if (point === undefined) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: cuaScroll needs x and y, a ref, or a selector', 'browser_invalid_args'))
+    }
+    view.webContents.sendInputEvent({ type: 'mouseWheel', ...point, deltaX, deltaY })
+    return { scrolled: { deltaX, deltaY }, x: point.x, y: point.y }
+  }
+
+  /**
+   * Press at one point, move in trusted steps, and release at another: sliders,
+   * drag-and-drop, and canvas surfaces that have no DOM to address.
+   * @param view - active tab.
+   * @param args - `from` and `to`, each `{x,y}` or a `ref`/`selector`; optional `steps`.
+   * @param refs - ref cache written by the last snapshot.
+   * @returns The points and the number of move steps between them.
+   */
+  private async cuaDrag(view: AgentGuestView, args: ShellBrowserJson, refs: Map<string, AgentRef>): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const from = await this.resolvePoint(view, readRecord(parsed.from), refs)
+    const to = await this.resolvePoint(view, readRecord(parsed.to), refs)
+    if (from === undefined || to === undefined) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: cuaDrag requires a resolvable from and to point', 'browser_element_not_found'))
+    }
+    const requested = typeof parsed.steps === 'number' ? parsed.steps : 8
+    const steps = Math.min(Math.max(Math.round(requested), 1), 64)
+    view.webContents.sendInputEvent({ type: 'mouseMove', ...from })
+    view.webContents.sendInputEvent({ type: 'mouseDown', ...from, button: 'left', clickCount: 1 })
+    for (let step = 1; step <= steps; step += 1) {
+      view.webContents.sendInputEvent({
+        type: 'mouseMove',
+        x: Math.round(from.x + (to.x - from.x) * step / steps),
+        y: Math.round(from.y + (to.y - from.y) * step / steps),
+        button: 'left',
+      })
+    }
+    view.webContents.sendInputEvent({ type: 'mouseUp', ...to, button: 'left', clickCount: 1 })
+    return { dragged: { from, to, steps } }
+  }
+
+  /** @returns The `ref`/`selector` pair a command used to focus an element, or `undefined` when it named none. */
+  private focusArgs(parsed: Record<string, unknown>): ShellBrowserJson | undefined {
+    const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    if (ref === undefined && selector === undefined) return undefined
+    return { ...(ref === undefined ? {} : { ref }), ...(selector === undefined ? {} : { selector }) }
+  }
+
+  /**
+   * Resolve one viewport point from explicit coordinates, a snapshot ref, or a CSS selector.
+   * @param view - active tab.
+   * @param source - object carrying `x`/`y`, `ref`, or `selector`.
+   * @param refs - ref cache written by the last snapshot.
+   * @returns The point, or `undefined` when the source names nothing resolvable.
+   */
+  private async resolvePoint(
+    view: AgentGuestView,
+    source: Record<string, unknown>,
+    refs: Map<string, AgentRef>,
+  ): Promise<{ x: number; y: number } | undefined> {
+    if (typeof source.x === 'number' && typeof source.y === 'number') {
+      return { x: Math.round(source.x), y: Math.round(source.y) }
+    }
+    const ref = typeof source.ref === 'string' ? source.ref : undefined
+    if (ref !== undefined) {
+      const cached = refs.get(ref)
+      return cached === undefined ? undefined : { x: cached.x, y: cached.y }
+    }
+    const selector = typeof source.selector === 'string' ? source.selector : undefined
+    if (selector === undefined || selector.length === 0) return undefined
+    const probed = await view.webContents.evaluateInIsolatedWorld(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
+        el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+        return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+    ) as { found: boolean; x?: number; y?: number }
+    if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') return undefined
+    return { x: Math.round(probed.x), y: Math.round(probed.y) }
+  }
+
   /** Send one trusted key press (rawKeyDown + keyUp) with the given key code. */
   private press(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
     const key = argsObject(args).key
@@ -851,13 +988,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         if (!image.isEmpty()) {
           const png = image.toPNG()
           const size = pngSize(png)
+          const scale = this.scaleFactor()
           return {
             base64: png.toString('base64'),
             mimeType: 'image/png',
             url: view.webContents.getURL(),
+            scaleFactor: scale,
             ...(size === undefined ? {} : { width: size.width, height: size.height }),
             sizeCorrected: size !== undefined
-              && (size.width !== lease.viewport.width || size.height !== lease.viewport.height),
+              && (size.width !== Math.round(lease.viewport.width * scale)
+                || size.height !== Math.round(lease.viewport.height * scale)),
           }
         }
         if (attempt >= AGENT_CAPTURE_ATTEMPTS) {
@@ -1203,4 +1343,26 @@ function pngSize(bytes: Buffer): { width: number; height: number } | undefined {
   if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.readUInt32BE(4) !== 0x0d0a1a0a) return undefined
   if (bytes.toString('latin1', 12, 16) !== 'IHDR') return undefined
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+/** Chord vocabulary the key tools accept, mapped to Electron's modifier names. */
+const CHORD_MODIFIERS: Readonly<Record<string, 'control' | 'shift' | 'alt' | 'meta'>> = {
+  ctrl: 'control', shift: 'shift', alt: 'alt', meta: 'meta',
+}
+
+/** @returns Electron modifier names in the order given, dropping anything the vocabulary does not name. */
+function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'meta'> {
+  if (!Array.isArray(value)) return []
+  const names: Array<'control' | 'shift' | 'alt' | 'meta'> = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const mapped = CHORD_MODIFIERS[entry]
+    if (mapped !== undefined && !names.includes(mapped)) names.push(mapped)
+  }
+  return names
+}
+
+/** @returns The value as a plain record, or an empty record for anything that is not an object. */
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }

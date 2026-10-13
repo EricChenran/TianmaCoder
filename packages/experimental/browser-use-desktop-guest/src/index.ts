@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number } }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -436,6 +436,96 @@ export function apply(ctx: Context, input: Config): void {
             content: [{
               type: 'text',
               text: `Wrote ${String(result.path)} (${String(result.bytes)} bytes, ${String(result.frames)} frames, ${String(result.durationMs)} ms)`,
+            }],
+          }
+        },
+      },
+      {
+        name: 'browser_cuaKeypress',
+        rawName: 'cuaKeypress',
+        description: 'Send one trusted key chord with modifiers held across the press, optionally focusing a CSS selector or snapshot ref first.',
+        input: z.object({
+          key: z.string(),
+          modifiers: z.array(z.enum(['ctrl', 'shift', 'alt', 'meta'])).optional(),
+          selector: z.string().optional(),
+          ref: z.string().optional(),
+        }),
+        run: async (agent, parsed) => {
+          const { key, modifiers, selector, ref } = z.object({
+            key: z.string(),
+            modifiers: z.array(z.enum(['ctrl', 'shift', 'alt', 'meta'])).optional(),
+            selector: z.string().optional(),
+            ref: z.string().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'cuaKeypress', {
+            key,
+            ...(modifiers === undefined ? {} : { modifiers }),
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
+          const held = (result.modifiers ?? []).join('+')
+          return { content: [{ type: 'text', text: `Pressed ${held === '' ? '' : `${held}+`}${result.pressed ?? key}` }] }
+        },
+      },
+      {
+        name: 'browser_cuaScroll',
+        rawName: 'cuaScroll',
+        description: 'Scroll at one viewport point with pixel deltas, for a page whose scroller is not the document; accepts x/y, a snapshot ref, or a CSS selector.',
+        input: z.object({
+          deltaX: z.number().optional(),
+          deltaY: z.number().optional(),
+          x: z.number().optional(),
+          y: z.number().optional(),
+          selector: z.string().optional(),
+          ref: z.string().optional(),
+        }),
+        run: async (agent, parsed) => {
+          const { deltaX, deltaY, x, y, selector, ref } = z.object({
+            deltaX: z.number().optional(),
+            deltaY: z.number().optional(),
+            x: z.number().optional(),
+            y: z.number().optional(),
+            selector: z.string().optional(),
+            ref: z.string().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'cuaScroll', {
+            deltaX: deltaX ?? 0,
+            deltaY: deltaY ?? 0,
+            ...(x === undefined ? {} : { x }),
+            ...(y === undefined ? {} : { y }),
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
+          return {
+            content: [{
+              type: 'text',
+              text: `Scrolled by ${String(deltaX ?? 0)}, ${String(deltaY ?? 0)} at ${String(result.x)}, ${String(result.y)}`,
+            }],
+          }
+        },
+      },
+      {
+        name: 'browser_cuaDrag',
+        rawName: 'cuaDrag',
+        description: 'Press at one point, move in trusted steps, and release at another: sliders, drag-and-drop, and canvas surfaces with no DOM to address.',
+        input: z.object({
+          from: z.object({ x: z.number(), y: z.number() }),
+          to: z.object({ x: z.number(), y: z.number() }),
+          steps: z.number().optional(),
+        }),
+        run: async (agent, parsed) => {
+          const { from, to, steps } = z.object({
+            from: z.object({ x: z.number(), y: z.number() }),
+            to: z.object({ x: z.number(), y: z.number() }),
+            steps: z.number().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'cuaDrag', {
+            from, to, ...(steps === undefined ? {} : { steps }),
+          })
+          return {
+            content: [{
+              type: 'text',
+              text: `Dragged ${String(from.x)},${String(from.y)} to ${String(to.x)},${String(to.y)} in ${String(result.dragged?.steps ?? steps ?? 8)} steps`,
             }],
           }
         },

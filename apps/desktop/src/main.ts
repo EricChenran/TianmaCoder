@@ -17,6 +17,7 @@ import {
   nativeTheme,
   net,
   protocol,
+  screen,
   session,
   shell,
   type IpcMainInvokeEvent,
@@ -471,6 +472,7 @@ async function main(): Promise<void> {
         guest: tabId => mainWindow === undefined || mainWindow.isDestroyed()
           ? undefined : browserGuests.ownedGuest(mainWindow.webContents, tabId),
       },
+      deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
       emit: (event) => {
         controlReference.current?.emit(event.name, event.payload, event.leaseId)
         const payload = event.payload as { active?: unknown; command?: unknown; presented?: unknown; closed?: unknown }

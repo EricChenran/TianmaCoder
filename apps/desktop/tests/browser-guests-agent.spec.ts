@@ -258,6 +258,7 @@ function makeGuests(overrides?: {
   }
   createRecorder?: () => AgentRecorderPort
   recordingsDir?: string
+  deviceScaleFactor?: () => number
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -280,6 +281,7 @@ function makeGuests(overrides?: {
     ...(overrides?.humanTabs === undefined ? {} : { humanTabs: overrides.humanTabs }),
     ...(overrides?.createRecorder === undefined ? {} : { createRecorder: overrides.createRecorder }),
     ...(overrides?.recordingsDir === undefined ? {} : { recordingsDir: overrides.recordingsDir }),
+    ...(overrides?.deviceScaleFactor === undefined ? {} : { deviceScaleFactor: overrides.deviceScaleFactor }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -780,6 +782,74 @@ describe('AgentBrowserGuests', () => {
     expect(recorder.disposed).toBe(1)
     expect(await readdir(directory)).toEqual([])
     await rm(directory, { recursive: true, force: true })
+  })
+
+  it('holds the named modifiers across one trusted key chord', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'cuaKeypress',
+      args: { key: 'A', modifiers: ['ctrl', 'shift', 'bogus'] },
+    }) as { pressed: string; modifiers: string[] }
+    expect(result).toEqual({ pressed: 'A', modifiers: ['control', 'shift'] })
+    const events = lastRecord().inputEvents as Array<{ type?: string; keyCode?: string; modifiers?: string[] }>
+    expect(events.map(event => event.type)).toEqual([
+      'keyDown', 'keyDown', 'rawKeyDown', 'keyUp', 'keyUp', 'keyUp',
+    ])
+    expect(events[0]?.keyCode).toBe('control')
+    expect(events[1]?.keyCode).toBe('shift')
+    expect(events[2]).toMatchObject({ keyCode: 'A', modifiers: ['control', 'shift'] })
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'cuaKeypress', args: {} }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('scrolls at one viewport point and rejects an unusable gesture', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'cuaScroll', args: { x: 10, y: 20, deltaY: 100 },
+    }) as { x: number; y: number; scrolled: { deltaY: number } }
+    expect(result).toMatchObject({ x: 10, y: 20, scrolled: { deltaX: 0, deltaY: 100 } })
+    expect(lastRecord().inputEvents.at(-1)).toMatchObject({ type: 'mouseWheel', x: 10, y: 20, deltaY: 100 })
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'cuaScroll', args: { x: 1, y: 1 } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'cuaScroll', args: { deltaY: 40 } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('drags between two points in interpolated trusted steps', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'cuaDrag',
+      args: { from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, steps: 4 },
+    }) as { dragged: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number } }
+    expect(result.dragged).toEqual({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, steps: 4 })
+    const events = lastRecord().inputEvents as Array<{ type?: string; x?: number; y?: number }>
+    expect(events.map(event => event.type)).toEqual([
+      'mouseMove', 'mouseDown', 'mouseMove', 'mouseMove', 'mouseMove', 'mouseMove', 'mouseUp',
+    ])
+    expect(events.at(-1)).toMatchObject({ type: 'mouseUp', x: 100, y: 50 })
+    await expect(guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'cuaDrag', args: { from: { x: 0, y: 0 }, to: { ref: 'stale' } },
+    })).rejects.toMatchObject({ code: 'browser_element_not_found' })
+  })
+
+  it('calibrates the captured size against the display scale factor', async () => {
+    const { guests } = makeGuests({ deviceScaleFactor: () => 2 })
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', bounds: { x: 0, y: 0, width: 800, height: 600 },
+    }) as { leaseId: string }
+    lastRecord().pngBytes = pngHeader(1600, 1200)
+    const scaled = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width: number; height: number; scaleFactor: number; sizeCorrected: boolean }
+    expect(scaled).toMatchObject({ width: 1600, height: 1200, scaleFactor: 2, sizeCorrected: false })
+    lastRecord().pngBytes = pngHeader(800, 600)
+    const unscaled = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { sizeCorrected: boolean }
+    expect(unscaled.sizeCorrected).toBe(true)
   })
 
   it('rejects an unknown command with a structured code', async () => {

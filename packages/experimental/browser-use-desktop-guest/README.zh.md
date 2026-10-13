@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、state、click、hover、fill、check、type、press、scroll、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、state、click、hover、fill、check、type、press、scroll、cuaKeypress、cuaScroll、cuaDrag、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
 
 ## 目录
 
