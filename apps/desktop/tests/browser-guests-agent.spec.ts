@@ -30,10 +30,12 @@ interface FakeViewCtor {
   new (options: { webPreferences: unknown }): FakeWrappedGuest
 }
 
-const { FakeView, makeWrappedGuest } = vi.hoisted((): {
+const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
   FakeView: FakeViewCtor
   makeWrappedGuest: (loadURL: (url: string) => Promise<void>) => FakeWrappedGuest
+  clipboardStore: { text: string }
 } => {
+  const clipboardStore = { text: '' }
   class FakeView implements FakeWrappedGuest {
     loadedUrls: string[] = []
     insertedTexts: string[] = []
@@ -71,6 +73,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           reload: async () => { this.loadedUrls.push(this.currentUrl) },
         },
         insertText: async (text: string): Promise<void> => { this.insertedTexts.push(text) },
+        copy: () => { clipboardStore.text = 'selected text' },
+        paste: () => { this.insertedTexts.push('<paste:' + clipboardStore.text + '>') },
         sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]): void => { this.inputEvents.push(event) },
         executeJavaScriptInIsolatedWorld: async (_worldId: number, scripts: Array<{ code: string }>): Promise<unknown> => {
           this.executedScripts.push(scripts[0]?.code ?? '')
@@ -122,6 +126,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           close: () => { view.webContents.close() },
           isDestroyed: () => view.webContents.isDestroyed(),
           insertText: async (text) => { await view.webContents.insertText(text) },
+          copy: () => { view.webContents.copy() },
+          paste: () => { view.webContents.paste() },
           sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { view.webContents.sendInputEvent(event) },
           evaluateInIsolatedWorld: async (script: string) => {
             return view.webContents.executeJavaScriptInIsolatedWorld(999, [{ code: script }])
@@ -137,10 +143,18 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         destroy: () => { view.destroy() },
       }
     },
+    clipboardStore,
   }
 })
 
-vi.mock('electron', () => ({ WebContentsView: FakeView, app: { isPackaged: true } }))
+vi.mock('electron', () => ({
+  WebContentsView: FakeView,
+  app: { isPackaged: true },
+  clipboard: {
+    readText: () => clipboardStore.text,
+    writeText: (value: string) => { clipboardStore.text = value },
+  },
+}))
 
 interface Harness {
   guests: AgentBrowserGuests

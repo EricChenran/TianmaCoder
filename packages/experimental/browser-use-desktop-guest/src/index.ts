@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -175,6 +175,26 @@ export function apply(ctx: Context, input: Config): void {
           if (action === 'new') return { content: [{ type: 'text', text: `Opened tab ${String(result.tabId).slice(0, 8)}` }] }
           if (action === 'close') return { content: [{ type: 'text', text: `Closed tab ${String(result.closed).slice(0, 8)}` }] }
           return { content: [{ type: 'text', text: `Active tab ${String(result.activeTabId).slice(0, 8)}` }] }
+        },
+      },
+      {
+        name: 'browser_copy',
+        rawName: 'copy',
+        description: 'Copy the current page selection and hold it in this Session\'s virtual clipboard.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'copy', {})
+          return { content: [{ type: 'text', text: `Copied ${result.copied ?? 0} characters to the virtual clipboard` }] }
+        },
+      },
+      {
+        name: 'browser_paste',
+        rawName: 'paste',
+        description: 'Paste this Session\'s virtual clipboard into the focused element.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'paste', {})
+          return { content: [{ type: 'text', text: `Pasted ${result.pasted ?? 0} characters` }] }
         },
       },
       {

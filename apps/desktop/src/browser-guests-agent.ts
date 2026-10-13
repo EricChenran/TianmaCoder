@@ -1,6 +1,6 @@
 /** Main-owned browser guests driven by the Host browser control seam. */
 
-import { WebContentsView, app, type WebContents } from 'electron'
+import { WebContentsView, app, clipboard, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { getAriaInjectedScriptSource } from './aria-injected-script.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
@@ -35,7 +35,7 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'reload'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'reload' | 'copy' | 'paste'> & {
     /** Electron marks goBack/goForward on WebContents deprecated in favor of the history member. */
     readonly navigationHistory: AgentGuestHistory
     /** Runs one page script in the isolated world the page cannot observe or tamper with. */
@@ -50,6 +50,12 @@ export interface AgentGuestView {
 
 /** Reserved world id so the page's own isolated worlds never collide with ours. */
 export const AGENT_ISOLATED_WORLD_ID = 999
+
+/** One-paint settle before a screenshot so freshly delivered input is visible. */
+export const SCREENSHOT_SETTLE_MS = 120
+
+/** Upper bound on tabs per lease, mirroring ZCode's residency budget. */
+export const AGENT_MAX_TABS = 32
 
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
@@ -103,6 +109,8 @@ interface GuestLease {
   readonly tabs: Map<string, { view: AgentGuestView; refs: Map<string, { x: number; y: number }> }>
   activeTabId: string
   bounds: { x: number; y: number; width: number; height: number }
+  /** Virtual clipboard text held per lease so agent copy/paste never bleeds across sessions. */
+  clipboard?: string
 }
 
 export class AgentBrowserGuests implements ShellBrowserCommandHandler {
@@ -175,6 +183,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'snapshot': return this.snapshot(view, refs)
       case 'aria': return this.ariaSnapshot(view)
       case 'wait': return this.waitFor(view, request.args)
+      case 'copy': return this.copySelection(view, request.leaseId)
+      case 'paste': return this.pasteClipboard(view, request.leaseId)
       case 'tabs': return this.tabsOp(request.leaseId, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
@@ -200,6 +210,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     })
     if (action === 'list') return list()
     if (action === 'new') {
+      if (lease.tabs.size >= AGENT_MAX_TABS) {
+        return Promise.reject(new ShellBrowserControlError(`desktop browser: at most ${String(AGENT_MAX_TABS)} tabs per lease`, 'browser_invalid_args'))
+      }
       const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
       const created = randomUUID()
       lease.tabs.set(created, { view, refs: new Map() })
@@ -437,12 +450,37 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
   }
 
-  /** Capture the guest page as PNG for durable model-visible attachment. */
+  /** Capture the guest page as PNG for durable model-visible attachment, settling one paint first. */
   private async screenshot(view: AgentGuestView): Promise<ShellBrowserJson> {
     if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
+    await new Promise((resolve) => { setTimeout(resolve, SCREENSHOT_SETTLE_MS) })
     const image = await view.webContents.capturePage()
     if (image.isEmpty()) throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
     return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
+  }
+
+  /** Copy the page selection: trusted copy, then hold the text in the lease's virtual clipboard. */
+  private async copySelection(view: AgentGuestView, leaseId: string): Promise<ShellBrowserJson> {
+    const lease = this.lease(leaseId)
+    view.webContents.copy()
+    const text = await clipboard.readText()
+    lease.clipboard = text
+    return { copied: text.length }
+  }
+
+  /** Paste from the lease's virtual clipboard, falling back to the focused element's own paste. */
+  private async pasteClipboard(view: AgentGuestView, leaseId: string): Promise<ShellBrowserJson> {
+    const lease = this.lease(leaseId)
+    if (lease.clipboard !== undefined) await clipboard.writeText(lease.clipboard)
+    view.webContents.paste()
+    return { pasted: lease.clipboard?.length ?? 0 }
+  }
+
+  /** @returns The lease record or throws the structured unknown-lease error. */
+  private lease(leaseId: string): GuestLease {
+    const lease = this.#leases.get(leaseId)
+    if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
+    return lease
   }
 
   /** Produce the full-page ARIA snapshot through the Playwright injected runtime in the isolated world. */
@@ -560,6 +598,8 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       close: () => { web.close() },
       isDestroyed: () => web.isDestroyed(),
       insertText: (text: string) => web.insertText(text),
+      copy: () => { web.copy() },
+      paste: () => { web.paste() },
       sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { web.sendInputEvent(event) },
       reload: () => { web.reload() },
       navigationHistory: web.navigationHistory,
