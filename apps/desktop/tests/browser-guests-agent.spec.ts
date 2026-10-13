@@ -35,6 +35,9 @@ interface FakeGuestRecord {
   captures: number
   bounds: Array<{ x: number; y: number; width: number; height: number }>
   lastPreferences: unknown
+  reloads: number
+  readonly crashListeners: Set<(...args: unknown[]) => void>
+  crash(reason: string, exitCode: number): void
 }
 
 /** Debugger channel the fake guest exposes: attachment state, recorded commands, and message delivery. */
@@ -82,6 +85,12 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
     emptyCapture = false
     pngBytes: Buffer = Buffer.from('png-bytes')
     captures = 0
+    reloads = 0
+    readonly crashListeners = new Set<(...args: unknown[]) => void>()
+    crash = (reason: string, exitCode: number): void => {
+      for (const listener of [...this.crashListeners]) listener({}, { reason, exitCode })
+    }
+
     bounds: Array<{ x: number; y: number; width: number; height: number }> = []
     lastPreferences: unknown
     currentUrl = 'about:blank'
@@ -103,7 +112,7 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         isDestroyed: () => this.destroyed,
         goBack: () => { this.currentUrl = 'https://example.com/back' },
         goForward: () => { this.currentUrl = 'https://example.com/forward' },
-        reload: () => { this.loadedUrls.push(this.currentUrl) },
+        reload: () => { this.reloads += 1; this.loadedUrls.push(this.currentUrl) },
         navigationHistory: {
           goBack: () => { this.currentUrl = 'https://example.com/back' },
           goForward: () => { this.currentUrl = 'https://example.com/forward' },
@@ -129,6 +138,12 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
           }
         },
         debugger: createFakeDebugger(),
+        on: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'render-process-gone') this.crashListeners.add(listener)
+        },
+        removeListener: (event: string, listener: (...args: unknown[]) => void): void => {
+          if (event === 'render-process-gone') this.crashListeners.delete(listener)
+        },
       }
       FakeView.instances.push(this)
     }
@@ -186,6 +201,9 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         get pngBytes() { return view.pngBytes },
         set pngBytes(value: Buffer) { view.pngBytes = value },
         get captures() { return view.captures },
+        get reloads() { return view.reloads },
+        get crashListeners() { return view.crashListeners },
+        crash: (reason: string, exitCode: number) => { view.crash(reason, exitCode) },
         bounds: view.bounds,
         lastPreferences: view.lastPreferences,
         webContents: {
@@ -208,6 +226,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
           },
           capturePage: async () => view.webContents.capturePage(),
           debugger: view.webContents.debugger,
+          on: view.webContents.on,
+          removeListener: view.webContents.removeListener,
         },
         attach: (target) => { view.attach(target) },
         destroy: () => { view.destroy() },
@@ -1075,6 +1095,38 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({
       type: 'browser', requestId: 8, op: 'execute', leaseId, command: 'dialog', args: { action: 'nope' },
     })).rejects.toMatchObject({ code: 'browser_lease_unknown' })
+  })
+
+  it('marks a dead renderer, tells the pane, and reloads the tab before the next command', async () => {
+    const events: Array<{ name: string; payload: unknown }> = []
+    const { guests } = makeGuests({ emit: (event) => { events.push({ name: event.name, payload: event.payload }) } })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const record = lastRecord()
+    record.jsResult = { elements: [{ ref: 'e1', tag: 'button', x: 10, y: 20 }] }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'snapshot', args: {} })
+    expect(await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { ref: 'e1' },
+    })).toMatchObject({ x: 10, y: 20, clicked: true })
+    expect(record.crashListeners.size).toBe(1)
+    record.crash('crashed', 139)
+    const dead = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' },
+    }) as { tabs: Array<{ crashed?: boolean }> }
+    expect(dead.tabs[0]?.crashed).toBe(true)
+    const states = events.filter(event => event.name === 'browser-state')
+    const reported = states.at(-1)?.payload as { tabs?: Array<{ crashed?: boolean }> } | undefined
+    expect(reported?.tabs?.[0]?.crashed).toBe(true)
+    // The ref cache described the page that died, and the next command brings the tab back first.
+    await expect(guests.execute({
+      type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'click', args: { ref: 'e1' },
+    })).rejects.toMatchObject({ code: 'browser_element_not_found' })
+    expect(record.reloads).toBe(1)
+    const alive = await guests.execute({
+      type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' },
+    }) as { tabs: Array<{ crashed?: boolean }> }
+    expect(alive.tabs[0]?.crashed).toBe(false)
+    await guests.release({ leaseId })
+    expect(record.crashListeners.size).toBe(0)
   })
 
   it('rejects an unknown command with a structured code', async () => {

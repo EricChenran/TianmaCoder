@@ -68,6 +68,13 @@ export interface AgentGuestView {
    */
   watchDialogs?(listener: (event: AgentDialogEvent) => void): () => void
   /**
+   * Follow this guest's renderer process. Absent when the carrier cannot observe it,
+   * so a tab without it simply never reports a crash.
+   * @param listener - receives each renderer death.
+   * @returns unsubscribe callback.
+   */
+  watchCrashes?(listener: (event: AgentCrashEvent) => void): () => void
+  /**
    * Answer one open dialog.
    * @param id - id the listener reported.
    * @param accept - whether to accept the dialog.
@@ -75,6 +82,16 @@ export interface AgentGuestView {
    * @returns Whether a waiting dialog was answered.
    */
   answerDialog?(id: string, accept: boolean, promptText?: string): Promise<boolean>
+}
+
+/** One dead renderer process, as the guest carrier reports it. */
+export interface AgentCrashEvent {
+  /** Electron's reason, such as `crashed`, `oom`, or `killed`. */
+  readonly reason: string
+  /** Process exit code, or 0 when Electron reports none. */
+  readonly exitCode: number
+  /** Page URL the guest had loaded when its renderer died. */
+  readonly url: string
 }
 
 /** Reserved world id so the page's own isolated worlds never collide with ours. */
@@ -183,6 +200,10 @@ interface AgentTab {
   captureActive: boolean
   /** True when this tab wraps a guest the window owns; the pool never closes that guest. */
   readonly claimed?: boolean
+  /** True once the renderer process died and before the next command reloads the page. */
+  crashed: boolean
+  /** Ends this tab's subscriptions; absent when its carrier offers none. */
+  readonly dispose?: () => void
 }
 
 /** One lease: a tab set with an active pointer, all sharing one workspace partition. */
@@ -377,6 +398,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
           title: tab.view.webContents.isDestroyed() ? '' : tab.view.webContents.getTitle(),
           active: tabId === lease.activeTabId,
           suspended: tab.suspended,
+          crashed: tab.crashed,
         })),
       },
     })
@@ -399,6 +421,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   async execute(request: ShellBrowserExecuteRequest): Promise<ShellBrowserJson> {
     const tab = this.tab(request.leaseId)
+    // A dead renderer is brought back before the command runs, so no command ever
+    // talks to a process that is gone. Listing tabs is exempt: it is how the model
+    // learns the tab died, and it reads nothing from the renderer.
+    if (tab.crashed && request.command !== 'tabs') this.recoverTab(tab)
     tab.operationActive = true
     this.publishActivity(request.leaseId, true, request.command)
     try {
@@ -465,6 +491,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         title: tab.view.webContents.getTitle(),
         active: id === lease.activeTabId,
         suspended: tab.suspended,
+        crashed: tab.crashed,
       })),
       activeTabId: lease.activeTabId,
     })
@@ -547,25 +574,39 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** @returns A fresh tab record with the residency clock started. */
   private newTab(leaseId: string, view: AgentGuestView, now: number, claimed = false): AgentTab {
-    this.watchDialogs(leaseId, view)
+    const disposers: Array<() => void> = []
+    if (view.watchDialogs !== undefined) disposers.push(view.watchDialogs((event) => { this.recordDialog(leaseId, view, event) }))
+    if (view.watchCrashes !== undefined) disposers.push(view.watchCrashes((event) => { this.recordCrash(leaseId, view, event) }))
     return {
       view, refs: new Map(), openedAt: now, lastActivityAt: now, lastSelectedAt: now,
-      suspended: false, operationActive: false, captureActive: false,
-      ...(claimed ? { claimed: true } : {}),
+      suspended: false, operationActive: false, captureActive: false, crashed: false,
+      ...(claimed ? { claimed: true as const } : {}),
+      ...(disposers.length === 0 ? {} : { dispose: () => { for (const dispose of disposers) dispose() } }),
     }
   }
 
+  /** Remember one dialog this tab is waiting on, so the model can answer it. */
+  private recordDialog(leaseId: string, view: AgentGuestView, event: AgentDialogEvent): void {
+    const running = this.#dialogs.get(leaseId) ?? []
+    running.push({ event, tabId: this.tabOfView(leaseId, view), openedAt: Date.now() })
+    this.#dialogs.set(leaseId, running)
+  }
+
   /**
-   * Follow the page dialogs this tab opens, so the model can answer them instead
-   * of the page blocking forever. A carrier without a dialog channel is left alone.
+   * Mark one tab's renderer as dead and drop its ref cache, which described a page
+   * that no longer exists. The next command reloads it, so a crash never leaves a
+   * command talking to a dead process.
    */
-  private watchDialogs(leaseId: string, view: AgentGuestView): void {
-    if (view.watchDialogs === undefined) return
-    view.watchDialogs((event) => {
-      const running = this.#dialogs.get(leaseId) ?? []
-      running.push({ event, tabId: this.tabOfView(leaseId, view), openedAt: Date.now() })
-      this.#dialogs.set(leaseId, running)
-    })
+  private recordCrash(leaseId: string, view: AgentGuestView, event: AgentCrashEvent): void {
+    const lease = this.#leases.get(leaseId)
+    if (lease === undefined) return
+    for (const tab of lease.tabs.values()) {
+      if (tab.view !== view) continue
+      tab.crashed = true
+      tab.refs.clear()
+    }
+    console.warn(`desktop agent browser: the renderer of one tab died (${event.reason}, code ${String(event.exitCode)}) at ${event.url}`)
+    this.publishState(leaseId, lease)
   }
 
   /** @returns the tab id wrapping one view, or an empty string when it is already gone. */
@@ -578,10 +619,31 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return ''
   }
 
+  /**
+   * Reload a tab whose renderer died and clear the flags a dead process left behind.
+   * @param tab - crashed tab to bring back.
+   * @returns Whether the reload was requested.
+   */
+  private recoverTab(tab: AgentTab): boolean {
+    tab.crashed = false
+    tab.refs.clear()
+    if (tab.view.webContents.isDestroyed()) return false
+    try {
+      tab.view.webContents.reload()
+      return true
+    } catch (error) {
+      // A carrier that refuses the reload leaves the tab usable for nothing but closing.
+      tab.crashed = true
+      console.warn('desktop agent browser: could not reload a crashed tab', error)
+      return false
+    }
+  }
+
   /** Detach one tab's carrier and drop its slot; a claimed guest belongs to the window and stays open. */
   private closeTab(lease: GuestLease, tabId: string): void {
     const closing = lease.tabs.get(tabId)
     lease.tabs.delete(tabId)
+    closing?.dispose?.()
     if (closing !== undefined && closing.claimed !== true) closing.view.destroy()
   }
 
@@ -1379,6 +1441,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       await running.port.dispose()
     }
     for (const tab of lease.tabs.values()) {
+      tab.dispose?.()
       if (tab.claimed !== true) tab.view.destroy()
     }
     this.options.emit?.({
@@ -1445,6 +1508,20 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
   })
   let window: AgentGuestHostWindow | undefined
   const web = view.webContents
+  const crashListeners = new Set<(event: AgentCrashEvent) => void>()
+  const onRenderProcessGone = (_event: Electron.Event, details: Electron.RenderProcessGoneDetails): void => {
+    const crash: AgentCrashEvent = {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      url: web.isDestroyed() ? '' : web.getURL(),
+    }
+    for (const listener of [...crashListeners]) listener(crash)
+  }
+  /** Stop following this guest's renderer process and let it go. */
+  const releaseCrashWatch = (): void => {
+    crashListeners.clear()
+    if (!web.isDestroyed()) web.removeListener('render-process-gone', onRenderProcessGone)
+  }
   /** Dialog state: our own id sequence, the dialogs the page still waits on, and the open one. */
   const dialogListeners = new Set<(event: AgentDialogEvent) => void>()
   const openDialogs = new Set<string>()
@@ -1495,8 +1572,17 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
     },
     destroy() {
       releaseDebugger()
+      releaseCrashWatch()
       if (window !== undefined && !window.isDestroyed()) window.contentView.removeChildView(view)
       if (!view.webContents.isDestroyed()) view.webContents.close()
+    },
+    watchCrashes(listener) {
+      crashListeners.add(listener)
+      if (crashListeners.size === 1 && !web.isDestroyed()) web.on('render-process-gone', onRenderProcessGone)
+      return () => {
+        crashListeners.delete(listener)
+        if (crashListeners.size === 0 && !web.isDestroyed()) web.removeListener('render-process-gone', onRenderProcessGone)
+      }
     },
     watchDialogs(listener) {
       if (!watchingDialogs()) {

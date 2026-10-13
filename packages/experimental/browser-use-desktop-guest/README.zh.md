@@ -101,6 +101,7 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 - **下载按租约追踪** — 一次下载归属到它开始时处于活动状态的那个 tab；该 tab 有下载在跑时，驻留上限不会关闭它。列表只覆盖当前租约。
 - **选择器只搜同源 frame** — 元素探查会进入页面允许读取的 frame 并累加其偏移，因此 `click`、`hover`、`elementInfo`、`wait` 能命中这些 frame 内的元素。跨源 frame 无法从页面自身世界读取或驱动，因此报错会点名它而不是去搜它；这类内容请用显式坐标操作。
 - **页面弹窗通过 DevTools 协议应答** — shell 会给自己创建的每个 guest 附加一个 debugger 会话，使 `browser_dialog` 能列出并应答 `alert`、`confirm`、`prompt`、`beforeunload`，而不是让页面永久阻塞。若该 guest 的 debugger 已被占用（例如开着 DevTools），它就没有弹窗通道，并会如实报告无法应答。
+- **渲染进程死亡后按需自愈** — 渲染进程死亡时，shell 丢弃该 tab 的 ref 缓存、把"已崩溃"回报给窗格与 `browser_tabs list`，并在下一条触及该 tab 的命令前重载页面。`browser_tabs list` 豁免于重载，好让崩溃保持可见；若载体拒绝重载，该 tab 只剩关闭可用。
 - **ref 会失效** — `browser_snapshot` 的元素 ref 对应快照当刻的页面；导航或重渲染后即失效，对陈旧 ref 的操作会以"元素未找到"失败。
 - **挂起只是驻留标记** — `suspend`/`resume` 只是把后台 tab 移出或移回 32 个 tab 驻留上限所依据的保护集。被挂起的 tab 其 guest 仍然加载，只有在 tab 池为守住上限而关闭 tab 时才释放。
 - **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面；tab 池只随 Session 运行时存在。
