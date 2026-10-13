@@ -53,9 +53,21 @@ export const AGENT_ISOLATED_WORLD_ID = 999
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
 
-/** Collects visible interactive elements with stable refs and viewport-center points. */
+/** Collects visible interactive elements with stable refs, ARIA roles, and viewport-center points. */
 const SNAPSHOT_SCRIPT = `(() => {
   const nodes = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role], [onclick], [contenteditable="true"]'));
+  const implicitRole = (el) => {
+    if (el.tagName === 'A' && el.hasAttribute('href')) return 'link';
+    if (el.tagName === 'BUTTON' || el.tagName === 'SUMMARY') return 'button';
+    if (el.tagName === 'SELECT') return 'combobox';
+    if (el.tagName === 'TEXTAREA') return 'textbox';
+    if (el.tagName === 'IMG') return 'img';
+    if (/^H[1-6]$/.test(el.tagName)) return 'heading';
+    if (el.tagName === 'INPUT') {
+      return { checkbox: 'checkbox', radio: 'radio', range: 'slider', number: 'spinbutton' }[el.type] ?? 'textbox';
+    }
+    return null;
+  };
   const elements = [];
   for (const el of nodes) {
     if (elements.length >= 80) break;
@@ -69,7 +81,7 @@ const SNAPSHOT_SCRIPT = `(() => {
     elements.push({
       ref,
       tag: el.tagName.toLowerCase(),
-      role: el.getAttribute('role') ?? undefined,
+      role: el.getAttribute('role') ?? implicitRole(el) ?? undefined,
       name,
       text,
       x: Math.round(r.x + r.width / 2),

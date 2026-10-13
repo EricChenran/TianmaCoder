@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -129,7 +129,7 @@ export function apply(ctx: Context, input: Config): void {
         input: z.object({}),
         run: async (agent) => {
           const result = await executeOnLease(agent, 'snapshot', {})
-          const lines = (result.elements ?? []).map(element => `${element.ref}\t${element.tag}\t${element.name ?? element.text ?? ''}`)
+          const lines = (result.elements ?? []).map(element => `${element.ref}\t${element.role ?? element.tag}\t${element.name ?? element.text ?? ''}`)
           return { content: [{ type: 'text', text: `${String(result.url)} — ${String(result.title)}\n${lines.join('\n')}` }] }
         },
       },
