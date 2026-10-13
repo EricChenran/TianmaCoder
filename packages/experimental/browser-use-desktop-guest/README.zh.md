@@ -103,6 +103,7 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 - **页面弹窗通过 DevTools 协议应答** — shell 会给自己创建的每个 guest 附加一个 debugger 会话，使 `browser_dialog` 能列出并应答 `alert`、`confirm`、`prompt`、`beforeunload`，而不是让页面永久阻塞。若该 guest 的 debugger 已被占用（例如开着 DevTools），它就没有弹窗通道，并会如实报告无法应答。
 - **渲染进程死亡后按需自愈** — 渲染进程死亡时，shell 丢弃该 tab 的 ref 缓存、把"已崩溃"回报给窗格与 `browser_tabs list`，并在下一条触及该 tab 的命令前重载页面。`browser_tabs list` 豁免于重载，好让崩溃保持可见；若载体拒绝重载，该 tab 只剩关闭可用。
 - **屏幕外的 guest 仍有真实表面** — 没有被任何窗格呈现的租约，其 guest 会按请求的完整视口停在窗口内容区**左侧**（而不是压在内容之上），因此截图有全尺寸表面可读，`browser_viewport` 也会重新停放它。不带 bounds 的租约因此从默认视口开始，而不是一个像素。
+- **tab 正在被使用时不会被驻留上限关闭** — 选中、可见、执行中、截图中、下载中、等待弹窗、加载中、播放音频。挂起或空闲的后台 tab 不受保护，因此池超限时会关闭最久未使用的那个。
 - **ref 会失效** — `browser_snapshot` 的元素 ref 对应快照当刻的页面；导航或重渲染后即失效，对陈旧 ref 的操作会以"元素未找到"失败。
 - **挂起只是驻留标记** — `suspend`/`resume` 只是把后台 tab 移出或移回 32 个 tab 驻留上限所依据的保护集。被挂起的 tab 其 guest 仍然加载，只有在 tab 池为守住上限而关闭 tab 时才释放。
 - **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面；tab 池只随 Session 运行时存在。

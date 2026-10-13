@@ -33,6 +33,8 @@ interface FakeGuestRecord {
   emptyCapture: boolean
   pngBytes: Buffer
   captures: number
+  loading: boolean
+  audible: boolean
   bounds: Array<{ x: number; y: number; width: number; height: number }>
   lastPreferences: unknown
   reloads: number
@@ -86,6 +88,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
     pngBytes: Buffer = Buffer.from('png-bytes')
     captures = 0
     reloads = 0
+    loading = false
+    audible = false
     readonly crashListeners = new Set<(...args: unknown[]) => void>()
     crash = (reason: string, exitCode: number): void => {
       for (const listener of [...this.crashListeners]) listener({}, { reason, exitCode })
@@ -138,6 +142,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
           }
         },
         debugger: createFakeDebugger(),
+        isLoading: (): boolean => this.loading,
+        isCurrentlyAudible: (): boolean => this.audible,
         on: (event: string, listener: (...args: unknown[]) => void): void => {
           if (event === 'render-process-gone') this.crashListeners.add(listener)
         },
@@ -202,6 +208,10 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         set pngBytes(value: Buffer) { view.pngBytes = value },
         get captures() { return view.captures },
         get reloads() { return view.reloads },
+        get loading() { return view.loading },
+        set loading(value: boolean) { view.loading = value },
+        get audible() { return view.audible },
+        set audible(value: boolean) { view.audible = value },
         get crashListeners() { return view.crashListeners },
         crash: (reason: string, exitCode: number) => { view.crash(reason, exitCode) },
         bounds: view.bounds,
@@ -226,6 +236,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
           },
           capturePage: async () => view.webContents.capturePage(),
           debugger: view.webContents.debugger,
+          isLoading: () => view.webContents.isLoading(),
+          isCurrentlyAudible: () => view.webContents.isCurrentlyAudible(),
           on: view.webContents.on,
           removeListener: view.webContents.removeListener,
         },
@@ -268,6 +280,8 @@ function makeClaimedGuest(): {
       getTitle: () => 'Human page',
       isDestroyed: () => state.destroyed,
       insertText: async () => {},
+      isLoading: () => false,
+      isCurrentlyAudible: () => false,
       copy: () => {},
       paste: () => {},
       sendInputEvent: () => {},
@@ -1157,6 +1171,24 @@ describe('AgentBrowserGuests', () => {
       type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'screenshot', args: {},
     }) as { sizeCorrected: boolean; width: number }
     expect(resized).toMatchObject({ width: 800, sizeCorrected: false })
+  })
+
+  it('never closes the oldest tab while its page is still loading', async () => {
+    const { guests } = makeGuests()
+    const { leaseId, tabId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws',
+    }) as { leaseId: string; tabId: string }
+    // The first tab is the oldest, so it is the natural victim once the pool overflows.
+    lastRecord().loading = true
+    for (let index = 0; index < 32; index += 1) {
+      await guests.execute({ type: 'browser', requestId: 2 + index, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' } })
+    }
+    const listed = await guests.execute({
+      type: 'browser', requestId: 40, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' },
+    }) as { tabs: Array<{ tabId: string }> }
+    // The pool still came back to its limit, but the loading tab was spared.
+    expect(listed.tabs).toHaveLength(32)
+    expect(listed.tabs.map(tab => tab.tabId)).toContain(tabId)
   })
 
   it('rejects an unknown command with a structured code', async () => {

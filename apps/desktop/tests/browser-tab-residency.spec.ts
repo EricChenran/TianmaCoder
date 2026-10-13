@@ -15,6 +15,8 @@ function candidate(overrides: Partial<AgentTabResidencyCandidate> & { tabId: str
     captureActive: false,
     downloadActive: false,
     dialogPending: false,
+    loading: false,
+    audible: false,
     ...overrides,
   }
 }
@@ -51,6 +53,8 @@ describe('agent tab residency policy', () => {
     expect(isAgentTabProtected(candidate({ tabId: 'a', captureActive: true }))).toBe(true)
     expect(isAgentTabProtected(candidate({ tabId: 'a', downloadActive: true }))).toBe(true)
     expect(isAgentTabProtected(candidate({ tabId: 'a', dialogPending: true }))).toBe(true)
+    expect(isAgentTabProtected(candidate({ tabId: 'a', loading: true }))).toBe(true)
+    expect(isAgentTabProtected(candidate({ tabId: 'a', audible: true }))).toBe(true)
     expect(isAgentTabProtected(candidate({ tabId: 'a', residency: 'live-visible' }))).toBe(true)
     expect(isAgentTabProtected(candidate({ tabId: 'a', residency: 'suspend-pending' }))).toBe(true)
     expect(isAgentTabProtected(candidate({ tabId: 'a', residency: 'suspended' }))).toBe(false)

@@ -30,6 +30,10 @@ export interface AgentTabResidencyCandidate {
   readonly downloadActive: boolean
   /** The page is waiting on a dialog this tab opened. */
   readonly dialogPending: boolean
+  /** The page is still loading. */
+  readonly loading: boolean
+  /** The page is playing audio. */
+  readonly audible: boolean
 }
 
 /**
@@ -47,6 +51,8 @@ export function isAgentTabProtected(candidate: AgentTabResidencyCandidate): bool
     || candidate.captureActive
     || candidate.downloadActive
     || candidate.dialogPending
+    || candidate.loading
+    || candidate.audible
 }
 
 /**

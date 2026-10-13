@@ -49,7 +49,7 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'reload' | 'copy' | 'paste'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'reload' | 'copy' | 'paste' | 'isLoading' | 'isCurrentlyAudible'> & {
     /** Electron marks goBack/goForward on WebContents deprecated in favor of the history member. */
     readonly navigationHistory: AgentGuestHistory
     /** Runs one page script in the isolated world the page cannot observe or tamper with. */
@@ -682,6 +682,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         captureActive: tab.captureActive,
         downloadActive: this.downloadActive(leaseId, tabId),
         dialogPending: this.dialogPending(leaseId, tabId),
+        loading: !tab.view.webContents.isDestroyed() && tab.view.webContents.isLoading(),
+        audible: !tab.view.webContents.isDestroyed() && tab.view.webContents.isCurrentlyAudible(),
       }
     })
   }
@@ -1470,6 +1472,8 @@ export interface AgentClaimedWebContents {
   insertText(text: string): Promise<void>
   copy(): void
   paste(): void
+  isLoading(): boolean
+  isCurrentlyAudible(): boolean
   sendInputEvent(event: Parameters<WebContents['sendInputEvent']>[0]): void
   reload(): void
   readonly navigationHistory: AgentGuestHistory
@@ -1491,6 +1495,8 @@ function wrapClaimedGuest(web: AgentClaimedWebContents): AgentGuestView {
       paste: () => { web.paste() },
       sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { web.sendInputEvent(event) },
       reload: () => { web.reload() },
+      isLoading: () => web.isLoading(),
+      isCurrentlyAudible: () => web.isCurrentlyAudible(),
       navigationHistory: web.navigationHistory,
       evaluateInIsolatedWorld: (script: string) =>
         web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
@@ -1566,6 +1572,8 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       paste: () => { web.paste() },
       sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { web.sendInputEvent(event) },
       reload: () => { web.reload() },
+      isLoading: () => web.isLoading(),
+      isCurrentlyAudible: () => web.isCurrentlyAudible(),
       navigationHistory: web.navigationHistory,
       evaluateInIsolatedWorld: (script: string) => web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
       capturePage: () => web.capturePage(),
