@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import type { WebContents } from 'electron'
+import type { AgentRecorderPort, AgentRecordingResult } from '../src/agent-recorder.ts'
 import type { AgentClaimedWebContents, AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
 import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
 import { AGENT_TAB_LIMIT } from '../src/browser-tab-residency.ts'
@@ -207,6 +211,37 @@ function makeClaimedGuest(): {
   }
 }
 
+/** Deterministic recorder carrier for the shell's recording lifecycle. */
+function makeFakeRecorder(): {
+  port: AgentRecorderPort
+  drawn: number[]
+  intervals: number[]
+  disposed: number
+  result: AgentRecordingResult | undefined
+} {
+  const state = {
+    drawn: [] as number[],
+    intervals: [] as number[],
+    disposed: 0,
+    result: {
+      base64: Buffer.from('webm-bytes').toString('base64'), frames: 2, durationMs: 250,
+    } as AgentRecordingResult | undefined,
+  }
+  return {
+    drawn: state.drawn,
+    intervals: state.intervals,
+    get disposed() { return state.disposed },
+    get result() { return state.result },
+    set result(value: AgentRecordingResult | undefined) { state.result = value },
+    port: {
+      start: async (intervalMs: number) => { state.intervals.push(intervalMs) },
+      frame: async (png: Buffer) => { state.drawn.push(png.length) },
+      stop: async () => state.result,
+      dispose: async () => { state.disposed += 1 },
+    },
+  }
+}
+
 interface Harness {
   guests: AgentBrowserGuests
 }
@@ -221,6 +256,8 @@ function makeGuests(overrides?: {
     readonly list: () => Array<{ tabId: string; url: string; title: string }>
     readonly guest: (tabId: string) => AgentClaimedWebContents | undefined
   }
+  createRecorder?: () => AgentRecorderPort
+  recordingsDir?: string
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -241,6 +278,8 @@ function makeGuests(overrides?: {
     ...(ariaMaxChars === undefined ? {} : { ariaMaxChars }),
     ...(overrides?.emit === undefined ? {} : { emit: overrides.emit }),
     ...(overrides?.humanTabs === undefined ? {} : { humanTabs: overrides.humanTabs }),
+    ...(overrides?.createRecorder === undefined ? {} : { createRecorder: overrides.createRecorder }),
+    ...(overrides?.recordingsDir === undefined ? {} : { recordingsDir: overrides.recordingsDir }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -687,6 +726,60 @@ describe('AgentBrowserGuests', () => {
     expect(human.state.destroyed).toBe(false)
     // The pool's own tab is closed through the carrier; the claimed guest is left alone.
     expect(lastRecord().closed).toBe(1)
+  })
+
+  it('records the active tab and writes a WebM file, pruning expired ones', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-agent-recording-'))
+    const stale = join(directory, 'agent-browser-old.webm')
+    await writeFile(stale, Buffer.from('old'))
+    await utimes(stale, new Date(0), new Date(0))
+    const recorder = makeFakeRecorder()
+    const { guests } = makeGuests({ createRecorder: () => recorder.port, recordingsDir: directory })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const idle = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'record', args: { action: 'status' },
+    }) as { recording: boolean; frames: number }
+    expect(idle).toMatchObject({ recording: false, frames: 0 })
+    const started = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'record', args: { action: 'start', frameIntervalMs: 50 },
+    }) as { recording: boolean; frameIntervalMs: number }
+    expect(started).toEqual({ recording: true, frameIntervalMs: 50 })
+    expect(recorder.intervals).toEqual([50])
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'record', args: { action: 'start' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await new Promise((resolve) => { setTimeout(resolve, 120) })
+    expect(recorder.drawn.length).toBeGreaterThan(0)
+    const stopping = await guests.execute({
+      type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'record', args: { action: 'stop' },
+    }) as { path: string; bytes: number; frames: number; durationMs: number }
+    expect(basename(stopping.path).startsWith('agent-browser-')).toBe(true)
+    expect(stopping.bytes).toBe(Buffer.from('webm-bytes').length)
+    expect(stopping.frames).toBe(2)
+    expect(recorder.disposed).toBe(1)
+    // The expired file is gone; only the recording just written remains.
+    expect(await readdir(directory)).toEqual([basename(stopping.path)])
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  it('reports a recorder that produced no frames and clamps the frame interval', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-agent-recording-'))
+    const recorder = makeFakeRecorder()
+    recorder.result = undefined
+    const { guests } = makeGuests({ createRecorder: () => recorder.port, recordingsDir: directory })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'record', args: { action: 'start', frameIntervalMs: 1 },
+    })
+    expect(recorder.intervals).toEqual([40])
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'record', args: { action: 'stop' } }))
+      .rejects.toMatchObject({ code: 'browser_empty_capture' })
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'record', args: { action: 'stop' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'record', args: { action: 'nope' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    expect(recorder.disposed).toBe(1)
+    expect(await readdir(directory)).toEqual([])
+    await rm(directory, { recursive: true, force: true })
   })
 
   it('rejects an unknown command with a structured code', async () => {

@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -405,6 +405,37 @@ export function apply(ctx: Context, input: Config): void {
             content: [{
               type: 'text',
               text: `Viewport ${String(result.width)}x${String(result.height)}${result.visible === true ? '' : ' (recorded; the tab is not on screen)'}`,
+            }],
+          }
+        },
+      },
+      {
+        name: 'browser_record',
+        rawName: 'record',
+        description: 'Record the active guest tab as a WebM video: start recording, report status, or stop and write the file to disk.',
+        input: z.object({ action: z.enum(['start', 'status', 'stop']), frameIntervalMs: z.number().optional() }),
+        run: async (agent, parsed) => {
+          const { action, frameIntervalMs } = z.object({
+            action: z.enum(['start', 'status', 'stop']),
+            frameIntervalMs: z.number().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'record', {
+            action,
+            ...(frameIntervalMs === undefined ? {} : { frameIntervalMs }),
+          })
+          if (action === 'start') {
+            return { content: [{ type: 'text', text: `Recording started, one frame every ${String(result.frameIntervalMs)} ms` }] }
+          }
+          if (action === 'status') {
+            const state = result.recording === true
+              ? `Recording: ${String(result.frames)} frames, ${String(result.elapsedMs ?? 0)} ms elapsed`
+              : `Not recording${result.path === undefined ? '' : `; last file ${result.path} (${String(result.bytes ?? 0)} bytes)`}`
+            return { content: [{ type: 'text', text: state }] }
+          }
+          return {
+            content: [{
+              type: 'text',
+              text: `Wrote ${String(result.path)} (${String(result.bytes)} bytes, ${String(result.frames)} frames, ${String(result.durationMs)} ms)`,
             }],
           }
         },

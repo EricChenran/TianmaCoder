@@ -1,9 +1,15 @@
 /** Main-owned browser guests driven by the Host browser control seam. */
 
 import { WebContentsView, app, clipboard, type WebContents } from 'electron'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getAriaInjectedScriptSource } from './aria-injected-script.ts'
 import { AGENT_TAB_LIMIT, selectAgentTabVictim, type AgentTabResidencyCandidate } from './browser-tab-residency.ts'
+import {
+  AGENT_RECORD_FRAME_INTERVAL_MS, agentRecordingsDir, createCanvasRecorder, pruneRecordings,
+  type AgentRecorderPort, type AgentRecordingResult,
+} from './agent-recorder.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
@@ -166,10 +172,26 @@ interface GuestLease {
   clipboard?: string
 }
 
+/** One running recording: its carrier, its frame pump, and the frames it has drawn. */
+interface AgentRecording {
+  readonly port: AgentRecorderPort
+  readonly tab: AgentTab
+  readonly startedAt: number
+  readonly intervalMs: number
+  timer?: ReturnType<typeof setInterval>
+  frames: number
+  pumping: boolean
+  failure?: string
+}
+
 export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   readonly #leases = new Map<string, GuestLease>()
   /** One in-flight capture per lease; a second request joins the running one instead of stacking. */
   readonly #captures = new Map<string, Promise<ShellBrowserJson>>()
+  /** The running recording, when one exists; at most one per shell. */
+  #recording: AgentRecording | undefined
+  /** Last finished recording, so the model can report its path after stopping. */
+  #lastRecording?: { path: string; bytes: number; frames: number; durationMs: number }
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -191,6 +213,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       readonly list: () => Array<{ tabId: string; url: string; title: string }>
       readonly guest: (tabId: string) => AgentClaimedWebContents | undefined
     }
+    /** Recorder carrier; the default draws guest frames onto a canvas and encodes WebM. */
+    readonly createRecorder?: () => AgentRecorderPort
+    /** Directory finished recordings are written to; defaults under the application data directory. */
+    readonly recordingsDir?: string
   }) {}
 
   /** Upper bound for one ARIA snapshot result, applied to the complete emitted value. */
@@ -332,6 +358,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'copy': return this.copySelection(view, request.leaseId)
       case 'paste': return this.pasteClipboard(view, request.leaseId)
       case 'tabs': return this.tabsOp(request.leaseId, request.args)
+      case 'record': return this.recordOp(request.leaseId, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -500,6 +527,111 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       active.lastActivityAt = active.lastSelectedAt
     }
     this.attachActive(lease)
+  }
+
+  /**
+   * Start, stop, or report the WebM recording of one lease's active tab. The
+   * recorder draws captured guest frames onto its own canvas, so a hidden or
+   * minimized window still records.
+   * @param leaseId - lease whose active tab is recorded.
+   * @param args - `action` plus an optional `frameIntervalMs`.
+   * @returns Recording state, or the finished recording's path and byte count.
+   */
+  private async recordOp(leaseId: string, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const lease = this.lease(leaseId)
+    const parsed = argsObject(args)
+    const action = typeof parsed.action === 'string' ? parsed.action : undefined
+    const running = this.#recording
+    if (action === 'status') {
+      return {
+        recording: running !== undefined,
+        frames: running?.frames ?? this.#lastRecording?.frames ?? 0,
+        ...(running === undefined ? {} : { elapsedMs: Date.now() - running.startedAt }),
+        ...(running?.failure === undefined ? {} : { failure: running.failure }),
+        ...(this.#lastRecording === undefined ? {} : {
+          path: this.#lastRecording.path, bytes: this.#lastRecording.bytes,
+          durationMs: this.#lastRecording.durationMs,
+        }),
+      }
+    }
+    if (action === 'start') {
+      if (running !== undefined) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: a recording is already running', 'browser_invalid_args'))
+      }
+      const tab = lease.tabs.get(lease.activeTabId)
+      if (tab === undefined) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown'))
+      }
+      const requested = typeof parsed.frameIntervalMs === 'number' ? parsed.frameIntervalMs : AGENT_RECORD_FRAME_INTERVAL_MS
+      const intervalMs = Math.min(Math.max(Math.round(requested), 40), 2_000)
+      const port = (this.options.createRecorder ?? createCanvasRecorder)()
+      await port.start(intervalMs)
+      const recording: AgentRecording = { port, tab, startedAt: Date.now(), intervalMs, frames: 0, pumping: false }
+      this.#recording = recording
+      recording.timer = setInterval(() => { void this.pumpFrame(recording) }, intervalMs)
+      recording.timer.unref()
+      this.publishActivity(leaseId, true, 'record')
+      return { recording: true, frameIntervalMs: intervalMs }
+    }
+    if (action === 'stop') {
+      if (running === undefined) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: no recording is running', 'browser_invalid_args'))
+      }
+      this.#recording = undefined
+      if (running.timer !== undefined) clearInterval(running.timer)
+      const result = await running.port.stop()
+      await running.port.dispose()
+      this.publishActivity(leaseId, false)
+      if (result === undefined) {
+        const reason = running.failure === undefined ? '' : `: ${running.failure}`
+        return Promise.reject(new ShellBrowserControlError(
+          `desktop browser: the recorder produced no frames${reason}`, 'browser_empty_capture'))
+      }
+      const written = await this.writeRecording(result)
+      this.#lastRecording = { ...written, frames: result.frames, durationMs: result.durationMs }
+      return { path: written.path, bytes: written.bytes, frames: result.frames, durationMs: result.durationMs }
+    }
+    return Promise.reject(new ShellBrowserControlError('desktop browser: record requires action start/stop/status', 'browser_invalid_args'))
+  }
+
+  /** Draw one frame from the recorded tab, skipping a tick whose capture is already running. */
+  private async pumpFrame(recording: AgentRecording): Promise<void> {
+    if (this.#recording !== recording || recording.pumping) return
+    recording.pumping = true
+    try {
+      const png = await this.captureFrame(recording.tab)
+      if (png !== undefined && this.#recording === recording) {
+        await recording.port.frame(png)
+        recording.frames += 1
+      }
+    } catch (error) {
+      recording.failure = error instanceof Error ? error.message : String(error)
+    } finally {
+      recording.pumping = false
+    }
+  }
+
+  /** @returns PNG bytes of one tab, or `undefined` when the guest cannot be captured. */
+  private async captureFrame(tab: AgentTab): Promise<Buffer | undefined> {
+    if (tab.view.webContents.isDestroyed()) return undefined
+    const image = await tab.view.webContents.capturePage()
+    return image.isEmpty() ? undefined : image.toPNG()
+  }
+
+  /**
+   * Write one finished recording and prune expired ones.
+   * @param result - encoded WebM from the recorder.
+   * @returns The written path and byte length.
+   */
+  private async writeRecording(result: AgentRecordingResult): Promise<{ path: string; bytes: number }> {
+    const directory = this.options.recordingsDir ?? join(agentRecordingsDir(), 'agent-recordings')
+    await mkdir(directory, { recursive: true })
+    await pruneRecordings(directory, Date.now())
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const path = join(directory, `agent-browser-${stamp}.webm`)
+    const bytes = Buffer.from(result.base64, 'base64')
+    await writeFile(path, bytes)
+    return { path, bytes: bytes.length }
   }
 
   /** Current page facts without navigating. */
@@ -923,12 +1055,19 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return Promise.resolve({ x: point.x, y: point.y, clicked: click })
   }
 
-  release(request: { readonly leaseId: string }): Promise<ShellBrowserJson> {
+  async release(request: { readonly leaseId: string }): Promise<ShellBrowserJson> {
     const lease = this.#leases.get(request.leaseId)
     if (lease === undefined) {
       return Promise.reject(new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown'))
     }
     this.#leases.delete(request.leaseId)
+    // A recording of this lease ends with it; its partial file is discarded by the recorder.
+    const running = this.#recording
+    if (running !== undefined && [...lease.tabs.values()].includes(running.tab)) {
+      this.#recording = undefined
+      if (running.timer !== undefined) clearInterval(running.timer)
+      await running.port.dispose()
+    }
     for (const tab of lease.tabs.values()) {
       if (tab.claimed !== true) tab.view.destroy()
     }
