@@ -7,6 +7,7 @@ interface FakeGuestRecord {
   loadedUrls: string[]
   closed: number
   destroyed: boolean
+  emptyCapture: boolean
   bounds: Array<{ x: number; y: number; width: number; height: number }>
   lastPreferences: unknown
 }
@@ -51,9 +52,15 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         getTitle: () => 'Example',
         close: () => { this.closed += 1 },
         isDestroyed: () => this.destroyed,
+        capturePage: async () => ({
+          isEmpty: () => this.emptyCapture,
+          toPNG: () => Buffer.from('png-bytes'),
+        }),
       }
       FakeView.instances.push(this)
     }
+
+    emptyCapture = false
 
     attach(window: AgentGuestHostWindow): void {
       window.contentView.addChildView({ setBounds: this.setBounds })
@@ -74,6 +81,7 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         loadedUrls: view.loadedUrls,
         get closed() { return view.closed },
         get destroyed() { return view.destroyed },
+        get emptyCapture() { return view.emptyCapture },
         bounds: view.bounds,
         lastPreferences: view.lastPreferences,
         webContents: {
@@ -82,6 +90,7 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           getTitle: () => view.webContents.getTitle(),
           close: () => { view.webContents.close() },
           isDestroyed: () => view.webContents.isDestroyed(),
+          capturePage: async () => view.webContents.capturePage(),
         },
         attach: (target) => { view.attach(target) },
         destroy: () => { view.destroy() },
@@ -197,13 +206,29 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({ type: 'browser', requestId: 1, op: 'execute', leaseId: 'gone', command: 'navigate', args: {} }))
       .rejects.toMatchObject({ code: 'browser_lease_unknown' })
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 2, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
-    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'screenshot', args: {} }))
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'hover', args: {} }))
       .rejects.toMatchObject({ code: 'browser_unknown_command' })
     await expect(guests.release({ leaseId })).resolves.toBeNull()
     const record = lastRecord()
     expect(record.closed).toBe(1)
     await expect(guests.release({ leaseId })).rejects.toMatchObject({ code: 'browser_lease_unknown' })
     expect(record.closed).toBe(1)
+  })
+
+  it('captures the guest page as base64 png on screenshot', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {} }) as { base64: string; mimeType: string }
+    expect(result.mimeType).toBe('image/png')
+    expect(Buffer.from(result.base64, 'base64').toString()).toBe('png-bytes')
+  })
+
+  it('reports an empty capture as a structured error', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().emptyCapture = true
+    await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {} }))
+      .rejects.toMatchObject({ code: 'browser_empty_capture' })
   })
 })
 

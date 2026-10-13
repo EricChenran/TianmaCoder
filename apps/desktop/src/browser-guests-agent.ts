@@ -20,9 +20,17 @@ export interface AgentGuestElectronView {
   setBounds(bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void
 }
 
+/** The slice of a captured page image the screenshot command uses. */
+export interface AgentGuestCapture {
+  isEmpty(): boolean
+  toPNG(): Buffer
+}
+
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed'>
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed'> & {
+    capturePage(): Promise<AgentGuestCapture>
+  }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
   attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds): void
   /** Detach from its window and close the underlying contents. */
@@ -74,10 +82,17 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   async execute(request: ShellBrowserExecuteRequest): Promise<ShellBrowserJson> {
     const view = this.guest(request.leaseId)
-    if (request.command !== 'navigate') {
-      throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
+    switch (request.command) {
+      case 'navigate': return this.navigate(view, request.args)
+      case 'screenshot': return this.screenshot(view)
+      default:
+        throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
-    const url = requestArgsUrl(request.args)
+  }
+
+  /** Navigate to one allowlisted URL and report the settled page facts. */
+  private async navigate(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const url = requestArgsUrl(args)
     if (url === undefined || !isAgentNavigableUrl(url, this.options.hostUrl())) {
       throw new ShellBrowserControlError('desktop browser: navigation target is not allowed', 'browser_url_rejected')
     }
@@ -98,6 +113,14 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest closed during navigation', 'browser_guest_closed')
     return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
+  }
+
+  /** Capture the guest page as PNG for durable model-visible attachment. */
+  private async screenshot(view: AgentGuestView): Promise<ShellBrowserJson> {
+    if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
+    const image = await view.webContents.capturePage()
+    if (image.isEmpty()) throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
+    return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
   }
 
   release(request: { readonly leaseId: string }): Promise<ShellBrowserJson> {
