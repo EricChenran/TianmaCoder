@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-agent-browser/README.md
+/:
+  en: 8e1ac7d39450a412
+  zh: 37babfa027b7741a
+/deepseek-ai-dsh-client-ui-agent-browser:
+  en: f7d8156ee6406bf8
+  zh: a876da2348a5d323
+/deepseek-ai-dsh-client-ui-agent-browser/summary:
+  en: c7f1fd4b43746a8e
+  zh: b6e3c1d64401ada9
+/deepseek-ai-dsh-client-ui-agent-browser/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: de4a2a92773d135e
+/deepseek-ai-dsh-client-ui-agent-browser/use-this-package:
+  en: 5b89fb715f31d16c
+  zh: b7c6a17037186582
+/deepseek-ai-dsh-client-ui-agent-browser/use-this-package/when-to-choose-it:
+  en: 52c1193d20472b2d
+  zh: 3f3899368698cc18
+/deepseek-ai-dsh-client-ui-agent-browser/use-this-package/minimal-configuration:
+  en: 8e57e236cc2df714
+  zh: 23612addd70b08b4
+/deepseek-ai-dsh-client-ui-agent-browser/understand-the-implementation:
+  en: 42b15ac6321706aa
+  zh: e15901d8462ec7c7
+/deepseek-ai-dsh-client-ui-agent-browser/understand-the-implementation/tab-definition:
+  en: 76b0114ec82670d7
+  zh: d721bee4c9605852
+/deepseek-ai-dsh-client-ui-agent-browser/understand-the-implementation/slot-registration:
+  en: efb45bd8ddda1dd2
+  zh: d3afc1c6bbb913dc
+/deepseek-ai-dsh-client-ui-agent-browser/understand-the-implementation/carrier:
+  en: 14248fc0c308d6a5
+  zh: 9648fed40a2a4bec
+/deepseek-ai-dsh-client-ui-agent-browser/further-exploration:
+  en: c0f24dd8739e2af2
+  zh: eee52d71b512f933
+/deepseek-ai-dsh-client-ui-agent-browser/model-experience:
+  en: 7a86cd87f6a471cf
+  zh: f126cc87d8956e80
+/deepseek-ai-dsh-client-ui-agent-browser/model-experience/kv-cache-effect:
+  en: be2266ed2330a9da
+  zh: 3abb2ed004293263
+/deepseek-ai-dsh-client-ui-agent-browser/known-limitations-and-deferred-work:
+  en: 4b8db2995c897ac6
+  zh: e5f0c2378c206355
+/deepseek-ai-dsh-client-ui-agent-browser/known-limitations-and-deferred-work/dev-note:
+  en: 48c11302d0e9c021
+  zh: bf06857d61ab5a10

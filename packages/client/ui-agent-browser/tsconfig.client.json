@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "include": [
+    "src/client",
+    "src/types.ts"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../locale/tsconfig.client.json" },
+    { "path": "../ui-session" },
+    { "path": "../ui-sidebar-right" },
+    { "path": "../ui-slots" }
+  ]
+}

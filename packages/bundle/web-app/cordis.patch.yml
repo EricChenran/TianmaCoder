@@ -296,6 +296,8 @@
       name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
 
     # Web profiles opt in; Desktop retains sandboxed HTTP(S) Browser tabs.
+    - id: ui-agent-browser
+      name: '@deepseek-ai/dsh-client-ui-agent-browser'
     - id: ui-sidebar-browser
       name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"

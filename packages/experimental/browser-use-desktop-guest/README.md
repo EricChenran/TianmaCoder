@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, screenshot, state, click, hover, fill, check, type, press, scroll, back, forward, reload, select): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
+Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, aria, elementInfo, screenshot, viewport, state, click, hover, fill, check, type, press, scroll, back, forward, reload, select, wait, tabs, copy, paste): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
 
 ## Table of Contents
 
@@ -36,7 +36,8 @@ Mount in a desktop composition beside `@deepseek-ai/dsh-browser-use`; the Electr
 
 | Field | Meaning |
 |---|---|
-| workspaceKey | Sidebar-browser workspace identity whose storage partition and login state the agent guests reuse. |\n| watch | Optional on-screen { width, height }; when set the guest attaches visibly at the window's top-left so the human watches it work. |
+| workspaceKey | Sidebar-browser workspace identity whose storage partition and login state the agent guests reuse. |
+| watch | Optional on-screen { width, height }; when set the guest attaches visibly at the window's top-left so the human watches it work. |
 
 -----
 

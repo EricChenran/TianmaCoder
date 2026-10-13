@@ -420,6 +420,75 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'click', args: { ref: 'stale' } }))
       .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
+
+  it('describes a snapshot ref from the cache without probing the page again', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = {
+      url: 'https://example.com/',
+      title: 'Example',
+      elements: [{ ref: 'e1', tag: 'button', role: 'button', name: 'Submit', x: 30, y: 40 }],
+    }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'snapshot', args: {} })
+    const probed = lastRecord().executedScripts.length
+    const described = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'elementInfo', args: { ref: 'e1' },
+    }) as { source: string; tag: string; role: string; name: string }
+    expect(described).toMatchObject({ source: 'snapshot', tag: 'button', role: 'button', name: 'Submit' })
+    expect(lastRecord().executedScripts).toHaveLength(probed)
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'elementInfo', args: { ref: 'e9' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
+  })
+
+  it('probes one element by selector and reports its live facts', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true, tag: 'input', visible: true, disabled: false, box: { x: 1, y: 2, width: 3, height: 4 } }
+    const described = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'elementInfo', args: { selector: '#name' },
+    }) as { selector: string; source: string; tag: string; visible: boolean }
+    expect(described).toMatchObject({ selector: '#name', source: 'page', tag: 'input', visible: true })
+    expect(lastRecord().executedScripts.at(-1)).toContain('#name')
+    lastRecord().jsResult = { found: false }
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'elementInfo', args: { selector: '#gone' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'elementInfo', args: {} }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('applies a viewport to a visible lease and rejects out-of-range dimensions', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', bounds: { x: 0, y: 0, width: 800, height: 600 },
+    }) as { leaseId: string }
+    const attachments = lastRecord().bounds.length
+    const sized = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 1024, height: 768 },
+    }) as { width: number; height: number; visible: boolean }
+    expect(sized).toEqual({ width: 1024, height: 768, visible: true })
+    expect(lastRecord().bounds).toHaveLength(attachments + 1)
+    const fallback = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'viewport', args: {},
+    }) as { width: number; height: number }
+    expect(fallback).toMatchObject({ width: 1280, height: 720 })
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'viewport', args: { width: 100 } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'viewport', args: { height: 1.5 } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await expect(guests.execute({ type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'viewport', args: { height: 4000 } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('records a viewport for an offscreen lease without attaching it', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const attachments = lastRecord().bounds.length
+    const result = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 500, height: 400 },
+    }) as { width: number; height: number; visible: boolean }
+    expect(result).toEqual({ width: 500, height: 400, visible: false })
+    expect(lastRecord().bounds).toHaveLength(attachments)
+  })
 })
 
 describe('WebContentsView carrier', () => {

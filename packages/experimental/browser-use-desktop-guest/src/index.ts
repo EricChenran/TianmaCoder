@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -345,6 +345,51 @@ export function apply(ctx: Context, input: Config): void {
           const { deltaX = 0, deltaY = 0 } = z.object({ deltaX: z.number().optional(), deltaY: z.number().optional() }).parse(parsed)
           await executeOnLease(agent, 'scroll', { deltaX, deltaY })
           return { content: [{ type: 'text', text: `Scrolled by ${String(deltaX)}, ${String(deltaY)}` }] }
+        },
+      },
+      {
+        name: 'browser_elementInfo',
+        rawName: 'elementInfo',
+        description: 'Describe one element of the guest page by CSS selector or a ref from the last browser_snapshot: tag, role, name, text, value, checked, disabled, visibility, and box.',
+        input: z.object({ selector: z.string().optional(), ref: z.string().optional() }),
+        run: async (agent, parsed) => {
+          const { selector, ref } = z.object({ selector: z.string().optional(), ref: z.string().optional() }).parse(parsed)
+          const result = await executeOnLease(agent, 'elementInfo', {
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
+          const facts = [
+            result.tag === undefined ? undefined : `tag=${result.tag}`,
+            result.role === undefined ? undefined : `role=${result.role}`,
+            result.name === undefined ? undefined : `name=${result.name}`,
+            result.value === undefined ? undefined : `value=${result.value}`,
+            result.checked === undefined ? undefined : `checked=${String(result.checked)}`,
+            result.disabled === undefined ? undefined : `disabled=${String(result.disabled)}`,
+            result.visible === undefined ? undefined : `visible=${String(result.visible)}`,
+            result.box === undefined ? undefined : `box=${String(result.box.x)},${String(result.box.y)} ${String(result.box.width)}x${String(result.box.height)}`,
+            result.text === undefined ? undefined : `text=${result.text}`,
+          ].filter((fact): fact is string => fact !== undefined)
+          const subject = selector ?? ref ?? 'element'
+          return { content: [{ type: 'text', text: `${subject} (${result.source ?? 'page'})\n${facts.join('\n')}` }] }
+        },
+      },
+      {
+        name: 'browser_viewport',
+        rawName: 'viewport',
+        description: 'Set the page viewport of the guest tab; width and height default to 1280x720 and must stay within 320-3840 by 320-2160.',
+        input: z.object({ width: z.number().optional(), height: z.number().optional() }),
+        run: async (agent, parsed) => {
+          const { width, height } = z.object({ width: z.number().optional(), height: z.number().optional() }).parse(parsed)
+          const result = await executeOnLease(agent, 'viewport', {
+            ...(width === undefined ? {} : { width }),
+            ...(height === undefined ? {} : { height }),
+          })
+          return {
+            content: [{
+              type: 'text',
+              text: `Viewport ${String(result.width)}x${String(result.height)}${result.visible === true ? '' : ' (recorded; the tab is not on screen)'}`,
+            }],
+          }
         },
       },
     ]

@@ -60,6 +60,15 @@ export const AGENT_MAX_TABS = 32
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
 
+/** Smallest page viewport the viewport command accepts. */
+export const AGENT_VIEWPORT_MIN = { width: 320, height: 320 }
+
+/** Largest page viewport the viewport command accepts. */
+export const AGENT_VIEWPORT_MAX = { width: 3840, height: 2160 }
+
+/** Viewport the automation gets when it asks for one without dimensions. */
+export const AGENT_VIEWPORT_DEFAULT = { width: 1280, height: 720 }
+
 /** Collects visible interactive elements with stable refs, ARIA roles, and viewport-center points. */
 const SNAPSHOT_SCRIPT = `(() => {
   const nodes = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role], [onclick], [contenteditable="true"]'));
@@ -103,12 +112,26 @@ const SNAPSHOT_SCRIPT = `(() => {
  * browser's per-workspace storage partition, so the agent operates with the same
  * login state the human browser holds; URL policy matches the human sidebar.
  */
+/** One element address captured by the last snapshot: its click point and the semantics read at capture time. */
+interface AgentRef {
+  readonly x: number
+  readonly y: number
+  readonly tag?: string
+  readonly role?: string
+  readonly name?: string
+  readonly text?: string
+}
+
 /** One lease: a tab set with an active pointer, all sharing one workspace partition. */
 interface GuestLease {
   readonly workspaceKey: string
-  readonly tabs: Map<string, { view: AgentGuestView; refs: Map<string, { x: number; y: number }> }>
+  readonly tabs: Map<string, { view: AgentGuestView; refs: Map<string, AgentRef> }>
   activeTabId: string
   bounds: { x: number; y: number; width: number; height: number }
+  /** Page viewport size the automation asked for; applied to the attached view while the lease is visible. */
+  viewport: { width: number; height: number }
+  /** Whether this lease placed its view on screen at acquire time. */
+  readonly visible: boolean
   /** Virtual clipboard text held per lease so agent copy/paste never bleeds across sessions. */
   clipboard?: string
 }
@@ -137,7 +160,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** @returns The active tab of one lease: its navigation surface and ref cache. */
-  tab(leaseId: string): { view: AgentGuestView; refs: Map<string, { x: number; y: number }> } {
+  tab(leaseId: string): { view: AgentGuestView; refs: Map<string, AgentRef> } {
     const lease = this.#leases.get(leaseId)
     if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
     const tab = lease.tabs.get(lease.activeTabId)
@@ -155,6 +178,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       tabs: new Map([[tabId, { view, refs: new Map() }]]),
       activeTabId: tabId,
       bounds,
+      viewport: { width: bounds.width, height: bounds.height },
+      visible: request.bounds !== undefined,
     })
     const window = this.options.getWindow()
     if (window !== undefined && !window.isDestroyed()) {
@@ -181,7 +206,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'click': return this.click(view, request.args, true, refs)
       case 'hover': return this.click(view, request.args, false, refs)
       case 'snapshot': return this.snapshot(view, refs)
+      case 'elementInfo': return this.elementInfo(view, request.args, refs)
       case 'aria': return this.ariaSnapshot(view)
+      case 'viewport': return this.setViewport(request.leaseId, request.args)
       case 'wait': return this.waitFor(view, request.args)
       case 'copy': return this.copySelection(view, request.leaseId)
       case 'paste': return this.pasteClipboard(view, request.leaseId)
@@ -336,7 +363,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** Insert trusted text into the focused element, optionally focusing a ref or selector first with a trusted click. */
-  private async type(view: AgentGuestView, args: ShellBrowserJson, refs: Map<string, { x: number; y: number }>): Promise<ShellBrowserJson> {
+  private async type(view: AgentGuestView, args: ShellBrowserJson, refs: Map<string, AgentRef>): Promise<ShellBrowserJson> {
     const parsed = argsObject(args)
     const text = parsed.text
     if (typeof text !== 'string' || text.length === 0) {
@@ -516,16 +543,97 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */
-  private async snapshot(view: AgentGuestView, refs: Map<string, { x: number; y: number }>): Promise<ShellBrowserJson> {
+  private async snapshot(view: AgentGuestView, refs: Map<string, AgentRef>): Promise<ShellBrowserJson> {
     const probed = await view.webContents.evaluateInIsolatedWorld(SNAPSHOT_SCRIPT) as {
       url?: string
       title?: string
-      elements?: Array<{ ref: string; x: number; y: number; tag: string; name?: string; text?: string }>
+      elements?: Array<{ ref: string; x: number; y: number; tag: string; role?: string; name?: string; text?: string }>
     }
     const elements = probed.elements ?? []
     refs.clear()
-    for (const element of elements) refs.set(element.ref, { x: element.x, y: element.y })
+    for (const element of elements) {
+      refs.set(element.ref, {
+        x: element.x, y: element.y, tag: element.tag,
+        ...(element.role === undefined ? {} : { role: element.role }),
+        ...(element.name === undefined ? {} : { name: element.name }),
+        ...(element.text === undefined ? {} : { text: element.text }),
+      })
+    }
     return { url: probed.url ?? view.webContents.getURL(), title: probed.title ?? view.webContents.getTitle(), elements }
+  }
+
+  /**
+   * Describe one element by snapshot ref or CSS selector.
+   * @param view - active tab.
+   * @param args - `ref` (snapshot address) or `selector`.
+   * @param refs - ref cache written by the last snapshot.
+   * @returns The element's semantics as read at capture or probe time.
+   */
+  private async elementInfo(
+    view: AgentGuestView,
+    args: ShellBrowserJson,
+    refs: Map<string, AgentRef>,
+  ): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
+    if (ref !== undefined) {
+      const cached = refs.get(ref)
+      if (cached === undefined) {
+        return Promise.reject(new ShellBrowserControlError(
+          `desktop browser: ref ${JSON.stringify(ref)} is stale or unknown; run snapshot again`, 'browser_element_not_found'))
+      }
+      return { ref, source: 'snapshot', ...cached }
+    }
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    if (selector === undefined || selector.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: elementInfo requires a ref or CSS selector', 'browser_invalid_args'))
+    }
+    const probed = await view.webContents.evaluateInIsolatedWorld(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return { found: false };
+        el.scrollIntoView({ block: 'center' });
+        const r = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          found: true,
+          tag: el.tagName.toLowerCase(),
+          role: el.getAttribute('role') ?? undefined,
+          name: el.getAttribute('aria-label') ?? el.getAttribute('name') ?? undefined,
+          text: ((el.innerText ?? '') + '').slice(0, 200) || undefined,
+          value: typeof el.value === 'string' ? el.value : undefined,
+          checked: typeof el.checked === 'boolean' ? el.checked : undefined,
+          disabled: el.disabled === true,
+          visible: r.width >= 2 && r.height >= 2 && style.visibility !== 'hidden' && style.display !== 'none',
+          box: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) },
+        };
+      })()`,
+    ) as { found: boolean } & Record<string, unknown>
+    if (!probed.found) {
+      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    }
+    return { selector, source: 'page', ...probed }
+  }
+
+  /**
+   * Set the page viewport of one lease, applying it to the attached view while the lease is visible.
+   * @param leaseId - lease whose active tab is resized.
+   * @param args - optional `width` and `height`; each defaults to the reference viewport.
+   * @returns The effective viewport and whether the view is on screen.
+   */
+  private setViewport(leaseId: string, args: ShellBrowserJson): ShellBrowserJson {
+    const lease = this.lease(leaseId)
+    const parsed = argsObject(args)
+    const width = viewportDimension(parsed.width, AGENT_VIEWPORT_DEFAULT.width, AGENT_VIEWPORT_MIN.width, AGENT_VIEWPORT_MAX.width)
+    const height = viewportDimension(parsed.height, AGENT_VIEWPORT_DEFAULT.height, AGENT_VIEWPORT_MIN.height, AGENT_VIEWPORT_MAX.height)
+    lease.viewport = { width, height }
+    if (lease.visible) {
+      lease.bounds = { ...lease.bounds, width, height }
+      const window = this.options.getWindow()
+      const active = lease.tabs.get(lease.activeTabId)
+      if (window !== undefined && !window.isDestroyed() && active !== undefined) active.view.attach(window, lease.bounds)
+    }
+    return { width, height, visible: lease.visible }
   }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
@@ -533,7 +641,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     view: AgentGuestView,
     args: ShellBrowserJson,
     click: boolean,
-    refs: Map<string, { x: number; y: number }> = new Map(),
+    refs: Map<string, AgentRef> = new Map(),
   ): Promise<ShellBrowserJson> {
     const parsed = argsObject(args)
     const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
@@ -564,7 +672,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       view.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
       view.webContents.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
     }
-    return Promise.resolve({ ...point, clicked: click })
+    return Promise.resolve({ x: point.x, y: point.y, clicked: click })
   }
 
   release(request: { readonly leaseId: string }): Promise<ShellBrowserJson> {
@@ -641,4 +749,14 @@ function requestArgsUrl(args: ShellBrowserJson): string | undefined {
 function argsObject(args: ShellBrowserJson): Record<string, unknown> {
   if (typeof args !== 'object' || args === null || Array.isArray(args)) return {}
   return args as Record<string, unknown>
+}
+
+/** Validate one optional viewport dimension against the inclusive safety bounds. */
+function viewportDimension(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+    throw new ShellBrowserControlError(
+      `desktop browser: viewport dimension must be an integer between ${String(min)} and ${String(max)}`, 'browser_invalid_args')
+  }
+  return value
 }

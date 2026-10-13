@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../packages/host/browser-control"
+    },
+    {
       "path": "../../packages/boot/app-boot"
     },
     {

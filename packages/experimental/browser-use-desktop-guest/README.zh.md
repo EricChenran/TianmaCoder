@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、screenshot、state、click、hover、fill、check、type、press、scroll、back、forward、reload、select）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、state、click、hover、fill、check、type、press、scroll、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
 
 ## 目录
 
@@ -36,7 +36,8 @@ kind: "package-reference"
 
 | 字段 | 含义 |
 |---|---|
-| workspaceKey | agent guest 复用其存储分区与登录态的侧栏浏览器 workspace 身份。 |\n| watch | 可选的屏幕 { width, height }；设置后 guest 以该尺寸显示在窗口左上角，人类可实时观看。 |
+| workspaceKey | agent guest 复用其存储分区与登录态的侧栏浏览器 workspace 身份。 |
+| watch | 可选的屏幕 { width, height }；设置后 guest 以该尺寸显示在窗口左上角，人类可实时观看。 |
 
 -----
 
