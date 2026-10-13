@@ -280,6 +280,27 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'click', args: { selector: '#nope' } }))
       .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
+
+  it('caches snapshot refs and clicks by ref without re-resolving', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = {
+      url: 'https://example.com/',
+      title: 'Example',
+      elements: [{ ref: 'e1', tag: 'button', name: 'Submit', x: 30, y: 40 }],
+    }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'snapshot', args: {} }) as { elements: Array<{ ref: string; tag: string }> }
+    expect(result.elements).toHaveLength(1)
+    expect(result.elements[0]!.ref).toBe('e1')
+    const scriptsBefore = lastRecord().executedScripts.length
+    const clicked = await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { ref: 'e1' } }) as { x: number; y: number; clicked: boolean }
+    expect(clicked).toEqual({ x: 30, y: 40, clicked: true })
+    expect(lastRecord().executedScripts).toHaveLength(scriptsBefore)
+    const kinds = lastRecord().inputEvents.map(event => (event as { type?: string }).type)
+    expect(kinds).toEqual(['mouseMove', 'mouseDown', 'mouseUp'])
+    await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'click', args: { ref: 'stale' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
+  })
 })
 
 describe('WebContentsView carrier', () => {

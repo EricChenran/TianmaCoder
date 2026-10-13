@@ -40,13 +40,44 @@ export interface AgentGuestView {
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
 
+/** Collects visible interactive elements with stable refs and viewport-center points. */
+const SNAPSHOT_SCRIPT = `(() => {
+  const nodes = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role], [onclick], [contenteditable="true"]'));
+  const elements = [];
+  for (const el of nodes) {
+    if (elements.length >= 80) break;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') continue;
+    const ref = 'e' + (elements.length + 1);
+    const name = el.getAttribute('aria-label') ?? el.getAttribute('placeholder') ?? (el.tagName === 'INPUT' ? el.getAttribute('value') : null) ?? undefined;
+    const text = ((el.innerText ?? '') + '').slice(0, 80) || undefined;
+    elements.push({
+      ref,
+      tag: el.tagName.toLowerCase(),
+      role: el.getAttribute('role') ?? undefined,
+      name,
+      text,
+      x: Math.round(r.x + r.width / 2),
+      y: Math.round(r.y + r.height / 2),
+    });
+  }
+  return { url: location.href, title: document.title, elements };
+})()`
+
 /**
  * Shell-side command handler over main-owned guests. Leases reuse the sidebar
  * browser's per-workspace storage partition, so the agent operates with the same
  * login state the human browser holds; URL policy matches the human sidebar.
  */
 export class AgentBrowserGuests implements ShellBrowserCommandHandler {
-  readonly #leases = new Map<string, { readonly workspaceKey: string; readonly view: AgentGuestView }>()
+  readonly #leases = new Map<string, {
+    readonly workspaceKey: string
+    readonly view: AgentGuestView
+    /** Element refs from the most recent snapshot, mapping ref id to viewport point. */
+    readonly refs: Map<string, { x: number; y: number }>
+  }>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -72,7 +103,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   acquire(request: ShellBrowserAcquireRequest): Promise<ShellBrowserJson> {
     const leaseId = randomUUID()
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
-    this.#leases.set(leaseId, { workspaceKey: request.workspaceKey, view })
+    this.#leases.set(leaseId, { workspaceKey: request.workspaceKey, view, refs: new Map() })
     const window = this.options.getWindow()
     if (window !== undefined && !window.isDestroyed()) {
       view.attach(window, request.bounds ?? { x: 0, y: 0, width: 1, height: 1 })
@@ -89,8 +120,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'type': return this.type(view, request.args)
       case 'press': return this.press(view, request.args)
       case 'scroll': return this.scroll(view, request.args)
-      case 'click': return this.click(view, request.args, true)
-      case 'hover': return this.click(view, request.args, false)
+      case 'click': return this.click(view, request.args, true, request.leaseId)
+      case 'hover': return this.click(view, request.args, false, request.leaseId)
+      case 'snapshot': return this.snapshot(view, request.leaseId)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -168,21 +200,48 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
   }
 
-  /** Resolve one CSS selector to viewport coordinates, then hover or click it with trusted input. */
-  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean): Promise<ShellBrowserJson> {
-    const selector = argsObject(args).selector
-    if (typeof selector !== 'string' || selector.length === 0) {
-      return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a CSS selector', 'browser_invalid_args'))
+  /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */
+  private async snapshot(view: AgentGuestView, leaseId: string): Promise<ShellBrowserJson> {
+    const probed = await view.webContents.executeJavaScript(SNAPSHOT_SCRIPT) as {
+      url?: string
+      title?: string
+      elements?: Array<{ ref: string; x: number; y: number; tag: string; name?: string; text?: string }>
     }
-    const probed = await view.webContents.executeJavaScript(
-      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
-        el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
-        return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
-    ) as { found: boolean; x?: number; y?: number }
-    if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') {
-      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    const elements = probed.elements ?? []
+    const lease = this.#leases.get(leaseId)
+    if (lease !== undefined) {
+      lease.refs.clear()
+      for (const element of elements) lease.refs.set(element.ref, { x: element.x, y: element.y })
     }
-    const point = { x: Math.round(probed.x), y: Math.round(probed.y) }
+    return { url: probed.url ?? view.webContents.getURL(), title: probed.title ?? view.webContents.getTitle(), elements }
+  }
+
+  /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
+  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean, leaseId: string): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    let point: { x: number; y: number }
+    if (ref !== undefined) {
+      const cached = this.#leases.get(leaseId)?.refs.get(ref)
+      if (cached === undefined) {
+        return Promise.reject(new ShellBrowserControlError(`desktop browser: ref ${JSON.stringify(ref)} is stale or unknown; run snapshot again`, 'browser_element_not_found'))
+      }
+      point = cached
+    } else {
+      if (selector === undefined || selector.length === 0) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a ref or CSS selector', 'browser_invalid_args'))
+      }
+      const probed = await view.webContents.executeJavaScript(
+        `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
+          el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+          return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+      ) as { found: boolean; x?: number; y?: number }
+      if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') {
+        return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+      }
+      point = { x: Math.round(probed.x), y: Math.round(probed.y) }
+    }
     view.webContents.sendInputEvent({ type: 'mouseMove', ...point })
     if (click) {
       view.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })

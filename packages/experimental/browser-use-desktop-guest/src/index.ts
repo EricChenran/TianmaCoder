@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; name?: string; text?: string }> }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -123,25 +123,42 @@ export function apply(ctx: Context, input: Config): void {
         },
       },
       {
+        name: 'browser_snapshot',
+        rawName: 'snapshot',
+        description: 'List the visible interactive elements of the guest page with stable refs (e1, e2, ...) for use with browser_click and browser_hover.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'snapshot', {})
+          const lines = (result.elements ?? []).map(element => `${element.ref}\t${element.tag}\t${element.name ?? element.text ?? ''}`)
+          return { content: [{ type: 'text', text: `${String(result.url)} — ${String(result.title)}\n${lines.join('\n')}` }] }
+        },
+      },
+      {
         name: 'browser_click',
         rawName: 'click',
-        description: 'Click the element matching a CSS selector (resolved against the live page, then clicked with trusted mouse input).',
-        input: z.object({ selector: z.string() }),
+        description: 'Click the element matching a CSS selector or a ref from the last browser_snapshot.',
+        input: z.object({ selector: z.string().optional(), ref: z.string().optional() }),
         run: async (agent, parsed) => {
-          const { selector } = z.object({ selector: z.string() }).parse(parsed)
-          const result = await executeOnLease(agent, 'click', { selector })
-          return { content: [{ type: 'text', text: `Clicked ${selector} at ${String(result.x)}, ${String(result.y)}` }] }
+          const { selector, ref } = z.object({ selector: z.string().optional(), ref: z.string().optional() }).parse(parsed)
+          const result = await executeOnLease(agent, 'click', {
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
+          return { content: [{ type: 'text', text: `Clicked ${selector ?? ref} at ${String(result.x)}, ${String(result.y)}` }] }
         },
       },
       {
         name: 'browser_hover',
         rawName: 'hover',
-        description: 'Hover the mouse over the element matching a CSS selector.',
-        input: z.object({ selector: z.string() }),
+        description: 'Hover the mouse over the element matching a CSS selector or a ref from the last browser_snapshot.',
+        input: z.object({ selector: z.string().optional(), ref: z.string().optional() }),
         run: async (agent, parsed) => {
-          const { selector } = z.object({ selector: z.string() }).parse(parsed)
-          const result = await executeOnLease(agent, 'hover', { selector })
-          return { content: [{ type: 'text', text: `Hovered ${selector} at ${String(result.x)}, ${String(result.y)}` }] }
+          const { selector, ref } = z.object({ selector: z.string().optional(), ref: z.string().optional() }).parse(parsed)
+          const result = await executeOnLease(agent, 'hover', {
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
+          return { content: [{ type: 'text', text: `Hovered ${selector ?? ref} at ${String(result.x)}, ${String(result.y)}` }] }
         },
       },
       {
