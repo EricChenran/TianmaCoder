@@ -72,8 +72,12 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         },
         insertText: async (text: string): Promise<void> => { this.insertedTexts.push(text) },
         sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]): void => { this.inputEvents.push(event) },
-        executeJavaScript: async (code: string): Promise<unknown> => {
-          this.executedScripts.push(code)
+        executeJavaScriptInIsolatedWorld: async (_worldId: number, scripts: Array<{ code: string }>): Promise<unknown> => {
+          this.executedScripts.push(scripts[0]?.code ?? '')
+          return this.jsResult
+        },
+        evaluateInIsolatedWorld: async (script: string): Promise<unknown> => {
+          this.executedScripts.push(script)
           return this.jsResult
         },
         capturePage: async () => ({
@@ -119,7 +123,9 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           isDestroyed: () => view.webContents.isDestroyed(),
           insertText: async (text) => { await view.webContents.insertText(text) },
           sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { view.webContents.sendInputEvent(event) },
-          executeJavaScript: async (code: string) => { return view.webContents.executeJavaScript(code) },
+          evaluateInIsolatedWorld: async (script: string) => {
+            return view.webContents.executeJavaScriptInIsolatedWorld(999, [{ code: script }])
+          },
           reload: () => { view.webContents.reload() },
           navigationHistory: {
             goBack: () => { view.webContents.navigationHistory.goBack() },

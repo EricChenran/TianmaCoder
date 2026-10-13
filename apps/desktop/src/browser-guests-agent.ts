@@ -34,9 +34,11 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'executeJavaScript' | 'reload'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'reload'> & {
     /** Electron marks goBack/goForward on WebContents deprecated in favor of the history member. */
     readonly navigationHistory: AgentGuestHistory
+    /** Runs one page script in the isolated world the page cannot observe or tamper with. */
+    evaluateInIsolatedWorld(script: string): Promise<unknown>
     capturePage(): Promise<AgentGuestCapture>
   }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
@@ -44,6 +46,9 @@ export interface AgentGuestView {
   /** Detach from its window and close the underlying contents. */
   destroy(): void
 }
+
+/** Reserved world id so the page's own isolated worlds never collide with ours. */
+export const AGENT_ISOLATED_WORLD_ID = 999
 
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
@@ -168,7 +173,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     if (selector === undefined || selector.length === 0 || (value === undefined && label === undefined)) {
       return Promise.reject(new ShellBrowserControlError('desktop browser: select requires a selector and value or label', 'browser_invalid_args'))
     }
-    const result = await view.webContents.executeJavaScript(
+    const result = await view.webContents.evaluateInIsolatedWorld(
       `(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el || el.tagName !== 'SELECT') return { found: false };
@@ -212,7 +217,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     if (selector === undefined || selector.length === 0 || text === undefined || text.length === 0) {
       return Promise.reject(new ShellBrowserControlError('desktop browser: fill requires a selector and text', 'browser_invalid_args'))
     }
-    const result = await view.webContents.executeJavaScript(
+    const result = await view.webContents.evaluateInIsolatedWorld(
       `(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return { found: false };
@@ -236,7 +241,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     if (typeof selector !== 'string' || selector.length === 0) {
       return Promise.reject(new ShellBrowserControlError('desktop browser: check requires a CSS selector', 'browser_invalid_args'))
     }
-    const probed = await view.webContents.executeJavaScript(
+    const probed = await view.webContents.evaluateInIsolatedWorld(
       `(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return { found: false };
@@ -249,7 +254,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     if (probed.checked === true) return { checked: true, changed: false }
     await this.click(view, { selector }, true)
-    const after = await view.webContents.executeJavaScript(
+    const after = await view.webContents.evaluateInIsolatedWorld(
       `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return { found: el !== null, checked: el !== null && el.checked === true }; })()`,
     ) as { found: boolean; checked?: boolean }
     return { checked: after.found && after.checked === true, changed: true }
@@ -313,7 +318,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */
   private async snapshot(view: AgentGuestView, leaseId: string): Promise<ShellBrowserJson> {
-    const probed = await view.webContents.executeJavaScript(SNAPSHOT_SCRIPT) as {
+    const probed = await view.webContents.evaluateInIsolatedWorld(SNAPSHOT_SCRIPT) as {
       url?: string
       title?: string
       elements?: Array<{ ref: string; x: number; y: number; tag: string; name?: string; text?: string }>
@@ -343,7 +348,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       if (selector === undefined || selector.length === 0) {
         return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a ref or CSS selector', 'browser_invalid_args'))
       }
-      const probed = await view.webContents.executeJavaScript(
+      const probed = await view.webContents.evaluateInIsolatedWorld(
         `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
           el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
           return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
@@ -383,8 +388,21 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
     },
   })
   let window: AgentGuestHostWindow | undefined
+  const web = view.webContents
   return {
-    webContents: view.webContents,
+    webContents: {
+      loadURL: (url: string) => web.loadURL(url),
+      getURL: () => web.getURL(),
+      getTitle: () => web.getTitle(),
+      close: () => { web.close() },
+      isDestroyed: () => web.isDestroyed(),
+      insertText: (text: string) => web.insertText(text),
+      sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { web.sendInputEvent(event) },
+      reload: () => { web.reload() },
+      navigationHistory: web.navigationHistory,
+      evaluateInIsolatedWorld: (script: string) => web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
+      capturePage: () => web.capturePage(),
+    },
     attach(target, bounds) {
       window = target
       window.contentView.addChildView(view)
