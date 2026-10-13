@@ -97,13 +97,16 @@ const SNAPSHOT_SCRIPT = `(() => {
  * browser's per-workspace storage partition, so the agent operates with the same
  * login state the human browser holds; URL policy matches the human sidebar.
  */
+/** One lease: a tab set with an active pointer, all sharing one workspace partition. */
+interface GuestLease {
+  readonly workspaceKey: string
+  readonly tabs: Map<string, { view: AgentGuestView; refs: Map<string, { x: number; y: number }> }>
+  activeTabId: string
+  bounds: { x: number; y: number; width: number; height: number }
+}
+
 export class AgentBrowserGuests implements ShellBrowserCommandHandler {
-  readonly #leases = new Map<string, {
-    readonly workspaceKey: string
-    readonly view: AgentGuestView
-    /** Element refs from the most recent snapshot, mapping ref id to viewport point. */
-    readonly refs: Map<string, { x: number; y: number }>
-  }>()
+  readonly #leases = new Map<string, GuestLease>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -125,26 +128,35 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return this.options.ariaMaxChars ?? 20_000
   }
 
-  /** @returns The guest navigation surface for one request. */
-  guest(leaseId: string): AgentGuestView {
+  /** @returns The active tab of one lease: its navigation surface and ref cache. */
+  tab(leaseId: string): { view: AgentGuestView; refs: Map<string, { x: number; y: number }> } {
     const lease = this.#leases.get(leaseId)
     if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
-    return lease.view
+    const tab = lease.tabs.get(lease.activeTabId)
+    if (tab === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
+    return tab
   }
 
   acquire(request: ShellBrowserAcquireRequest): Promise<ShellBrowserJson> {
     const leaseId = randomUUID()
+    const tabId = randomUUID()
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
-    this.#leases.set(leaseId, { workspaceKey: request.workspaceKey, view, refs: new Map() })
+    const bounds = request.bounds ?? { x: 0, y: 0, width: 1, height: 1 }
+    this.#leases.set(leaseId, {
+      workspaceKey: request.workspaceKey,
+      tabs: new Map([[tabId, { view, refs: new Map() }]]),
+      activeTabId: tabId,
+      bounds,
+    })
     const window = this.options.getWindow()
     if (window !== undefined && !window.isDestroyed()) {
-      view.attach(window, request.bounds ?? { x: 0, y: 0, width: 1, height: 1 })
+      view.attach(window, bounds)
     }
-    return Promise.resolve({ leaseId })
+    return Promise.resolve({ leaseId, tabId })
   }
 
   async execute(request: ShellBrowserExecuteRequest): Promise<ShellBrowserJson> {
-    const view = this.guest(request.leaseId)
+    const { view, refs } = this.tab(request.leaseId)
     switch (request.command) {
       case 'navigate': return this.navigate(view, request.args)
       case 'back': return this.history(view, 'goBack')
@@ -153,18 +165,86 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'select': return this.selectOption(view, request.args)
       case 'screenshot': return this.screenshot(view)
       case 'getState': return this.state(view)
-      case 'type': return this.type(view, request.args, request.leaseId)
+      case 'type': return this.type(view, request.args, refs)
       case 'fill': return this.fill(view, request.args)
       case 'check': return this.check(view, request.args)
       case 'press': return this.press(view, request.args)
       case 'scroll': return this.scroll(view, request.args)
-      case 'click': return this.click(view, request.args, true, request.leaseId)
-      case 'hover': return this.click(view, request.args, false, request.leaseId)
-      case 'snapshot': return this.snapshot(view, request.leaseId)
+      case 'click': return this.click(view, request.args, true, refs)
+      case 'hover': return this.click(view, request.args, false, refs)
+      case 'snapshot': return this.snapshot(view, refs)
       case 'aria': return this.ariaSnapshot(view)
       case 'wait': return this.waitFor(view, request.args)
+      case 'tabs': return this.tabsOp(request.leaseId, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
+    }
+  }
+
+  /** List, open, activate, or close guest tabs; every other command runs on the active tab. */
+  private async tabsOp(leaseId: string, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const lease = this.#leases.get(leaseId)
+    if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
+    const parsed = argsObject(args)
+    const action = typeof parsed.action === 'string' ? parsed.action : undefined
+    const tabId = typeof parsed.tabId === 'string' ? parsed.tabId : undefined
+    const window = this.options.getWindow()
+    const list = () => ({
+      tabs: [...lease.tabs.entries()].map(([id, tab]) => ({
+        tabId: id,
+        url: tab.view.webContents.getURL(),
+        title: tab.view.webContents.getTitle(),
+        active: id === lease.activeTabId,
+      })),
+      activeTabId: lease.activeTabId,
+    })
+    if (action === 'list') return list()
+    if (action === 'new') {
+      const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
+      const created = randomUUID()
+      lease.tabs.set(created, { view, refs: new Map() })
+      this.activateTab(lease, created, window)
+      return { ...list(), tabId: created }
+    }
+    if (action === 'close') {
+      if (tabId === undefined || !lease.tabs.has(tabId)) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: close requires a known tabId', 'browser_invalid_args'))
+      }
+      if (lease.tabs.size === 1) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: cannot close the last tab', 'browser_invalid_args'))
+      }
+      const closing = lease.tabs.get(tabId)
+      if (closing !== undefined) closing.view.destroy()
+      lease.tabs.delete(tabId)
+      if (lease.activeTabId === tabId) {
+        this.activateTab(lease, [...lease.tabs.keys()].at(-1) ?? '', window)
+      }
+      return { closed: tabId, ...list() }
+    }
+    if (action === 'activate') {
+      if (tabId === undefined || !lease.tabs.has(tabId)) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: activate requires a known tabId', 'browser_invalid_args'))
+      }
+      this.activateTab(lease, tabId, window)
+      return { ...list(), tabId }
+    }
+    return Promise.reject(new ShellBrowserControlError('desktop browser: tabs requires action list/new/close/activate', 'browser_invalid_args'))
+  }
+
+  /** Point the active pointer at one tab and swap the on-screen bounds between old and new. */
+  private activateTab(
+    lease: GuestLease,
+    tabId: string,
+    window: AgentGuestHostWindow | undefined,
+  ): void {
+    const previous = lease.tabs.get(lease.activeTabId)
+    if (window !== undefined && !window.isDestroyed() && previous !== undefined && lease.activeTabId !== tabId) {
+      previous.view.attach(window, { x: 0, y: 0, width: 1, height: 1 })
+    }
+    lease.activeTabId = tabId
+    const active = lease.tabs.get(tabId)
+    if (window !== undefined && !window.isDestroyed() && active !== undefined) {
+      active.view.attach(window, lease.bounds)
     }
   }
 
@@ -243,7 +323,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** Insert trusted text into the focused element, optionally focusing a ref or selector first with a trusted click. */
-  private async type(view: AgentGuestView, args: ShellBrowserJson, leaseId: string): Promise<ShellBrowserJson> {
+  private async type(view: AgentGuestView, args: ShellBrowserJson, refs: Map<string, { x: number; y: number }>): Promise<ShellBrowserJson> {
     const parsed = argsObject(args)
     const text = parsed.text
     if (typeof text !== 'string' || text.length === 0) {
@@ -252,7 +332,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
     const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
     if (ref !== undefined || selector !== undefined) {
-      await this.click(view, { ...(ref === undefined ? {} : { ref }), ...(selector === undefined ? {} : { selector }) }, true, leaseId)
+      await this.click(view, { ...(ref === undefined ? {} : { ref }), ...(selector === undefined ? {} : { selector }) }, true, refs)
     }
     await view.webContents.insertText(text)
     return { typed: text.length }
@@ -398,29 +478,31 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */
-  private async snapshot(view: AgentGuestView, leaseId: string): Promise<ShellBrowserJson> {
+  private async snapshot(view: AgentGuestView, refs: Map<string, { x: number; y: number }>): Promise<ShellBrowserJson> {
     const probed = await view.webContents.evaluateInIsolatedWorld(SNAPSHOT_SCRIPT) as {
       url?: string
       title?: string
       elements?: Array<{ ref: string; x: number; y: number; tag: string; name?: string; text?: string }>
     }
     const elements = probed.elements ?? []
-    const lease = this.#leases.get(leaseId)
-    if (lease !== undefined) {
-      lease.refs.clear()
-      for (const element of elements) lease.refs.set(element.ref, { x: element.x, y: element.y })
-    }
+    refs.clear()
+    for (const element of elements) refs.set(element.ref, { x: element.x, y: element.y })
     return { url: probed.url ?? view.webContents.getURL(), title: probed.title ?? view.webContents.getTitle(), elements }
   }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
-  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean, leaseId = ''): Promise<ShellBrowserJson> {
+  private async click(
+    view: AgentGuestView,
+    args: ShellBrowserJson,
+    click: boolean,
+    refs: Map<string, { x: number; y: number }> = new Map(),
+  ): Promise<ShellBrowserJson> {
     const parsed = argsObject(args)
     const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
     const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
     let point: { x: number; y: number }
     if (ref !== undefined) {
-      const cached = this.#leases.get(leaseId)?.refs.get(ref)
+      const cached = refs.get(ref)
       if (cached === undefined) {
         return Promise.reject(new ShellBrowserControlError(`desktop browser: ref ${JSON.stringify(ref)} is stale or unknown; run snapshot again`, 'browser_element_not_found'))
       }
@@ -453,7 +535,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       return Promise.reject(new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown'))
     }
     this.#leases.delete(request.leaseId)
-    lease.view.destroy()
+    for (const tab of lease.tabs.values()) tab.view.destroy()
     return Promise.resolve(null)
   }
 }

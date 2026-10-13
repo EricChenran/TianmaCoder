@@ -322,8 +322,23 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
 
-  it('waits for a visible element and times out otherwise', async () => {
-    const { guests } = makeGuests()
+  it('manages multiple tabs with new, activate, close, and list', async () => {
+    const { guests } = makeGuests({ loadURL: async () => {} })
+    const acquire = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string; tabId: string }
+    const { leaseId, tabId: first } = acquire
+    const opened = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' } }) as { tabId: string; tabs: Array<{ tabId: string; active: boolean }> }
+    expect(opened.tabs).toHaveLength(2)
+    expect(opened.tabs.find(tab => tab.tabId === opened.tabId)?.active).toBe(true)
+    await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'tabs', args: { action: 'activate', tabId: first } })
+    const listed = await guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' } }) as { tabs: Array<{ active: boolean }> }
+    expect(listed.tabs.filter(tab => tab.active)).toHaveLength(1)
+    const closed = await guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'tabs', args: { action: 'close', tabId: opened.tabId } }) as { closed: string }
+    expect(closed.closed).toBe(opened.tabId)
+    await expect(guests.execute({ type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'tabs', args: { action: 'close', tabId: opened.tabId } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('waits for a visible element and times out otherwise', async () => {    const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
     lastRecord().jsResult = { found: true }
     await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'wait', args: { selector: '#ready', ms: 500 } }))
