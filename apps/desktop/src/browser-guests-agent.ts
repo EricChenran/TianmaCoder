@@ -2,6 +2,7 @@
 
 import { WebContentsView, app, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { getAriaInjectedScriptSource } from './aria-injected-script.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
@@ -154,6 +155,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'click': return this.click(view, request.args, true, request.leaseId)
       case 'hover': return this.click(view, request.args, false, request.leaseId)
       case 'snapshot': return this.snapshot(view, request.leaseId)
+      case 'aria': return this.ariaSnapshot(view)
       case 'wait': return this.waitFor(view, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
@@ -355,6 +357,31 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const image = await view.webContents.capturePage()
     if (image.isEmpty()) throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
     return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
+  }
+
+  /** Produce the full-page ARIA snapshot through the Playwright injected runtime in the isolated world. */
+  private async ariaSnapshot(view: AgentGuestView): Promise<ShellBrowserJson> {
+    if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
+    const options = {
+      browserName: 'chromium',
+      customEngines: [],
+      isUnderTest: false,
+      sdkLanguage: 'javascript',
+      stableRafCount: 1,
+      testIdAttributeName: 'data-testid',
+    }
+    const expression = `(() => {
+      globalThis.__dshAriaInjected ??= (() => {
+        const module = {};
+        ${getAriaInjectedScriptSource()}
+        return new (module.exports.InjectedScript())(globalThis, ${JSON.stringify(options)});
+      })();
+      const root = document.body || document.documentElement;
+      if (!root) return { aria: '' };
+      return { aria: globalThis.__dshAriaInjected.incrementalAriaSnapshot(root, { mode: 'ai' }).full };
+    })()`
+    const result = await view.webContents.evaluateInIsolatedWorld(expression) as { aria?: string }
+    return { aria: result.aria ?? '', url: view.webContents.getURL(), title: view.webContents.getTitle() }
   }
 
   /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */

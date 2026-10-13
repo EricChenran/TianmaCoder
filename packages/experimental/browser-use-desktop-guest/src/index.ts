@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -142,6 +142,16 @@ export function apply(ctx: Context, input: Config): void {
           const { selector, ms } = z.object({ selector: z.string(), ms: z.number().optional() }).parse(parsed)
           await executeOnLease(agent, 'wait', { selector, ...(ms === undefined ? {} : { ms }) })
           return { content: [{ type: 'text', text: `${selector} is visible` }] }
+        },
+      },
+      {
+        name: 'browser_aria',
+        rawName: 'aria',
+        description: 'Produce the full-page ARIA accessibility snapshot (YAML) of the guest page through the Playwright injected runtime.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'aria', {})
+          return { content: [{ type: 'text', text: result.aria !== undefined && result.aria !== '' ? result.aria : '(empty page)' }] }
         },
       },
       {
