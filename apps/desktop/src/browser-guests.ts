@@ -27,6 +27,20 @@ export class DesktopBrowserGuests {
    * @returns opaque lease and the partition approved for it.
    */
   acquire(owner: WebContents, workspace: unknown): DesktopBrowserReservation {
+    const partition = this.partitionFor(workspace)
+    const lease = randomUUID() as DesktopBrowserLeaseId
+    this.leases.set(lease, { owner, partition, attached: false })
+    return { lease, partition }
+  }
+
+  /**
+   * Storage partition for one workspace identity, created and hardened on first
+   * use. Agent-driven guests join the same partition to share login state with
+   * the human sidebar browser of the workspace.
+   * @param workspace - workspace identity; validated exactly like `acquire`.
+   * @returns The partition approved for this workspace.
+   */
+  partitionFor(workspace: unknown): string {
     if (typeof workspace !== 'string' || workspace.length === 0 || workspace.length > 4096) {
       throw new Error('desktop browser: a workspace storage identity is required')
     }
@@ -36,9 +50,7 @@ export class DesktopBrowserGuests {
       this.configureSession(session.fromPartition(partition))
       this.partitions.set(workspace, partition)
     }
-    const lease = randomUUID() as DesktopBrowserLeaseId
-    this.leases.set(lease, { owner, partition, attached: false })
-    return { lease, partition }
+    return partition
   }
 
   /**

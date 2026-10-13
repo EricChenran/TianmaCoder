@@ -55,7 +55,8 @@ import { readDesktopSettings } from './settings.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
-import { ShellBrowserControlEndpoint, UnsupportedShellBrowserHandler } from './browser-control-main.ts'
+import { AgentBrowserGuests } from './browser-guests-agent.ts'
+import { ShellBrowserControlEndpoint } from './browser-control-main.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -445,9 +446,14 @@ async function main(): Promise<void> {
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
     const hostReference: { current?: DesktopHostProcess } = {}
+    const agentGuests = new AgentBrowserGuests({
+      hostUrl: () => hostUrl,
+      getWindow: () => mainWindow,
+      partitionFor: workspace => browserGuests.partitionFor(workspace),
+    })
     const browserControl = new ShellBrowserControlEndpoint(
       (message) => { hostReference.current?.postToHost(message) },
-      new UnsupportedShellBrowserHandler())
+      agentGuests)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
