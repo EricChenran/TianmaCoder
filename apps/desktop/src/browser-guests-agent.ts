@@ -117,7 +117,13 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly partitionFor: (workspaceKey: string) => string
     readonly createView?: (partition: string) => AgentGuestView
     readonly navigateTimeoutMs?: number
+    readonly ariaMaxChars?: number
   }) {}
+
+  /** Upper bound for one ARIA snapshot result, applied to the complete emitted value. */
+  private ariaLimit(): number {
+    return this.options.ariaMaxChars ?? 20_000
+  }
 
   /** @returns The guest navigation surface for one request. */
   guest(leaseId: string): AgentGuestView {
@@ -381,7 +387,14 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       return { aria: globalThis.__dshAriaInjected.incrementalAriaSnapshot(root, { mode: 'ai' }).full };
     })()`
     const result = await view.webContents.evaluateInIsolatedWorld(expression) as { aria?: string }
-    return { aria: result.aria ?? '', url: view.webContents.getURL(), title: view.webContents.getTitle() }
+    const full = result.aria ?? ''
+    const limit = this.ariaLimit()
+    return {
+      aria: full.slice(0, limit),
+      truncated: full.length > limit,
+      url: view.webContents.getURL(),
+      title: view.webContents.getTitle(),
+    }
   }
 
   /** Enumerate interactive elements with stable refs and cache their points for ref-based actions. */

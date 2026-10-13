@@ -149,6 +149,7 @@ interface Harness {
 function makeGuests(overrides?: {
   getWindow?: () => AgentGuestHostWindow | undefined
   navigateTimeoutMs?: number
+  ariaMaxChars?: number
   loadURL?: (url: string) => Promise<void>
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
@@ -161,11 +162,13 @@ function makeGuests(overrides?: {
   FakeView.instances.length = 0
   const loadURL = overrides?.loadURL
   const navigateTimeoutMs = overrides?.navigateTimeoutMs
+  const ariaMaxChars = overrides?.ariaMaxChars
   const guests = new AgentBrowserGuests({
     hostUrl: () => 'http://127.0.0.1:19387',
     getWindow: overrides?.getWindow ?? (() => fakeWindow),
     partitionFor: workspace => `partition-${workspace}`,
     ...(navigateTimeoutMs === undefined ? {} : { navigateTimeoutMs }),
+    ...(ariaMaxChars === undefined ? {} : { ariaMaxChars }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -328,6 +331,19 @@ describe('AgentBrowserGuests', () => {
     lastRecord().jsResult = { found: false }
     await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'wait', args: { selector: '#gone', ms: 300 } }))
       .rejects.toMatchObject({ code: 'browser_timeout' })
+  })
+
+  it('truncates the ARIA snapshot at the configured bound', async () => {
+    const { guests } = makeGuests({ ariaMaxChars: 8 })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { aria: '- yaml: '.padEnd(30, 'x') }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'aria', args: {} }) as { aria: string; truncated: boolean }
+    expect(result.aria).toHaveLength(8)
+    expect(result.truncated).toBe(true)
+    lastRecord().jsResult = { aria: '- short' }
+    const small = await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'aria', args: {} }) as { aria: string; truncated: boolean }
+    expect(small.aria).toBe('- short')
+    expect(small.truncated).toBe(false)
   })
 
   it('fills an input by selector with real input and change events', async () => {
