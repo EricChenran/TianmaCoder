@@ -162,6 +162,13 @@ describe('AgentBrowserGuests', () => {
     expect(lastRecord().bounds).toEqual([])
   })
 
+  it('attaches with the requested on-screen bounds when the acquire carries them', async () => {
+    const { guests } = makeGuests()
+    const requested = { x: 12, y: 20, width: 640, height: 480 }
+    await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws-1', bounds: requested }) as { leaseId: string }
+    expect(lastRecord().bounds).toEqual([requested])
+  })
+
   it('navigates an allowed target and reports the settled url and title', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
@@ -209,7 +216,7 @@ describe('WebContentsView carrier', () => {
       contentView: { addChildView: () => {}, removeChildView: () => {} },
       isDestroyed: () => false,
     }
-    view.attach(window)
+    view.attach(window, { x: 0, y: 0, width: 1, height: 1 })
     expect(record.bounds).toEqual([{ x: 0, y: 0, width: 1, height: 1 }])
     view.destroy()
     expect(record.closed).toBe(1)

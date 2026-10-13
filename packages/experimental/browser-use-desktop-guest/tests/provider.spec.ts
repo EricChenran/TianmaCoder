@@ -80,6 +80,12 @@ describe('Desktop guest provider', () => {
     expect(() => { applyProvider() }).toThrow(/already registered/)
   })
 
+  it('forwards the watch size as on-screen bounds on acquire', async () => {
+    apply(ctx, { workspaceKey: 'ws-watch', watch: { width: 800, height: 600 } })
+    await registered[0]!.execute({ url: 'https://example.com/' }, minimalExec)
+    expect(sent[0]!.bounds).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+  })
+
   it('keeps tool schema strict about the url argument', async () => {
     applyProvider()
     await expect(registered[0]!.execute({}, minimalExec)).rejects.toThrow()

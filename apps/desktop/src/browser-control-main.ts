@@ -1,11 +1,12 @@
 /** Shell endpoint for the Host plugin browser control seam on the shared Host IPC. */
 
 import type {
+  BrowserControlBounds,
   BrowserControlJson as ShellBrowserJson,
   BrowserControlRequest as ShellBrowserRequest,
 } from '@deepseek-ai/dsh-host-browser-control'
 
-export type { ShellBrowserJson, ShellBrowserRequest }
+export type { ShellBrowserJson, ShellBrowserRequest, BrowserControlBounds }
 
 /** Reserve one agent lease in a workspace storage partition. */
 export type ShellBrowserAcquireRequest = Extract<ShellBrowserRequest, { readonly op: 'acquire' }>
@@ -26,8 +27,13 @@ export function isShellBrowserControlRequest(message: unknown): message is Shell
   const candidate = message as Record<string, unknown>
   if (candidate.type !== 'browser' || !Number.isSafeInteger(candidate.requestId)) return false
   switch (candidate.op) {
-    case 'acquire':
-      return typeof candidate.workspaceKey === 'string' && candidate.workspaceKey.length > 0
+    case 'acquire': {
+      if (typeof candidate.workspaceKey !== 'string' || candidate.workspaceKey.length === 0) return false
+      const bounds = candidate.bounds as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined
+      if (bounds === undefined) return true
+      return Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
+        && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)
+    }
     case 'execute':
       return typeof candidate.leaseId === 'string' && candidate.leaseId.length > 0
         && typeof candidate.command === 'string' && candidate.command.length > 0

@@ -2,6 +2,7 @@
 
 import { WebContentsView, app, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
+import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
 
@@ -22,8 +23,8 @@ export interface AgentGuestElectronView {
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
   readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed'>
-  /** Attach to the window with placeholder bounds so the compositor keeps producing frames. */
-  attach(window: AgentGuestHostWindow): void
+  /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
+  attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds): void
   /** Detach from its window and close the underlying contents. */
   destroy(): void
 }
@@ -65,7 +66,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
     this.#leases.set(leaseId, { workspaceKey: request.workspaceKey, view })
     const window = this.options.getWindow()
-    if (window !== undefined && !window.isDestroyed()) view.attach(window)
+    if (window !== undefined && !window.isDestroyed()) {
+      view.attach(window, request.bounds ?? { x: 0, y: 0, width: 1, height: 1 })
+    }
     return Promise.resolve({ leaseId })
   }
 
@@ -121,10 +124,10 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
   let window: AgentGuestHostWindow | undefined
   return {
     webContents: view.webContents,
-    attach(target) {
+    attach(target, bounds) {
       window = target
       window.contentView.addChildView(view)
-      view.setBounds({ x: 0, y: 0, width: 1, height: 1 })
+      view.setBounds(bounds)
     },
     destroy() {
       if (window !== undefined && !window.isDestroyed()) window.contentView.removeChildView(view)

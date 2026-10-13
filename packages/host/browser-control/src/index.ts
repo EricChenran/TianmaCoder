@@ -13,6 +13,14 @@ export type BrowserControlJson =
 /** Operations the Electron shell executes against its embedded browser guests. */
 export type BrowserControlOp = 'acquire' | 'execute' | 'release'
 
+/** On-screen rectangle a guest occupies while the human watches it work. */
+export interface BrowserControlBounds {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
 /**
  * One plugin-initiated request to the shell. `command` and `args` stay opaque at
  * this seam: the shell owns the browser command vocabulary and validates it there.
@@ -23,6 +31,8 @@ export type BrowserControlRequest = {
   readonly op: 'acquire'
   /** Workspace storage identity the lease belongs to; mirrors the sidebar browser lease key. */
   readonly workspaceKey: string
+  /** Optional on-screen rectangle; absent means the guest stays invisible (placeholder bounds). */
+  readonly bounds?: BrowserControlBounds
 } | {
   readonly type: 'browser'
   readonly requestId: number
@@ -75,8 +85,13 @@ export function isBrowserControlRequest(message: unknown): message is BrowserCon
   const candidate = message as Record<string, unknown>
   if (candidate.type !== 'browser' || !Number.isSafeInteger(candidate.requestId)) return false
   switch (candidate.op) {
-    case 'acquire':
-      return typeof candidate.workspaceKey === 'string' && candidate.workspaceKey.length > 0
+    case 'acquire': {
+      if (typeof candidate.workspaceKey !== 'string' || candidate.workspaceKey.length === 0) return false
+      const bounds = candidate.bounds as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined
+      if (bounds === undefined) return true
+      return Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
+        && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)
+    }
     case 'execute':
       return typeof candidate.leaseId === 'string' && candidate.leaseId.length > 0
         && typeof candidate.command === 'string' && candidate.command.length > 0
