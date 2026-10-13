@@ -1,0 +1,112 @@
+---
+description: "实验性桌面 guest 浏览器工具：经 Electron 浏览器控制缝，为每个存活 Session 持有一条 shell 租约。"
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-experimental-browser-use-desktop-guest
+
+[English](README.md) | 中文
+
+## 概述
+
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得 `browser_navigate`：该工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+
+## 目录
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## 使用本包
+
+在桌面组合中与 `@deepseek-ai/dsh-browser-use` 一同挂载；Electron shell 必须运行浏览器控制缝端点。更多工具（观察、点击、输入、截图）随后续版本发布。
+
+```yaml
+- name: '@deepseek-ai/dsh-browser-use'
+- name: '@deepseek-ai/dsh-experimental-browser-use-desktop-guest'
+  config:
+    workspaceKey: default
+```
+
+| 字段 | 含义 |
+|---|---|
+| `workspaceKey` | agent guest 复用其存储分区与登录态的侧栏浏览器 workspace 身份。 |
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现内部 — 点击展开</summary>
+
+[SessionResources](../browser-use-runtime/README.zh.md) 为每个精确存活 Agent 持有一条租约；获取在首次工具调用时惰性发生。每次工具调用都请求[shell 缝](../../host/browser-control/README.zh.md)执行 acquire、execute 或 release；shell 持有 guest 视图、导航策略与命令词表。provider 在清理完成前保留其 browser-use 注册。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 延伸阅读
+
+- [Browser use](../../../docs/subsystems/browser-use.zh.md) — provider 选择与 Session 所有权。
+- [Browser control contract](../../host/browser-control/README.zh.md) — 本 provider 使用的线上形状。
+
+-----
+
+<a id="model-experience"></a>
+## 模型体验
+
+### 浏览器指引
+
+#### What the model sees
+
+provider 添加一节固定系统提示：guest 属于本 Session、页面内容不可信、浏览器状态不从会话日志恢复、完成的动作需要用新鲜状态复核、取消会等待 drain 且不回滚已送达的输入。
+
+#### Token effect
+
+固定指引增加一小段系统提示；工具 schema 与结果增加主对话上下文。
+
+#### KV Cache effect
+
+不变的指引与静态工具目录保持提示前缀。
+
+### 原生浏览器工具与结果
+
+#### What the model sees
+
+`browser_navigate` 接受 HTTP(S) `url`，返回落定后的 URL 与页面标题。不允许的目标、未知租约与超时都会以可见错误呈现，模型可在重试前检视。
+
+#### Token effect
+
+每个结果向会话历史追加一小段文本。
+
+#### KV Cache effect
+
+结果追加到主会话历史；工具目录本身是静态的。
+
+## 已知限制与延期工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+- **仅 Chromium HTTP(S)** — shell 导航白名单拒绝其他协议；文件目标走文档预览流程。
+- **仅导航** — 观察、点击、输入与截图随后续版本发布；缝契约已能承载。
+- **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面。
+- **workspace 级登录态** — agent 共享 workspace 分区的 cookie；同一 workspace 内没有按 Session 的隔离。
+- **Loader 组合测试** — dispose 释放将由真实 Loader 的后续 spec 覆盖；本包单测覆盖 acquire、execute 与独占槽位。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者工作背景 — 点击展开</summary>
+
+shell 在自己的信任边界复检每条请求；修改形状时保持[其守卫](../../../apps/desktop/src/browser-control-main.ts)与[缝契约](../../host/browser-control/README.zh.md)字面一致。
+
+</details>

@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/browser-use-desktop-guest/README.md
+/:
+  en: bd518ee697ab7b37
+  zh: 5ab837b67f3aafd2
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest:
+  en: 647df0634f310ae6
+  zh: bd82881987bfc8ed
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/summary:
+  en: 7433a9895ae99c87
+  zh: 843940dcb6ab2e57
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: ffab54373e9e61f0
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/use-this-package:
+  en: ecddd7444a22d32c
+  zh: 4b37381395e8730f
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/understand-the-implementation:
+  en: da648051238359b5
+  zh: 91ffc03f868ad90e
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/further-exploration:
+  en: 6466acbf2d50791b
+  zh: 1390bbcbaab7aa75
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/browser-guidance:
+  en: db27706a7478c425
+  zh: d36d746cf60e56c4
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/browser-guidance/what-the-model-sees:
+  en: 313d12e3006a7bf3
+  zh: e6fc2136c0ae0d97
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/browser-guidance/token-effect:
+  en: b29d1b566df810b5
+  zh: 45933dc1956bfc1c
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/browser-guidance/kv-cache-effect:
+  en: 58cb0715d20ebfc1
+  zh: 84c4f190a5047f76
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/native-browser-tools-and-results:
+  en: 0295a32030d24cd0
+  zh: 65ef3d8920d811c2
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/native-browser-tools-and-results/what-the-model-sees:
+  en: c4bf2ba303fecefd
+  zh: 3474b5ae16792a7a
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/native-browser-tools-and-results/token-effect:
+  en: 8b6f4dedb3a1756c
+  zh: 0d408d4b7e27c6ab
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/native-browser-tools-and-results/kv-cache-effect:
+  en: 6e3f7433e8248bf8
+  zh: 59e8b0a923ce5b5f
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/known-limitations-and-deferred-work:
+  en: 3cdebf91461ed238
+  zh: 8225af945f80884f
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/known-limitations-and-deferred-work/dev-note:
+  en: 273a18ba615be346
+  zh: ca1087e012bdd218
