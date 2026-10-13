@@ -154,6 +154,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'click': return this.click(view, request.args, true, request.leaseId)
       case 'hover': return this.click(view, request.args, false, request.leaseId)
       case 'snapshot': return this.snapshot(view, request.leaseId)
+      case 'wait': return this.waitFor(view, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -163,6 +164,28 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   private state(view: AgentGuestView): ShellBrowserJson {
     if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
     return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
+  }
+
+  /** Poll the guest until one selector matches a visible element or the deadline passes. */
+  private async waitFor(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    if (selector === undefined || selector.length === 0) {
+      throw new ShellBrowserControlError('desktop browser: wait requires a CSS selector', 'browser_invalid_args')
+    }
+    const requested = typeof parsed.ms === 'number' ? parsed.ms : 5_000
+    const deadline = Date.now() + Math.min(Math.max(requested, 0), 10_000)
+    for (;;) {
+      const probe = await view.webContents.evaluateInIsolatedWorld(
+        `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
+          const r = el.getBoundingClientRect(); return { found: r.width >= 2 && r.height >= 2 }; })()`,
+      ) as { found: boolean }
+      if (probe.found) return { waited: true }
+      if (Date.now() >= deadline) {
+        throw new ShellBrowserControlError(`desktop browser: timed out waiting for ${JSON.stringify(selector)}`, 'browser_timeout')
+      }
+      await new Promise((resolve) => { setTimeout(resolve, 200) })
+    }
   }
 
   /** Walk session history or reload, reporting the page facts after issuing the action. */

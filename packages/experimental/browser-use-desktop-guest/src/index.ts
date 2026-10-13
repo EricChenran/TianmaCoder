@@ -134,6 +134,17 @@ export function apply(ctx: Context, input: Config): void {
         },
       },
       {
+        name: 'browser_wait',
+        rawName: 'wait',
+        description: 'Wait until one element matching a CSS selector is visible on the guest page (default 5s, max 10s).',
+        input: z.object({ selector: z.string(), ms: z.number().optional() }),
+        run: async (agent, parsed) => {
+          const { selector, ms } = z.object({ selector: z.string(), ms: z.number().optional() }).parse(parsed)
+          await executeOnLease(agent, 'wait', { selector, ...(ms === undefined ? {} : { ms }) })
+          return { content: [{ type: 'text', text: `${selector} is visible` }] }
+        },
+      },
+      {
         name: 'browser_click',
         rawName: 'click',
         description: 'Click the element matching a CSS selector or a ref from the last browser_snapshot.',

@@ -300,6 +300,17 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
 
+  it('waits for a visible element and times out otherwise', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true }
+    await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'wait', args: { selector: '#ready', ms: 500 } }))
+      .resolves.toEqual({ waited: true })
+    lastRecord().jsResult = { found: false }
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'wait', args: { selector: '#gone', ms: 300 } }))
+      .rejects.toMatchObject({ code: 'browser_timeout' })
+  })
+
   it('fills an input by selector with real input and change events', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
