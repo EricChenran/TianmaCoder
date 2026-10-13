@@ -628,10 +628,14 @@ export interface PiAiModelProfile {
   input?: PiAiModality[]
   /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
-   * entry's capability (a hand-declared model has none and does not reason);
-   * `false` declares a non-reasoning model, which is how a profile strips
-   * reasoning from a catalog model its gateway cannot serve; a non-empty dict
-   * declares the offered levels and their wire spellings.
+   * entry's capability; a hand-declared model — one the installed catalog
+   * does not describe — falls back to its wire protocol's usual vocabulary
+   * (`off`/`low`/`medium`/`high` on the OpenAI family and `anthropic-messages`),
+   * so the effort picker reaches a
+   * third-party route without a declaration. `false` declares a non-reasoning
+   * model, which strips reasoning from a catalog model its gateway cannot
+   * serve and from a hand-declared model whose gateway rejects the fallback;
+   * a non-empty dict declares the offered levels and their wire spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
@@ -700,6 +704,30 @@ interface ModelReasoning {
 }
 
 /**
+ * The reasoning efforts a hand-declared model offers by default, by wire
+ * protocol. A model the installed catalog does not describe declares no
+ * capability of its own, so the protocol's usual effort vocabulary is the only
+ * reasonable guess — the same gamble every request field a hand-declared route
+ * takes: a gateway that rejects `reasoning_effort` is corrected by an explicit
+ * `reasoningEfforts: false`, the same way a gateway that rejects `developer`
+ * is corrected by `compat.supportsDeveloperRole: false`.
+ *
+ * Both families map the three levels their endpoints act on: `reasoning_effort`
+ * on OpenAI completions, `reasoning.effort` on Responses, and Anthropic's
+ * effort spelling — whose native mapping these values reproduce, so the map
+ * decides nothing the protocol would not decide alone. `minimal`, `xhigh`, and
+ * `max` are pinned unsupported because neither family's base vocabulary takes
+ * them.
+ */
+const HAND_DECLARED_EFFORTS: Readonly<Record<string, PiAiReasoningEfforts>> = {
+  'openai-completions': { off: null, low: 'low', medium: 'medium', high: 'high' },
+  'openai-responses': { off: null, low: 'low', medium: 'medium', high: 'high' },
+  'azure-openai-responses': { off: null, low: 'low', medium: 'medium', high: 'high' },
+  'openai-codex-responses': { off: null, low: 'low', medium: 'medium', high: 'high' },
+  'anthropic-messages': { off: null, low: 'low', medium: 'medium', high: 'high' },
+}
+
+/**
  * Resolve one model's reasoning capability from its declared efforts.
  *
  * A declared dict translates to pi-ai's `thinkingLevelMap` with every level
@@ -714,12 +742,15 @@ interface ModelReasoning {
  * @param provider - provider route key, for diagnostics.
  * @param entry - the configured model entry.
  * @param base - the installed catalog entry of the same id, when one exists.
+ * @param api - the model's resolved wire protocol, which decides the
+ *   hand-declared fallback.
  * @returns the reasoning fields the materialized model carries.
  */
 function resolveModelReasoning(
   provider: string,
   entry: PiAiModelProfile,
   base: Model<Api> | undefined,
+  api: string,
 ): ModelReasoning {
   const efforts = entry.reasoningEfforts
   if (efforts === undefined) {
@@ -727,8 +758,13 @@ function resolveModelReasoning(
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
     // spell them, and no listing endpoint reports a model's reasoning
     // protocol. The entry's map (when any) arrives through the `...base`
-    // spread in the model literal.
-    return { reasoning: base?.reasoning ?? false }
+    // spread in the model literal. A model the installed catalog does not
+    // describe takes the protocol's fallback vocabulary instead, so a
+    // hand-declared route reaches the effort picker without declaring one.
+    if (base !== undefined) return { reasoning: base.reasoning }
+    const fallback = HAND_DECLARED_EFFORTS[api]
+    if (fallback === undefined) return { reasoning: false }
+    return resolveModelReasoning(provider, { ...entry, reasoningEfforts: fallback }, undefined, api)
   }
   // The installed entry's map may ride along through `...base`; pi-ai never
   // reads it on a non-reasoning model, so stripping it is not worth a field
@@ -954,7 +990,7 @@ export function resolveRouteModels(
       cost: base?.cost ?? NO_COST,
       contextWindow,
       maxTokens,
-      ...resolveModelReasoning(provider, entry, base),
+      ...resolveModelReasoning(provider, entry, base, api),
       ...resolveModelCompat(provider, entry, request.compat, base, api),
     }
   }

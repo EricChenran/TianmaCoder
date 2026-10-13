@@ -1831,10 +1831,14 @@ export interface PiAiModelProfile {
   input?: PiAiModality[]
   /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
-   * entry's capability (a hand-declared model has none and does not reason);
-   * `false` declares a non-reasoning model, which is how a profile strips
-   * reasoning from a catalog model its gateway cannot serve; a non-empty dict
-   * declares the offered levels and their wire spellings.
+   * entry's capability; a hand-declared model — one the installed catalog
+   * does not describe — falls back to its wire protocol's usual vocabulary
+   * (`off`/`low`/`medium`/`high` on the OpenAI family and `anthropic-messages`),
+   * so the effort picker reaches a
+   * third-party route without a declaration. `false` declares a non-reasoning
+   * model, which strips reasoning from a catalog model its gateway cannot
+   * serve and from a hand-declared model whose gateway rejects the fallback;
+   * a non-empty dict declares the offered levels and their wire spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */

@@ -11,7 +11,7 @@ import { getAllBuiltinModels, getBuiltinModels, getBuiltinProviders } from '@ear
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream'
 import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
-import { catalogModels, catalogProvider } from '../src/catalog.ts'
+import { catalogModels, catalogProvider, resolveRouteModels } from '../src/catalog.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { createModels, createProvider, getSupportedThinkingLevels } from '../src/models.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
@@ -108,24 +108,52 @@ describe('hand-declared providers', () => {
     })
   })
 
-  it('offers no reasoning control it could not honour', async () => {
+  it('falls back to the wire protocol\'s effort vocabulary on a hand-declared model', async () => {
     const server = await mockServer([])
     const ctx = await harness(gateway(`${server.url}/v1`))
 
-    // pi-ai reports a model with no reasoning metadata as supporting the single
-    // level `off`, but `off` is translated to *omitting* the reasoning option —
-    // byte-for-byte the same request as naming no effort — so a provider whose
-    // own default is to think would keep thinking with `off` selected. The
-    // capability is reported unavailable instead of offering that control.
-    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
+    // The installed catalog does not describe this route, so the protocol's
+    // usual effort vocabulary is the fallback: the picker offers the OpenAI
+    // levels without a declaration, and `off` omits the reasoning option.
+    const info = await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')
+    expect(info.reasoning?.efforts.map(e => e.id)).toEqual(['off', 'low', 'medium', 'high'])
 
-    // A catalog route is unaffected: its models carry the metadata that makes
-    // `off` actually disable thinking.
+    // The fallback decides the picker only; the request path still sends no
+    // reasoning option until a session picks an effort or the route names one.
+    expect(info.reasoning?.defaultEffort).toBeUndefined()
+
+    // A catalog route is unaffected: its models keep the metadata the
+    // installed catalog records.
     const withCatalog = await harness({ providers: { deepseek: { baseURL: server.url } } })
     const [catalogModel] = getBuiltinModels('deepseek')
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     expect((await withCatalog.llm.resolveModelInfo('deepseek', catalogModel.id)).reasoning?.efforts.map(e => e.id))
       .toContain('off')
+  })
+
+  it('scopes the hand-declared fallback to the resolved wire protocol', () => {
+    const materialize = (api: string): Model<Api> => {
+      const { models: [model] } = resolveRouteModels({
+        provider: 'acme-gateway',
+        api,
+        baseURL: 'https://acme.test',
+        models: [{ id: 'acme-large' }],
+        defaultContextWindow: 65_536,
+        defaultMaxTokens: 4096,
+        defaultInput: ['text'],
+      })
+      if (model === undefined) throw new Error('the declared model did not materialize')
+      return model
+    }
+    // Both fallback families spell the same three levels — the OpenAI fields
+    // and Anthropic's native effort mapping; a protocol with no fallback
+    // entry keeps the non-reasoning default.
+    expect(getSupportedThinkingLevels(materialize('anthropic-messages')))
+      .toEqual(['off', 'low', 'medium', 'high'])
+    expect(getSupportedThinkingLevels(materialize('openai-responses')))
+      .toEqual(['off', 'low', 'medium', 'high'])
+    expect(getSupportedThinkingLevels(materialize('bedrock-converse-stream')))
+      .toEqual(['off'])
   })
 
   it('joins the configurable-provider directory so a settings surface can reach it', async () => {
