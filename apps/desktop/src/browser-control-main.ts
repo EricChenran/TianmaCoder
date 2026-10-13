@@ -1,46 +1,20 @@
 /** Shell endpoint for the Host plugin browser control seam on the shared Host IPC. */
 
-/**
- * JSON values that survive structured clone across the Host IPC channel. Kept
- * structurally identical to the Host-side declaration; the contract spec pins
- * both sides to the same wire shapes until the protocol moves to its permanent
- * shared home.
- */
-export type ShellBrowserJson =
-  | string | number | boolean | null
-  | readonly ShellBrowserJson[]
-  | { readonly [key: string]: ShellBrowserJson }
+import type {
+  BrowserControlJson as ShellBrowserJson,
+  BrowserControlRequest as ShellBrowserRequest,
+} from '@deepseek-ai/dsh-host-browser-control'
+
+export type { ShellBrowserJson, ShellBrowserRequest }
 
 /** Reserve one agent lease in a workspace storage partition. */
-export interface ShellBrowserAcquireRequest {
-  readonly type: 'browser'
-  readonly requestId: number
-  readonly op: 'acquire'
-  /** Workspace storage identity the lease belongs to; mirrors the sidebar browser lease key. */
-  readonly workspaceKey: string
-}
+export type ShellBrowserAcquireRequest = Extract<ShellBrowserRequest, { readonly op: 'acquire' }>
 
 /** Execute one browser command against the leased guest. */
-export interface ShellBrowserExecuteRequest {
-  readonly type: 'browser'
-  readonly requestId: number
-  readonly op: 'execute'
-  readonly leaseId: string
-  /** Opaque at this seam: the shell owns the browser command vocabulary and validates it here. */
-  readonly command: string
-  readonly args: ShellBrowserJson
-}
+export type ShellBrowserExecuteRequest = Extract<ShellBrowserRequest, { readonly op: 'execute' }>
 
 /** Release one agent lease and close its guest. */
-export interface ShellBrowserReleaseRequest {
-  readonly type: 'browser'
-  readonly requestId: number
-  readonly op: 'release'
-  readonly leaseId: string
-}
-
-/** One plugin-initiated request to the shell. */
-export type ShellBrowserRequest = ShellBrowserAcquireRequest | ShellBrowserExecuteRequest | ShellBrowserReleaseRequest
+export type ShellBrowserReleaseRequest = Extract<ShellBrowserRequest, { readonly op: 'release' }>
 
 /**
  * Narrow a Host IPC message to a browser control request. The shell validates

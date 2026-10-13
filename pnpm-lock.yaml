@@ -795,6 +795,9 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../packages/util/home-paths
+      '@deepseek-ai/dsh-host-browser-control':
+        specifier: workspace:*
+        version: link:../../packages/host/browser-control
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../packages/host/webserver
@@ -10052,6 +10055,8 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../core/tools
+
+  packages/host/browser-control: {}
 
   packages/host/directory-picker:
     devDependencies:

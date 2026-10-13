@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../packages/host/browser-control" },
     { "path": "../../vendor/cordis" },
     { "path": "../../packages/core/agent" },
     { "path": "../../packages/jobs/jobs" },
