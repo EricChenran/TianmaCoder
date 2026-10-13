@@ -8,6 +8,8 @@ interface FakeGuestRecord {
   loadedUrls: string[]
   insertedTexts: string[]
   inputEvents: object[]
+  executedScripts: string[]
+  jsResult: unknown
   closed: number
   destroyed: boolean
   emptyCapture: boolean
@@ -36,6 +38,8 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
     loadedUrls: string[] = []
     insertedTexts: string[] = []
     inputEvents: object[] = []
+    executedScripts: string[] = []
+    jsResult: unknown = { found: true, x: 50, y: 60 }
     closed = 0
     destroyed = false
     emptyCapture = false
@@ -60,6 +64,10 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         isDestroyed: () => this.destroyed,
         insertText: async (text: string): Promise<void> => { this.insertedTexts.push(text) },
         sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]): void => { this.inputEvents.push(event) },
+        executeJavaScript: async (code: string): Promise<unknown> => {
+          this.executedScripts.push(code)
+          return this.jsResult
+        },
         capturePage: async () => ({
           isEmpty: () => this.emptyCapture,
           toPNG: () => Buffer.from('png-bytes'),
@@ -87,6 +95,9 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         loadedUrls: view.loadedUrls,
         insertedTexts: view.insertedTexts,
         inputEvents: view.inputEvents,
+        executedScripts: view.executedScripts,
+        get jsResult() { return view.jsResult },
+        set jsResult(value: unknown) { view.jsResult = value },
         get closed() { return view.closed },
         get destroyed() { return view.destroyed },
         get emptyCapture() { return view.emptyCapture },
@@ -100,6 +111,7 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           isDestroyed: () => view.webContents.isDestroyed(),
           insertText: async (text) => { await view.webContents.insertText(text) },
           sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { view.webContents.sendInputEvent(event) },
+          executeJavaScript: async (code: string) => { return view.webContents.executeJavaScript(code) },
           capturePage: async () => view.webContents.capturePage(),
         },
         attach: (target) => { view.attach(target) },
@@ -216,7 +228,7 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({ type: 'browser', requestId: 1, op: 'execute', leaseId: 'gone', command: 'navigate', args: {} }))
       .rejects.toMatchObject({ code: 'browser_lease_unknown' })
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 2, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
-    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'hover', args: {} }))
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'select', args: {} }))
       .rejects.toMatchObject({ code: 'browser_unknown_command' })
     await expect(guests.release({ leaseId })).resolves.toBeNull()
     const record = lastRecord()
@@ -239,6 +251,34 @@ describe('AgentBrowserGuests', () => {
     lastRecord().emptyCapture = true
     await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {} }))
       .rejects.toMatchObject({ code: 'browser_empty_capture' })
+  })
+
+  it('clicks a selector at its resolved coordinates with trusted mouse input', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'click', args: { selector: '#submit' } }) as { x: number; y: number; clicked: boolean }
+    expect(result).toEqual({ x: 50, y: 60, clicked: true })
+    const record = lastRecord()
+    expect(record.executedScripts.some(script => script.includes('"#submit"'))).toBe(true)
+    const kinds = record.inputEvents.map(event => (event as { type?: string }).type)
+    expect(kinds).toEqual(['mouseMove', 'mouseDown', 'mouseUp'])
+  })
+
+  it('hovers without pressing buttons', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'hover', args: { selector: '.menu' } }) as { clicked: boolean }
+    expect(result.clicked).toBe(false)
+    const kinds = lastRecord().inputEvents.map(event => (event as { type?: string }).type)
+    expect(kinds).toEqual(['mouseMove'])
+  })
+
+  it('reports a missing click target as a structured error', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: false }
+    await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'click', args: { selector: '#nope' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
 })
 

@@ -28,7 +28,7 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'executeJavaScript'> & {
     capturePage(): Promise<AgentGuestCapture>
   }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
@@ -89,6 +89,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'type': return this.type(view, request.args)
       case 'press': return this.press(view, request.args)
       case 'scroll': return this.scroll(view, request.args)
+      case 'click': return this.click(view, request.args, true)
+      case 'hover': return this.click(view, request.args, false)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -164,6 +166,29 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const image = await view.webContents.capturePage()
     if (image.isEmpty()) throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
     return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
+  }
+
+  /** Resolve one CSS selector to viewport coordinates, then hover or click it with trusted input. */
+  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean): Promise<ShellBrowserJson> {
+    const selector = argsObject(args).selector
+    if (typeof selector !== 'string' || selector.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: click requires a CSS selector', 'browser_invalid_args'))
+    }
+    const probed = await view.webContents.executeJavaScript(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return { found: false };
+        el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect();
+        return { found: true, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+    ) as { found: boolean; x?: number; y?: number }
+    if (!probed.found || typeof probed.x !== 'number' || typeof probed.y !== 'number') {
+      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    }
+    const point = { x: Math.round(probed.x), y: Math.round(probed.y) }
+    view.webContents.sendInputEvent({ type: 'mouseMove', ...point })
+    if (click) {
+      view.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
+      view.webContents.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+    }
+    return Promise.resolve({ ...point, clicked: click })
   }
 
   release(request: { readonly leaseId: string }): Promise<ShellBrowserJson> {
