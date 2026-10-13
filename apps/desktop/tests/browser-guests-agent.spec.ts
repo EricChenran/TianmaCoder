@@ -37,6 +37,19 @@ interface FakeGuestRecord {
   lastPreferences: unknown
 }
 
+/** Debugger channel the fake guest exposes: attachment state, recorded commands, and message delivery. */
+interface FakeDebugger {
+  attach(version: string): void
+  detach(): void
+  isAttached(): boolean
+  on(event: string, listener: (...args: unknown[]) => void): void
+  removeListener(event: string, listener: (...args: unknown[]) => void): void
+  sendCommand(method: string, params?: unknown): Promise<unknown>
+  readonly commands: Array<{ method: string; params?: unknown }>
+  readonly listening: Set<(...args: unknown[]) => void>
+  deliver(method: string, params: unknown): void
+}
+
 /** The full fake guest: recorded state plus the AgentGuestView surface. */
 interface FakeWrappedGuest extends FakeGuestRecord {
   readonly webContents: AgentGuestView['webContents']
@@ -50,12 +63,14 @@ interface FakeViewCtor {
   new (options: { webPreferences: unknown }): FakeWrappedGuest
 }
 
-const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
+const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted((): {
   FakeView: FakeViewCtor
   makeWrappedGuest: (loadURL: (url: string) => Promise<void>) => FakeWrappedGuest
   clipboardStore: { text: string }
+  lastDebugger: () => FakeDebugger
 } => {
   const clipboardStore = { text: '' }
+  const debuggers: FakeDebugger[] = []
   class FakeView implements FakeWrappedGuest {
     loadedUrls: string[] = []
     insertedTexts: string[] = []
@@ -113,6 +128,7 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
             toPNG: () => this.pngBytes,
           }
         },
+        debugger: createFakeDebugger(),
       }
       FakeView.instances.push(this)
     }
@@ -128,6 +144,31 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
 
     static instances: FakeWrappedGuest[] = []
   }
+
+  /**
+   * Minimal debugger channel: the carrier attaches, enables Page, listens for the
+   * dialog method, and answers through `Page.handleJavaScriptDialog`.
+   * @returns A stand-in for `webContents.debugger` plus the state a test drives.
+   */
+  function createFakeDebugger(): FakeDebugger {
+    const commands: Array<{ method: string; params?: unknown }> = []
+    const listening = new Set<(...args: unknown[]) => void>()
+    const state = { attached: false, commands, listening }
+    const channel: FakeDebugger = {
+      commands: state.commands,
+      listening: state.listening,
+      attach: () => { state.attached = true },
+      detach: () => { state.attached = false },
+      isAttached: () => state.attached,
+      on: (event, listener) => { if (event === 'message') state.listening.add(listener) },
+      removeListener: (event, listener) => { if (event === 'message') state.listening.delete(listener) },
+      sendCommand: async (method, params) => { state.commands.push({ method, ...(params === undefined ? {} : { params }) }); return {} },
+      deliver: (method, params) => { for (const listener of [...state.listening]) listener({}, method, params) },
+    }
+    debuggers.push(channel)
+    return channel
+  }
+
   return {
     FakeView,
     makeWrappedGuest: (loadURL) => {
@@ -166,12 +207,18 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
             goForward: () => { view.webContents.navigationHistory.goForward() },
           },
           capturePage: async () => view.webContents.capturePage(),
+          debugger: view.webContents.debugger,
         },
         attach: (target) => { view.attach(target) },
         destroy: () => { view.destroy() },
       }
     },
     clipboardStore,
+    lastDebugger: () => {
+      const channel = debuggers.at(-1)
+      if (channel === undefined) throw new Error('no fake guest was created')
+      return channel
+    },
   }
 })
 
@@ -314,7 +361,7 @@ function makeGuests(overrides?: {
   return { guests }
 }
 
-function lastRecord(): FakeGuestRecord {
+function lastRecord(): FakeWrappedGuest {
   const record = FakeView.instances.at(-1)
   if (record === undefined) throw new Error('no fake guest view was created')
   return record
@@ -964,9 +1011,14 @@ describe('AgentBrowserGuests', () => {
     expect(script).toContain('contentDocument')
     expect(script).toContain('#inner')
     lastRecord().jsResult = { found: false, opaqueFrames: 2 }
-    const failure = await guests.execute({
-      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { selector: '#inner' },
-    }).catch((error: unknown) => error as { code?: string; message?: string })
+    let failure: { code?: string; message?: string } | undefined
+    try {
+      await guests.execute({
+        type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { selector: '#inner' },
+      })
+    } catch (error) {
+      failure = error as { code?: string; message?: string }
+    }
     expect(failure?.code).toBe('browser_element_not_found')
     expect(failure?.message).toContain('2 cross-origin frame(s) were not searched')
     lastRecord().jsResult = { found: true, tag: 'button', frameDepth: 1, box: { x: 1, y: 2, width: 3, height: 4 } }
@@ -976,6 +1028,53 @@ describe('AgentBrowserGuests', () => {
     expect(info).toMatchObject({ insideFrame: true, tag: 'button' })
     await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'click', args: {} }))
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('tracks a page dialog and answers it so the page continues', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const channel = lastDebugger()
+    expect(channel.commands[0]?.method).toBe('Page.enable')
+    const idle = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'dialog', args: { action: 'list' },
+    }) as { dialogs: unknown[]; pending: number }
+    expect(idle).toEqual({ dialogs: [], pending: 0 })
+    channel.deliver('Page.javascriptDialogOpening', {
+      type: 'confirm', message: 'Delete this?', url: 'https://example.com/app',
+    })
+    const waiting = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'dialog', args: { action: 'list' },
+    }) as { dialogs: Array<{ id: string; type: string; message: string }>; pending: number }
+    expect(waiting.pending).toBe(1)
+    expect(waiting.dialogs[0]).toMatchObject({ id: 'dialog-1', type: 'confirm', message: 'Delete this?' })
+    const accepted = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'dialog', args: { action: 'accept' },
+    }) as { id: string; answered: boolean; accepted: boolean }
+    expect(accepted).toMatchObject({ id: 'dialog-1', accepted: true, answered: true })
+    expect(channel.commands.at(-1)).toMatchObject({
+      method: 'Page.handleJavaScriptDialog', params: { accept: true },
+    })
+    const settled = await guests.execute({
+      type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'dialog', args: { action: 'list' },
+    }) as { pending: number }
+    expect(settled.pending).toBe(0)
+    await expect(guests.execute({
+      type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'dialog', args: { action: 'accept', id: 'nope' },
+    })).rejects.toMatchObject({ code: 'browser_invalid_args' })
+    // A dialog the page answered itself is no longer answerable.
+    channel.deliver('Page.javascriptDialogOpening', { type: 'alert', message: 'done' })
+    channel.deliver('Page.javascriptDialogClosed', {})
+    const closed = await guests.execute({
+      type: 'browser', requestId: 7, op: 'execute', leaseId, command: 'dialog', args: { action: 'dismiss', id: 'dialog-2' },
+    }) as { answered: boolean; accepted: boolean }
+    expect(closed).toMatchObject({ answered: false, accepted: false })
+    // Releasing the debugger follows the lease.
+    await guests.release({ leaseId })
+    expect(channel.isAttached()).toBe(false)
+    expect(channel.listening.size).toBe(0)
+    await expect(guests.execute({
+      type: 'browser', requestId: 8, op: 'execute', leaseId, command: 'dialog', args: { action: 'nope' },
+    })).rejects.toMatchObject({ code: 'browser_lease_unknown' })
   })
 
   it('rejects an unknown command with a structured code', async () => {

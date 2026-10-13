@@ -13,6 +13,10 @@ import {
 import {
   downloadSummary, isDownloadRunning, type AgentDownloadRecord, type AgentDownloadWatcher,
 } from './agent-downloads.ts'
+import {
+  DIALOG_ANSWER_METHOD, DIALOG_CLOSED_METHOD, DIALOG_OPENED_METHOD, dialogSummary, readDialogOpening,
+  type AgentDialogEvent, type AgentDialogRecord,
+} from './agent-dialogs.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
@@ -56,6 +60,21 @@ export interface AgentGuestView {
   attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds): void
   /** Detach from its window and close the underlying contents. */
   destroy(): void
+  /**
+   * Follow the JavaScript dialogs this guest opens. Absent when the carrier cannot
+   * observe them, so a tab without it simply never reports a dialog.
+   * @param listener - receives each dialog while the page waits for an answer.
+   * @returns unsubscribe callback.
+   */
+  watchDialogs?(listener: (event: AgentDialogEvent) => void): () => void
+  /**
+   * Answer one open dialog.
+   * @param id - id the listener reported.
+   * @param accept - whether to accept the dialog.
+   * @param promptText - text a prompt should return instead of its default.
+   * @returns Whether a waiting dialog was answered.
+   */
+  answerDialog?(id: string, accept: boolean, promptText?: string): Promise<boolean>
 }
 
 /** Reserved world id so the page's own isolated worlds never collide with ours. */
@@ -208,6 +227,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   readonly #downloads = new Map<string, AgentDownloadRecord[]>()
   /** Download subscriptions held per lease, released with it. */
   readonly #downloadWatchers = new Map<string, () => void>()
+  /** Page dialogs this lease's tabs opened and have not answered yet. */
+  readonly #dialogs = new Map<string, AgentDialogRecord[]>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -269,7 +290,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const lease: GuestLease = {
       workspaceKey: request.workspaceKey,
       ...(request.sessionKey === undefined ? {} : { sessionKey: request.sessionKey }),
-      tabs: new Map([[tabId, this.newTab(view, now)]]),
+      tabs: new Map([[tabId, this.newTab(leaseId, view, now)]]),
       activeTabId: tabId,
       bounds,
       viewport: { width: bounds.width, height: bounds.height },
@@ -423,6 +444,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'tabs': return this.tabsOp(request.leaseId, request.args)
       case 'record': return this.recordOp(request.leaseId, request.args)
       case 'downloads': return this.downloadsOp(request.leaseId, request.args)
+      case 'dialog': return this.dialogOp(request.leaseId, request.args)
       default:
         throw new ShellBrowserControlError(`desktop browser: command "${request.command}" is not implemented`, 'browser_unknown_command')
     }
@@ -451,7 +473,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     if (action === 'new') {
       const created = randomUUID()
       const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
-      lease.tabs.set(created, this.newTab(view, Date.now()))
+      lease.tabs.set(created, this.newTab(leaseId, view, Date.now()))
       this.activateTab(lease, created, window)
       const evicted = this.enforceLimit(leaseId, lease)
       return { ...list(), tabId: created, ...(evicted.length === 0 ? {} : { evicted }) }
@@ -500,7 +522,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
           'desktop browser: claim requires a live tab the human opened', 'browser_element_not_found'))
       }
       const created = randomUUID()
-      lease.tabs.set(created, this.newTab(wrapClaimedGuest(guest), Date.now(), true))
+      lease.tabs.set(created, this.newTab(leaseId, wrapClaimedGuest(guest), Date.now(), true))
       this.activateTab(lease, created, window)
       const evicted = this.enforceLimit(leaseId, lease)
       return { ...list(), tabId: created, claimed: tabId, ...(evicted.length === 0 ? {} : { evicted }) }
@@ -524,12 +546,36 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** @returns A fresh tab record with the residency clock started. */
-  private newTab(view: AgentGuestView, now: number, claimed = false): AgentTab {
+  private newTab(leaseId: string, view: AgentGuestView, now: number, claimed = false): AgentTab {
+    this.watchDialogs(leaseId, view)
     return {
       view, refs: new Map(), openedAt: now, lastActivityAt: now, lastSelectedAt: now,
       suspended: false, operationActive: false, captureActive: false,
       ...(claimed ? { claimed: true } : {}),
     }
+  }
+
+  /**
+   * Follow the page dialogs this tab opens, so the model can answer them instead
+   * of the page blocking forever. A carrier without a dialog channel is left alone.
+   */
+  private watchDialogs(leaseId: string, view: AgentGuestView): void {
+    if (view.watchDialogs === undefined) return
+    view.watchDialogs((event) => {
+      const running = this.#dialogs.get(leaseId) ?? []
+      running.push({ event, tabId: this.tabOfView(leaseId, view), openedAt: Date.now() })
+      this.#dialogs.set(leaseId, running)
+    })
+  }
+
+  /** @returns the tab id wrapping one view, or an empty string when it is already gone. */
+  private tabOfView(leaseId: string, view: AgentGuestView): string {
+    const lease = this.#leases.get(leaseId)
+    if (lease === undefined) return ''
+    for (const [tabId, tab] of lease.tabs) {
+      if (tab.view === view) return tabId
+    }
+    return ''
   }
 
   /** Detach one tab's carrier and drop its slot; a claimed guest belongs to the window and stays open. */
@@ -571,8 +617,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         operationActive: tab.operationActive,
         captureActive: tab.captureActive,
         downloadActive: this.downloadActive(leaseId, tabId),
+        dialogPending: this.dialogPending(leaseId, tabId),
       }
     })
+  }
+
+  /** @returns whether one tab is waiting on a page dialog the model has not answered. */
+  private dialogPending(leaseId: string, tabId: string): boolean {
+    const pending = this.#dialogs.get(leaseId)
+    if (pending === undefined) return false
+    return pending.some(record => record.tabId === tabId)
   }
 
   /** @returns whether one tab started a download that is still running. */
@@ -738,6 +792,41 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   /** @returns the lease's downloads that are still running. */
   private runningDownloads(leaseId: string): AgentDownloadRecord[] {
     return (this.#downloads.get(leaseId) ?? []).filter(record => isDownloadRunning(record.event))
+  }
+
+  /**
+   * List the page dialogs this lease is waiting on, or answer one so the page continues.
+   * @param leaseId - lease whose dialogs are reported.
+   * @param args - `action` (`list`, `accept`, or `dismiss`), an optional `id`, and an optional `promptText`.
+   * @returns The pending dialogs, plus which one was answered when answering.
+   */
+  private async dialogOp(leaseId: string, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const lease = this.lease(leaseId)
+    const parsed = argsObject(args)
+    const action = typeof parsed.action === 'string' ? parsed.action : 'list'
+    if (action !== 'list' && action !== 'accept' && action !== 'dismiss') {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: dialog requires action list/accept/dismiss', 'browser_invalid_args'))
+    }
+    const pending = this.#dialogs.get(leaseId) ?? []
+    if (action === 'list') {
+      return { dialogs: pending.map(dialogSummary), pending: pending.length }
+    }
+    // Answering without an id takes the oldest waiting dialog, which is the one blocking the page.
+    const requested = typeof parsed.id === 'string' ? parsed.id : pending[0]?.event.id
+    const record = requested === undefined ? undefined : pending.find(candidate => candidate.event.id === requested)
+    if (record === undefined) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: no dialog is waiting for that id', 'browser_invalid_args'))
+    }
+    const tab = lease.tabs.get(record.tabId)
+    const promptText = typeof parsed.promptText === 'string' ? parsed.promptText : undefined
+    // A tab whose carrier has no dialog channel reports that it could not answer.
+    const answered = tab === undefined
+      ? false
+      : await (tab.view.answerDialog?.(record.event.id, action === 'accept', promptText) ?? false)
+    if (answered) {
+      this.#dialogs.set(leaseId, pending.filter(candidate => candidate.event.id !== record.event.id))
+    }
+    return { ...dialogSummary(record), accepted: action === 'accept', answered }
   }
 
   /** Current page facts without navigating. */
@@ -1281,6 +1370,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     this.#downloadWatchers.get(request.leaseId)?.()
     this.#downloadWatchers.delete(request.leaseId)
     this.#downloads.delete(request.leaseId)
+    this.#dialogs.delete(request.leaseId)
     // A recording of this lease ends with it; its partial file is discarded by the recorder.
     const running = this.#recording
     if (running !== undefined && [...lease.tabs.values()].includes(running.tab)) {
@@ -1355,6 +1445,33 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
   })
   let window: AgentGuestHostWindow | undefined
   const web = view.webContents
+  /** Dialog state: our own id sequence, the dialogs the page still waits on, and the open one. */
+  const dialogListeners = new Set<(event: AgentDialogEvent) => void>()
+  const openDialogs = new Set<string>()
+  let dialogSequence = 0
+  let openDialogId: string | undefined
+  const onDebuggerMessage = (_event: Electron.Event, method: string, params: unknown): void => {
+    if (method === DIALOG_OPENED_METHOD) {
+      dialogSequence += 1
+      const dialog = readDialogOpening(params, `dialog-${String(dialogSequence)}`)
+      if (dialog === undefined) return
+      openDialogs.add(dialog.id)
+      openDialogId = dialog.id
+      for (const listener of [...dialogListeners]) listener(dialog)
+      return
+    }
+    if (method === DIALOG_CLOSED_METHOD && openDialogId !== undefined) {
+      openDialogs.delete(openDialogId)
+      openDialogId = undefined
+    }
+  }
+  /** @returns whether the debugger is attached and watching page dialogs. */
+  const watchingDialogs = (): boolean => !web.isDestroyed() && web.debugger.isAttached()
+  const releaseDebugger = (): void => {
+    if (!watchingDialogs()) return
+    web.debugger.removeListener('message', onDebuggerMessage)
+    web.debugger.detach()
+  }
   return {
     webContents: {
       loadURL: (url: string) => web.loadURL(url),
@@ -1377,8 +1494,38 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       view.setBounds(bounds)
     },
     destroy() {
+      releaseDebugger()
       if (window !== undefined && !window.isDestroyed()) window.contentView.removeChildView(view)
       if (!view.webContents.isDestroyed()) view.webContents.close()
+    },
+    watchDialogs(listener) {
+      if (!watchingDialogs()) {
+        try {
+          web.debugger.attach('1.3')
+        } catch (error) {
+          // An open DevTools window or another debugger owns this contents; the tab
+          // keeps working without a dialog channel, which the operator should see.
+          console.warn('desktop agent browser: page dialogs are not observed', error)
+          return () => {}
+        }
+        web.debugger.on('message', onDebuggerMessage)
+        void web.debugger.sendCommand('Page.enable')
+      }
+      dialogListeners.add(listener)
+      return () => {
+        dialogListeners.delete(listener)
+        if (dialogListeners.size === 0) releaseDebugger()
+      }
+    },
+    async answerDialog(id, accept, promptText) {
+      if (!watchingDialogs() || !openDialogs.has(id)) return false
+      await web.debugger.sendCommand(DIALOG_ANSWER_METHOD, {
+        accept,
+        ...(promptText === undefined ? {} : { promptText }),
+      })
+      openDialogs.delete(id)
+      if (openDialogId === id) openDialogId = undefined
+      return true
     },
   }
 }

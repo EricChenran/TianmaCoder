@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、downloads、state、click、hover、fill、check、type、press、scroll、cuaKeypress、cuaScroll、cuaDrag、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、downloads、dialog、state、click、hover、fill、check、type、press、scroll、cuaKeypress、cuaScroll、cuaDrag、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
 
 ## 目录
 
@@ -100,6 +100,7 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 - **认领的 tab 是借用的** — `listUserTabs` 与 `claim` 触及人类已经在侧栏打开的页面；后续命令驱动的正是同一个页面，且 tab 池永不关闭它：finalize 认领的 tab 或释放租约后，页面保持原样。
 - **下载按租约追踪** — 一次下载归属到它开始时处于活动状态的那个 tab；该 tab 有下载在跑时，驻留上限不会关闭它。列表只覆盖当前租约。
 - **选择器只搜同源 frame** — 元素探查会进入页面允许读取的 frame 并累加其偏移，因此 `click`、`hover`、`elementInfo`、`wait` 能命中这些 frame 内的元素。跨源 frame 无法从页面自身世界读取或驱动，因此报错会点名它而不是去搜它；这类内容请用显式坐标操作。
+- **页面弹窗通过 DevTools 协议应答** — shell 会给自己创建的每个 guest 附加一个 debugger 会话，使 `browser_dialog` 能列出并应答 `alert`、`confirm`、`prompt`、`beforeunload`，而不是让页面永久阻塞。若该 guest 的 debugger 已被占用（例如开着 DevTools），它就没有弹窗通道，并会如实报告无法应答。
 - **ref 会失效** — `browser_snapshot` 的元素 ref 对应快照当刻的页面；导航或重渲染后即失效，对陈旧 ref 的操作会以"元素未找到"失败。
 - **挂起只是驻留标记** — `suspend`/`resume` 只是把后台 tab 移出或移回 32 个 tab 驻留上限所依据的保护集。被挂起的 tab 其 guest 仍然加载，只有在 tab 池为守住上限而关闭 tab 时才释放。
 - **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面；tab 池只随 Session 运行时存在。
