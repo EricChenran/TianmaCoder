@@ -34,6 +34,8 @@ export interface AgentTabResidencyCandidate {
   readonly loading: boolean
   /** The page is playing audio. */
   readonly audible: boolean
+  /** The page is playing media. */
+  readonly mediaActive: boolean
 }
 
 /**
@@ -53,6 +55,7 @@ export function isAgentTabProtected(candidate: AgentTabResidencyCandidate): bool
     || candidate.dialogPending
     || candidate.loading
     || candidate.audible
+    || candidate.mediaActive
 }
 
 /**

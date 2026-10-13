@@ -35,6 +35,10 @@ interface FakeGuestRecord {
   captures: number
   loading: boolean
   audible: boolean
+  readonly mediaStarted: Set<() => void>
+  readonly mediaPaused: Set<() => void>
+  playMedia(): void
+  pauseMedia(): void
   bounds: Array<{ x: number; y: number; width: number; height: number }>
   lastPreferences: unknown
   reloads: number
@@ -91,6 +95,10 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
     loading = false
     audible = false
     readonly crashListeners = new Set<(...args: unknown[]) => void>()
+    readonly mediaStarted = new Set<() => void>()
+    readonly mediaPaused = new Set<() => void>()
+    playMedia = (): void => { for (const listener of [...this.mediaStarted]) listener() }
+    pauseMedia = (): void => { for (const listener of [...this.mediaPaused]) listener() }
     crash = (reason: string, exitCode: number): void => {
       for (const listener of [...this.crashListeners]) listener({}, { reason, exitCode })
     }
@@ -146,9 +154,13 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         isCurrentlyAudible: (): boolean => this.audible,
         on: (event: string, listener: (...args: unknown[]) => void): void => {
           if (event === 'render-process-gone') this.crashListeners.add(listener)
+          if (event === 'media-started-playing') this.mediaStarted.add(listener)
+          if (event === 'media-paused') this.mediaPaused.add(listener)
         },
         removeListener: (event: string, listener: (...args: unknown[]) => void): void => {
           if (event === 'render-process-gone') this.crashListeners.delete(listener)
+          if (event === 'media-started-playing') this.mediaStarted.delete(listener)
+          if (event === 'media-paused') this.mediaPaused.delete(listener)
         },
       }
       FakeView.instances.push(this)
@@ -214,6 +226,10 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         set audible(value: boolean) { view.audible = value },
         get crashListeners() { return view.crashListeners },
         crash: (reason: string, exitCode: number) => { view.crash(reason, exitCode) },
+        get mediaStarted() { return view.mediaStarted },
+        get mediaPaused() { return view.mediaPaused },
+        playMedia: () => { view.playMedia() },
+        pauseMedia: () => { view.pauseMedia() },
         bounds: view.bounds,
         lastPreferences: view.lastPreferences,
         webContents: {
@@ -1174,13 +1190,17 @@ describe('AgentBrowserGuests', () => {
   })
 
   it('never closes the oldest tab while its page is still loading', async () => {
+    /** Residency orders tabs by millisecond timestamps, so give each one its own. */
+    const settle = async (): Promise<void> => { await new Promise((resolve) => { setTimeout(resolve, 2) }) }
     const { guests } = makeGuests()
     const { leaseId, tabId } = await guests.acquire({
       type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws',
     }) as { leaseId: string; tabId: string }
     // The first tab is the oldest, so it is the natural victim once the pool overflows.
     lastRecord().loading = true
+    await settle()
     for (let index = 0; index < 32; index += 1) {
+      await settle()
       await guests.execute({ type: 'browser', requestId: 2 + index, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' } })
     }
     const listed = await guests.execute({
@@ -1189,6 +1209,36 @@ describe('AgentBrowserGuests', () => {
     // The pool still came back to its limit, but the loading tab was spared.
     expect(listed.tabs).toHaveLength(32)
     expect(listed.tabs.map(tab => tab.tabId)).toContain(tabId)
+  })
+
+  it('spares a tab that is playing media and releases it once the media pauses', async () => {
+    /** Residency orders tabs by millisecond timestamps, so give each one its own. */
+    const settle = async (): Promise<void> => { await new Promise((resolve) => { setTimeout(resolve, 2) }) }
+    const { guests } = makeGuests()
+    const { leaseId, tabId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws',
+    }) as { leaseId: string; tabId: string }
+    const first = lastRecord()
+    first.playMedia()
+    await settle()
+    for (let index = 0; index < 32; index += 1) {
+      await settle()
+      await guests.execute({ type: 'browser', requestId: 2 + index, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' } })
+    }
+    const listed = await guests.execute({
+      type: 'browser', requestId: 40, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' },
+    }) as { tabs: Array<{ tabId: string }> }
+    expect(listed.tabs).toHaveLength(32)
+    expect(listed.tabs.map(tab => tab.tabId)).toContain(tabId)
+    // Pausing hands the tab back: the next overflow closes it as the oldest one.
+    first.pauseMedia()
+    await settle()
+    await guests.execute({ type: 'browser', requestId: 41, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' } })
+    const after = await guests.execute({
+      type: 'browser', requestId: 42, op: 'execute', leaseId, command: 'tabs', args: { action: 'list' },
+    }) as { tabs: Array<{ tabId: string }> }
+    expect(after.tabs).toHaveLength(32)
+    expect(after.tabs.map(tab => tab.tabId)).not.toContain(tabId)
   })
 
   it('rejects an unknown command with a structured code', async () => {

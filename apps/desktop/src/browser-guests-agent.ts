@@ -75,6 +75,13 @@ export interface AgentGuestView {
    */
   watchCrashes?(listener: (event: AgentCrashEvent) => void): () => void
   /**
+   * Follow whether this guest is playing media, which keeps it out of the victim set.
+   * Absent when the carrier cannot observe the page's media state.
+   * @param listener - receives the new state each time the page starts or pauses media.
+   * @returns unsubscribe callback.
+   */
+  watchMedia?(listener: (active: boolean) => void): () => void
+  /**
    * Answer one open dialog.
    * @param id - id the listener reported.
    * @param accept - whether to accept the dialog.
@@ -202,6 +209,8 @@ interface AgentTab {
   readonly claimed?: boolean
   /** True once the renderer process died and before the next command reloads the page. */
   crashed: boolean
+  /** True while the page plays media, which keeps it out of the victim set. */
+  mediaActive: boolean
   /** Ends this tab's subscriptions; absent when its carrier offers none. */
   readonly dispose?: () => void
 }
@@ -579,9 +588,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const disposers: Array<() => void> = []
     if (view.watchDialogs !== undefined) disposers.push(view.watchDialogs((event) => { this.recordDialog(leaseId, view, event) }))
     if (view.watchCrashes !== undefined) disposers.push(view.watchCrashes((event) => { this.recordCrash(leaseId, view, event) }))
+    if (view.watchMedia !== undefined) disposers.push(view.watchMedia((active) => { this.recordMedia(leaseId, view, active) }))
     return {
       view, refs: new Map(), openedAt: now, lastActivityAt: now, lastSelectedAt: now,
-      suspended: false, operationActive: false, captureActive: false, crashed: false,
+      suspended: false, operationActive: false, captureActive: false, crashed: false, mediaActive: false,
       ...(claimed ? { claimed: true as const } : {}),
       ...(disposers.length === 0 ? {} : { dispose: () => { for (const dispose of disposers) dispose() } }),
     }
@@ -592,6 +602,15 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const running = this.#dialogs.get(leaseId) ?? []
     running.push({ event, tabId: this.tabOfView(leaseId, view), openedAt: Date.now() })
     this.#dialogs.set(leaseId, running)
+  }
+
+  /** Remember whether one tab is playing media; the residency limit spares such a tab. */
+  private recordMedia(leaseId: string, view: AgentGuestView, active: boolean): void {
+    const lease = this.#leases.get(leaseId)
+    if (lease === undefined) return
+    for (const tab of lease.tabs.values()) {
+      if (tab.view === view) tab.mediaActive = active
+    }
   }
 
   /**
@@ -684,6 +703,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         dialogPending: this.dialogPending(leaseId, tabId),
         loading: !tab.view.webContents.isDestroyed() && tab.view.webContents.isLoading(),
         audible: !tab.view.webContents.isDestroyed() && tab.view.webContents.isCurrentlyAudible(),
+        mediaActive: tab.mediaActive,
       }
     })
   }
@@ -1533,6 +1553,16 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
     crashListeners.clear()
     if (!web.isDestroyed()) web.removeListener('render-process-gone', onRenderProcessGone)
   }
+  const mediaListeners = new Set<(active: boolean) => void>()
+  const onMediaStarted = (): void => { for (const listener of [...mediaListeners]) listener(true) }
+  const onMediaPaused = (): void => { for (const listener of [...mediaListeners]) listener(false) }
+  /** Stop following this guest's media state and let it go. */
+  const releaseMediaWatch = (): void => {
+    mediaListeners.clear()
+    if (web.isDestroyed()) return
+    web.removeListener('media-started-playing', onMediaStarted)
+    web.removeListener('media-paused', onMediaPaused)
+  }
   /** Dialog state: our own id sequence, the dialogs the page still waits on, and the open one. */
   const dialogListeners = new Set<(event: AgentDialogEvent) => void>()
   const openDialogs = new Set<string>()
@@ -1586,8 +1616,20 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
     destroy() {
       releaseDebugger()
       releaseCrashWatch()
+      releaseMediaWatch()
       if (window !== undefined && !window.isDestroyed()) window.contentView.removeChildView(view)
       if (!view.webContents.isDestroyed()) view.webContents.close()
+    },
+    watchMedia(listener) {
+      mediaListeners.add(listener)
+      if (mediaListeners.size === 1 && !web.isDestroyed()) {
+        web.on('media-started-playing', onMediaStarted)
+        web.on('media-paused', onMediaPaused)
+      }
+      return () => {
+        mediaListeners.delete(listener)
+        if (mediaListeners.size === 0) releaseMediaWatch()
+      }
     },
     watchCrashes(listener) {
       crashListeners.add(listener)
