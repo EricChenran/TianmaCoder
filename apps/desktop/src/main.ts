@@ -463,6 +463,14 @@ async function main(): Promise<void> {
       hostUrl: () => hostUrl,
       getWindow: () => mainWindow,
       partitionFor: workspace => browserGuests.partitionFor(workspace),
+      humanTabs: {
+        list: () => mainWindow === undefined || mainWindow.isDestroyed()
+          ? []
+          : browserGuests.listOwned(mainWindow.webContents)
+            .map(tab => ({ tabId: tab.leaseId, url: tab.url, title: tab.title })),
+        guest: tabId => mainWindow === undefined || mainWindow.isDestroyed()
+          ? undefined : browserGuests.ownedGuest(mainWindow.webContents, tabId),
+      },
       emit: (event) => {
         controlReference.current?.emit(event.name, event.payload, event.leaseId)
         const payload = event.payload as { active?: unknown; command?: unknown; presented?: unknown; closed?: unknown }

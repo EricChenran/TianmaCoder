@@ -138,13 +138,14 @@ interface AgentTab {
   readonly openedAt: number
   lastActivityAt: number
   lastSelectedAt: number | null
-  /**
-   * A suspended tab keeps its logical slot and live guest but leaves the protected
+  /** A suspended tab keeps its logical slot and live guest but leaves the protected
    * set, so the residency limit may close it before a tab the human can see.
    */
   suspended: boolean
   operationActive: boolean
   captureActive: boolean
+  /** True when this tab wraps a guest the window owns; the pool never closes that guest. */
+  readonly claimed?: boolean
 }
 
 /** One lease: a tab set with an active pointer, all sharing one workspace partition. */
@@ -185,6 +186,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly ariaMaxChars?: number
     /** Receives lease state and activity facts for the Host seam and the window that presents them. */
     readonly emit?: (event: ShellBrowserGuestEvent) => void
+    /** Read-only view of the guests the window opened, for listUserTabs and claim. */
+    readonly humanTabs?: {
+      readonly list: () => Array<{ tabId: string; url: string; title: string }>
+      readonly guest: (tabId: string) => AgentClaimedWebContents | undefined
+    }
   }) {}
 
   /** Upper bound for one ARIA snapshot result, applied to the complete emitted value. */
@@ -393,22 +399,53 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       }
       return { ...list(), tabId, suspended: action === 'suspend' }
     }
-    return Promise.reject(new ShellBrowserControlError('desktop browser: tabs requires action list/new/close/activate/suspend/resume', 'browser_invalid_args'))
+    if (action === 'listUserTabs') {
+      return { userTabs: this.options.humanTabs?.list() ?? [] }
+    }
+    if (action === 'claim') {
+      const guest = tabId === undefined ? undefined : this.options.humanTabs?.guest(tabId)
+      if (tabId === undefined || guest === undefined) {
+        return Promise.reject(new ShellBrowserControlError(
+          'desktop browser: claim requires a live tab the human opened', 'browser_element_not_found'))
+      }
+      const created = randomUUID()
+      lease.tabs.set(created, this.newTab(wrapClaimedGuest(guest), Date.now(), true))
+      this.activateTab(lease, created, window)
+      const evicted = this.enforceLimit(lease)
+      return { ...list(), tabId: created, claimed: tabId, ...(evicted.length === 0 ? {} : { evicted }) }
+    }
+    if (action === 'finalize') {
+      if (!known) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: finalize requires a known tabId', 'browser_invalid_args'))
+      }
+      if (lease.tabs.size === 1) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: cannot finalize the last tab', 'browser_invalid_args'))
+      }
+      const finalized = lease.tabs.get(tabId)
+      this.closeTab(lease, tabId)
+      if (lease.activeTabId === tabId) {
+        this.activateTab(lease, [...lease.tabs.keys()].at(-1) ?? '', window)
+      }
+      return { finalized: tabId, claimed: finalized?.claimed === true, ...list() }
+    }
+    return Promise.reject(new ShellBrowserControlError(
+      'desktop browser: tabs requires action list/new/close/activate/suspend/resume/listUserTabs/claim/finalize', 'browser_invalid_args'))
   }
 
   /** @returns A fresh tab record with the residency clock started. */
-  private newTab(view: AgentGuestView, now: number): AgentTab {
+  private newTab(view: AgentGuestView, now: number, claimed = false): AgentTab {
     return {
       view, refs: new Map(), openedAt: now, lastActivityAt: now, lastSelectedAt: now,
       suspended: false, operationActive: false, captureActive: false,
+      ...(claimed ? { claimed: true } : {}),
     }
   }
 
-  /** Detach and close one tab's carrier and drop its slot. */
+  /** Detach one tab's carrier and drop its slot; a claimed guest belongs to the window and stays open. */
   private closeTab(lease: GuestLease, tabId: string): void {
     const closing = lease.tabs.get(tabId)
     lease.tabs.delete(tabId)
-    if (closing !== undefined) closing.view.destroy()
+    if (closing !== undefined && closing.claimed !== true) closing.view.destroy()
   }
 
   /**
@@ -892,13 +929,58 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       return Promise.reject(new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown'))
     }
     this.#leases.delete(request.leaseId)
-    for (const tab of lease.tabs.values()) tab.view.destroy()
+    for (const tab of lease.tabs.values()) {
+      if (tab.claimed !== true) tab.view.destroy()
+    }
     this.options.emit?.({
       name: 'browser-state',
       leaseId: request.leaseId,
       payload: { leaseId: request.leaseId, closed: true, presented: false, tabs: [] },
     })
     return Promise.resolve(null)
+  }
+}
+
+/**
+ * The slice of a window-owned guest the pool may drive. Claiming borrows the page
+ * the human already sees, so the pool never detaches or closes it.
+ */
+export interface AgentClaimedWebContents {
+  loadURL(url: string): Promise<void>
+  getURL(): string
+  getTitle(): string
+  isDestroyed(): boolean
+  insertText(text: string): Promise<void>
+  copy(): void
+  paste(): void
+  sendInputEvent(event: Parameters<WebContents['sendInputEvent']>[0]): void
+  reload(): void
+  readonly navigationHistory: AgentGuestHistory
+  executeJavaScriptInIsolatedWorld(worldId: number, scripts: Array<{ code: string }>): Promise<unknown>
+  capturePage(): Promise<AgentGuestCapture>
+}
+
+/** @param web - the window's live guest. @returns A carrier the pool drives without owning it. */
+function wrapClaimedGuest(web: AgentClaimedWebContents): AgentGuestView {
+  return {
+    webContents: {
+      loadURL: (url: string) => web.loadURL(url),
+      getURL: () => web.getURL(),
+      getTitle: () => web.getTitle(),
+      close: () => {},
+      isDestroyed: () => web.isDestroyed(),
+      insertText: (text: string) => web.insertText(text),
+      copy: () => { web.copy() },
+      paste: () => { web.paste() },
+      sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { web.sendInputEvent(event) },
+      reload: () => { web.reload() },
+      navigationHistory: web.navigationHistory,
+      evaluateInIsolatedWorld: (script: string) =>
+        web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
+      capturePage: () => web.capturePage(),
+    },
+    attach() {},
+    destroy() {},
   }
 }
 

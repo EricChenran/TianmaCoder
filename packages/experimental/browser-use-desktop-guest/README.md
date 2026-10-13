@@ -97,6 +97,7 @@ Results append to the main Session history; the tool catalog itself is static.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Chromium HTTP(S) only** — the shell's navigation allowlist rejects other schemes; file targets stay with document-preview flows.
+- **Claimed tabs are borrowed** — `listUserTabs` and `claim` reach the pages the human already has open in the Sidebar. Commands then drive that same page, and the pool never closes it: finalizing a claimed tab or releasing the lease leaves the page exactly as it was.
 - **Refs go stale** — element refs from `browser_snapshot` address the page as it was when the snapshot ran, so a navigation or re-render invalidates them and an action on a stale ref fails with an element-not-found error.
 - **Suspension is a residency marker** — the `suspend` and `resume` actions move a background tab in and out of the protected set that the 32-tab residency limit consults. A suspended tab's guest stays loaded and is released only when the pool closes a tab to stay within the limit.
 - **Live browser state** — Session replay restores recorded conversation data, not the guest process or page; the tab pool lives only as long as the Session runtime.

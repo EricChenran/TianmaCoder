@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebContents } from 'electron'
-import type { AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
+import type { AgentClaimedWebContents, AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
 import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
 import { AGENT_TAB_LIMIT } from '../src/browser-tab-residency.ts'
 
@@ -179,6 +179,34 @@ vi.mock('electron', () => ({
   },
 }))
 
+/** A guest the window owns, as the claim path sees it. */
+function makeClaimedGuest(): {
+  web: AgentClaimedWebContents
+  urls: string[]
+  state: { url: string; destroyed: boolean }
+} {
+  const state = { url: 'https://example.com/human', destroyed: false }
+  const urls: string[] = []
+  return {
+    urls,
+    state,
+    web: {
+      loadURL: async (url: string) => { state.url = url; urls.push(url) },
+      getURL: () => state.url,
+      getTitle: () => 'Human page',
+      isDestroyed: () => state.destroyed,
+      insertText: async () => {},
+      copy: () => {},
+      paste: () => {},
+      sendInputEvent: () => {},
+      reload: () => {},
+      navigationHistory: { goBack: () => {}, goForward: () => {} },
+      executeJavaScriptInIsolatedWorld: async () => ({ found: false }),
+      capturePage: async () => ({ isEmpty: () => true, toPNG: () => Buffer.from('') }),
+    },
+  }
+}
+
 interface Harness {
   guests: AgentBrowserGuests
 }
@@ -189,6 +217,10 @@ function makeGuests(overrides?: {
   ariaMaxChars?: number
   loadURL?: (url: string) => Promise<void>
   emit?: (event: { name: string; leaseId: string; payload: unknown }) => void
+  humanTabs?: {
+    readonly list: () => Array<{ tabId: string; url: string; title: string }>
+    readonly guest: (tabId: string) => AgentClaimedWebContents | undefined
+  }
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -208,6 +240,7 @@ function makeGuests(overrides?: {
     ...(navigateTimeoutMs === undefined ? {} : { navigateTimeoutMs }),
     ...(ariaMaxChars === undefined ? {} : { ariaMaxChars }),
     ...(overrides?.emit === undefined ? {} : { emit: overrides.emit }),
+    ...(overrides?.humanTabs === undefined ? {} : { humanTabs: overrides.humanTabs }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -608,6 +641,52 @@ describe('AgentBrowserGuests', () => {
     const closed = events.at(-1)
     expect(closed?.name).toBe('browser-state')
     expect(closed?.payload).toMatchObject({ closed: true, presented: false })
+  })
+
+  it('lists, claims, and finalizes a tab the human opened', async () => {
+    const human = makeClaimedGuest()
+    const { guests } = makeGuests({
+      humanTabs: {
+        list: () => [{ tabId: 'human-1', url: 'https://example.com/human', title: 'Human page' }],
+        guest: tabId => tabId === 'human-1' ? human.web : undefined,
+      },
+    })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const listed = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'tabs', args: { action: 'listUserTabs' },
+    }) as { userTabs: Array<{ tabId: string; title: string }> }
+    expect(listed.userTabs).toEqual([{ tabId: 'human-1', url: 'https://example.com/human', title: 'Human page' }])
+    const claimed = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'tabs', args: { action: 'claim', tabId: 'human-1' },
+    }) as { tabId: string; claimed: string; tabs: Array<{ tabId: string; url: string; active?: boolean }> }
+    expect(claimed.claimed).toBe('human-1')
+    const adopted = claimed.tabs.find(tab => tab.tabId === claimed.tabId)
+    expect(adopted).toMatchObject({ url: 'https://example.com/human', active: true })
+    // Commands on a claimed tab drive the very page the human is looking at.
+    await guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'navigate', args: { url: 'https://example.com/next' } })
+    expect(human.urls).toEqual(['https://example.com/next'])
+    const finalized = await guests.execute({
+      type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'tabs', args: { action: 'finalize', tabId: claimed.tabId },
+    }) as { finalized: string; claimed: boolean }
+    expect(finalized).toMatchObject({ finalized: claimed.tabId, claimed: true })
+    expect(human.state.destroyed).toBe(false)
+    await expect(guests.execute({ type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'tabs', args: { action: 'claim', tabId: 'missing' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
+    await expect(guests.execute({ type: 'browser', requestId: 7, op: 'execute', leaseId, command: 'tabs', args: { action: 'finalize', tabId: 'missing' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('leaves a claimed guest open when its lease is released', async () => {
+    const human = makeClaimedGuest()
+    const { guests } = makeGuests({
+      humanTabs: { list: () => [], guest: tabId => tabId === 'human-1' ? human.web : undefined },
+    })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'tabs', args: { action: 'claim', tabId: 'human-1' } })
+    await guests.release({ leaseId })
+    expect(human.state.destroyed).toBe(false)
+    // The pool's own tab is closed through the carrier; the claimed guest is left alone.
+    expect(lastRecord().closed).toBe(1)
   })
 
   it('rejects an unknown command with a structured code', async () => {

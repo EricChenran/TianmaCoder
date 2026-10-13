@@ -97,6 +97,7 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 <a id="known-limitations-and-deferred-work"></a>
 
 - **仅 Chromium HTTP(S)** — shell 导航白名单拒绝其他协议；文件目标走文档预览流程。
+- **认领的 tab 是借用的** — `listUserTabs` 与 `claim` 触及人类已经在侧栏打开的页面；后续命令驱动的正是同一个页面，且 tab 池永不关闭它：finalize 认领的 tab 或释放租约后，页面保持原样。
 - **ref 会失效** — `browser_snapshot` 的元素 ref 对应快照当刻的页面；导航或重渲染后即失效，对陈旧 ref 的操作会以"元素未找到"失败。
 - **挂起只是驻留标记** — `suspend`/`resume` 只是把后台 tab 移出或移回 32 个 tab 驻留上限所依据的保护集。被挂起的 tab 其 guest 仍然加载，只有在 tab 池为守住上限而关闭 tab 时才释放。
 - **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面；tab 池只随 Session 运行时存在。

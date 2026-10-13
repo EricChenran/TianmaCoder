@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[] }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -157,20 +157,31 @@ export function apply(ctx: Context, input: Config): void {
       {
         name: 'browser_tabs',
         rawName: 'tabs',
-        description: 'List guest tabs, open a new tab, activate one, close one, or mark one suspended or resumed; other browser tools act on the active tab.',
+        description: 'Manage guest tabs: list, open, activate, close, mark one suspended or resumed, list the tabs the human opened, claim one of those, or finalize one.',
         input: z.object({
-          action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume']),
+          action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume', 'listUserTabs', 'claim', 'finalize']),
           tabId: z.string().optional(),
         }),
         run: async (agent, parsed) => {
           const { action, tabId } = z.object({
-            action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume']),
+            action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume', 'listUserTabs', 'claim', 'finalize']),
             tabId: z.string().optional(),
           }).parse(parsed)
           const result = await executeOnLease(agent, 'tabs', { action, ...(tabId === undefined ? {} : { tabId }) })
           if (action === 'list') {
             const lines = (result.tabs ?? []).map(tab => `${tab.tabId.slice(0, 8)}\t${tab.active === true ? '*' : ' '}\t${tab.url} ${tab.title}`)
             return { content: [{ type: 'text', text: lines.join('\n') || '(no tabs)' }] }
+          }
+          if (action === 'listUserTabs') {
+            const lines = (result.userTabs ?? []).map(tab => `${tab.tabId.slice(0, 8)}\t${tab.url} ${tab.title}`)
+            return { content: [{ type: 'text', text: lines.join('\n') || '(the human has no open browser tabs)' }] }
+          }
+          if (action === 'claim') {
+            return { content: [{ type: 'text', text: `Claimed the human tab ${String(result.claimed).slice(0, 8)} as ${String(result.tabId).slice(0, 8)}` }] }
+          }
+          if (action === 'finalize') {
+            const kept = result.claimed === true ? '; the page stays open for the human' : ''
+            return { content: [{ type: 'text', text: `Finalized tab ${String(result.finalized).slice(0, 8)}${kept}` }] }
           }
           if (action === 'new') {
             const evicted = result.evicted ?? []

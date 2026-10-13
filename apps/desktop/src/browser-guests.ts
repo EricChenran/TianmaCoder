@@ -12,6 +12,13 @@ interface GuestLease {
   releaseInput?: () => void
 }
 
+/** One live guest a window opened, as the agent browser's unified tab pool reads it. */
+export interface DesktopBrowserUserTab {
+  readonly leaseId: DesktopBrowserLeaseId
+  readonly url: string
+  readonly title: string
+}
+
 /** Owns workspace storage partitions independently from individual tab guests. */
 export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
@@ -72,6 +79,37 @@ export class DesktopBrowserGuests {
       guest.close({ waitForBeforeUnload: false })
       await destroyed
     }
+  }
+
+  /**
+   * List the live guests one window opened, so an agent lease can offer them for claim.
+   * @param owner - authenticated IPC sender whose guests are listed.
+   * @returns One entry per attached, live guest of that window.
+   */
+  listOwned(owner: WebContents): DesktopBrowserUserTab[] {
+    const tabs: DesktopBrowserUserTab[] = []
+    for (const [leaseId, lease] of this.leases) {
+      const guest = lease.guest
+      if (lease.owner !== owner || guest === undefined || guest.isDestroyed()) continue
+      tabs.push({ leaseId, url: guest.getURL(), title: guest.getTitle() })
+    }
+    return tabs
+  }
+
+  /**
+   * Resolve one guest this window owns without taking its lease from the renderer,
+   * so the agent and the human drive the same page.
+   * @param owner - authenticated IPC sender that owns the guest.
+   * @param id - lease received from the caller.
+   * @returns The live guest, or `undefined` when it is not this window's attached guest.
+   */
+  ownedGuest(owner: WebContents, id: unknown): WebContents | undefined {
+    if (typeof id !== 'string') return undefined
+    const lease = this.leases.get(id as DesktopBrowserLeaseId)
+    if (lease === undefined || lease.owner !== owner) return undefined
+    const guest = lease.guest
+    if (guest === undefined || guest.isDestroyed()) return undefined
+    return guest
   }
 
   /**
