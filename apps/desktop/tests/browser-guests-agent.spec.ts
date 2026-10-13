@@ -281,6 +281,31 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_element_not_found' })
   })
 
+  it('fills an input by selector with real input and change events', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true, value: 'hello world' }
+    const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'fill', args: { selector: '#name', text: 'hello world' } }) as { filled: string; value: string }
+    expect(result).toEqual({ filled: '#name', value: 'hello world' })
+    const script = lastRecord().executedScripts.at(-1) ?? ''
+    expect(script).toContain('dispatchEvent')
+    expect(script).toContain('"hello world"')
+  })
+
+  it('checks an unchecked box and reports an already-checked one without clicking', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true, checked: false, x: 30, y: 40 }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'check', args: { selector: '#agree' } })
+    const kinds = lastRecord().inputEvents.map(event => (event as { type?: string }).type)
+    expect(kinds).toEqual(['mouseMove', 'mouseDown', 'mouseUp'])
+    lastRecord().inputEvents.length = 0
+    lastRecord().jsResult = { found: true, checked: true }
+    const result = await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'check', args: { selector: '#agree' } }) as { checked: boolean; changed: boolean }
+    expect(result).toEqual({ checked: true, changed: false })
+    expect(lastRecord().inputEvents).toHaveLength(0)
+  })
+
   it('caches snapshot refs and clicks by ref without re-resolving', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }

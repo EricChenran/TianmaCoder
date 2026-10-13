@@ -118,6 +118,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'screenshot': return this.screenshot(view)
       case 'getState': return this.state(view)
       case 'type': return this.type(view, request.args)
+      case 'fill': return this.fill(view, request.args)
+      case 'check': return this.check(view, request.args)
       case 'press': return this.press(view, request.args)
       case 'scroll': return this.scroll(view, request.args)
       case 'click': return this.click(view, request.args, true, request.leaseId)
@@ -142,6 +144,57 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     await view.webContents.insertText(text)
     return { typed: text.length }
+  }
+
+  /** Set one input/textarea value by selector, firing input and change events like a real edit. */
+  private async fill(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    const text = typeof parsed.text === 'string' ? parsed.text : undefined
+    if (selector === undefined || selector.length === 0 || text === undefined || text.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: fill requires a selector and text', 'browser_invalid_args'))
+    }
+    const result = await view.webContents.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return { found: false };
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        if (setter) setter.call(el, ${JSON.stringify(text)}); else el.value = ${JSON.stringify(text)};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return { found: true, value: el.value };
+      })()`,
+    ) as { found: boolean; value?: string }
+    if (!result.found) {
+      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    }
+    return { filled: selector, value: result.value ?? '' }
+  }
+
+  /** Check (or report the checked state of) one checkbox/radio by selector, clicking with trusted input when needed. */
+  private async check(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const selector = argsObject(args).selector
+    if (typeof selector !== 'string' || selector.length === 0) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: check requires a CSS selector', 'browser_invalid_args'))
+    }
+    const probed = await view.webContents.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return { found: false };
+        el.scrollIntoView({ block: 'center' });
+        return { found: true, checked: el.checked === true };
+      })()`,
+    ) as { found: boolean; checked?: boolean }
+    if (!probed.found) {
+      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    }
+    if (probed.checked === true) return { checked: true, changed: false }
+    await this.click(view, { selector }, true)
+    const after = await view.webContents.executeJavaScript(
+      `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return { found: el !== null, checked: el !== null && el.checked === true }; })()`,
+    ) as { found: boolean; checked?: boolean }
+    return { checked: after.found && after.checked === true, changed: true }
   }
 
   /** Send one trusted key press (rawKeyDown + keyUp) with the given key code. */
@@ -217,7 +270,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
-  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean, leaseId: string): Promise<ShellBrowserJson> {
+  private async click(view: AgentGuestView, args: ShellBrowserJson, click: boolean, leaseId = ''): Promise<ShellBrowserJson> {
     const parsed = argsObject(args)
     const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
     const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
