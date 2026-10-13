@@ -146,7 +146,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       case 'select': return this.selectOption(view, request.args)
       case 'screenshot': return this.screenshot(view)
       case 'getState': return this.state(view)
-      case 'type': return this.type(view, request.args)
+      case 'type': return this.type(view, request.args, request.leaseId)
       case 'fill': return this.fill(view, request.args)
       case 'check': return this.check(view, request.args)
       case 'press': return this.press(view, request.args)
@@ -211,11 +211,17 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return { selected: result.value ?? '', label: result.label ?? '' }
   }
 
-  /** Insert trusted text into the focused element of the guest page. */
-  private async type(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
-    const text = argsObject(args).text
+  /** Insert trusted text into the focused element, optionally focusing a ref or selector first with a trusted click. */
+  private async type(view: AgentGuestView, args: ShellBrowserJson, leaseId: string): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const text = parsed.text
     if (typeof text !== 'string' || text.length === 0) {
       throw new ShellBrowserControlError('desktop browser: type requires a non-empty text', 'browser_invalid_args')
+    }
+    const ref = typeof parsed.ref === 'string' ? parsed.ref : undefined
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    if (ref !== undefined || selector !== undefined) {
+      await this.click(view, { ...(ref === undefined ? {} : { ref }), ...(selector === undefined ? {} : { selector }) }, true, leaseId)
     }
     await view.webContents.insertText(text)
     return { typed: text.length }

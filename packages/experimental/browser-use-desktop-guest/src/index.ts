@@ -245,11 +245,19 @@ export function apply(ctx: Context, input: Config): void {
       {
         name: 'browser_type',
         rawName: 'type',
-        description: 'Insert trusted text into the currently focused element of the guest page.',
-        input: z.object({ text: z.string() }),
+        description: 'Insert trusted text into the currently focused element, or focus the element matching a CSS selector or snapshot ref first.',
+        input: z.object({ text: z.string(), selector: z.string().optional(), ref: z.string().optional() }),
         run: async (agent, parsed) => {
-          const { text } = z.object({ text: z.string() }).parse(parsed)
-          const result = await executeOnLease(agent, 'type', { text })
+          const { text, selector, ref } = z.object({
+            text: z.string(),
+            selector: z.string().optional(),
+            ref: z.string().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'type', {
+            text,
+            ...(selector === undefined ? {} : { selector }),
+            ...(ref === undefined ? {} : { ref }),
+          })
           return { content: [{ type: 'text', text: `Inserted ${result.typed ?? 0} characters` }] }
         },
       },
