@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model `browser_navigate`: the tool drives one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
+Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, screenshot, state, click, hover, fill, check, type, press, scroll, back, forward, reload, select): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ Mount beside the [browser-use service](../../browser-use/browser-use/README.md) 
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount in a desktop composition beside `@deepseek-ai/dsh-browser-use`; the Electron shell must run the browser control seam endpoint. Additional tools (observe, click, extract, screenshots) ship in later releases.
+Mount in a desktop composition beside `@deepseek-ai/dsh-browser-use`; the Electron shell must run the browser control seam endpoint. Configure `watch` to show the guest on screen while the agent works.
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -36,7 +36,7 @@ Mount in a desktop composition beside `@deepseek-ai/dsh-browser-use`; the Electr
 
 | Field | Meaning |
 |---|---|
-| `workspaceKey` | Sidebar-browser workspace identity whose storage partition and login state the agent guests reuse. |
+| workspaceKey | Sidebar-browser workspace identity whose storage partition and login state the agent guests reuse. |\n| watch | Optional on-screen { width, height }; when set the guest attaches visibly at the window's top-left so the human watches it work. |
 
 -----
 
@@ -96,7 +96,7 @@ Results append to the main Session history; the tool catalog itself is static.
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Chromium HTTP(S) only** — the shell's navigation allowlist rejects other schemes; file targets stay with document-preview flows.
-- **Navigation only** — observation, clicking, typing, and screenshots ship in later releases; the seam contract already carries them.
+- **Main-world page scripts** — snapshot and selector resolution run in the page's main world; an isolated-world upgrade is planned. Element refs from `browser_snapshot` go stale after navigation.
 - **Live browser state** — Session replay restores recorded conversation data, not the guest process or page.
 - **Workspace-scoped login state** — the agent shares the workspace partition's cookies; there is no per-Session isolation inside one workspace.
 - **Loader composition test** — release-on-dispose is exercised with the real Loader in a follow-up spec; this package's unit suite covers acquire, execute, and the exclusive slot.

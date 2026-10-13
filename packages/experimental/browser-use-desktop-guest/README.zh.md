@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得 `browser_navigate`：该工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、screenshot、state、click、hover、fill、check、type、press、scroll、back、forward、reload、select）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在桌面组合中与 `@deepseek-ai/dsh-browser-use` 一同挂载；Electron shell 必须运行浏览器控制缝端点。更多工具（观察、点击、输入、截图）随后续版本发布。
+在桌面组合中与 `@deepseek-ai/dsh-browser-use` 一同挂载；Electron shell 必须运行浏览器控制缝端点。配置 `watch` 可在 agent 工作时把 guest 显示在屏幕上。
 
 ```yaml
 - name: '@deepseek-ai/dsh-browser-use'
@@ -36,7 +36,7 @@ kind: "package-reference"
 
 | 字段 | 含义 |
 |---|---|
-| `workspaceKey` | agent guest 复用其存储分区与登录态的侧栏浏览器 workspace 身份。 |
+| workspaceKey | agent guest 复用其存储分区与登录态的侧栏浏览器 workspace 身份。 |\n| watch | 可选的屏幕 { width, height }；设置后 guest 以该尺寸显示在窗口左上角，人类可实时观看。 |
 
 -----
 
@@ -96,7 +96,7 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 <a id="known-limitations-and-deferred-work"></a>
 
 - **仅 Chromium HTTP(S)** — shell 导航白名单拒绝其他协议；文件目标走文档预览流程。
-- **仅导航** — 观察、点击、输入与截图随后续版本发布；缝契约已能承载。
+- **主世界页面脚本** — 快照与选择器解析当前在页面主世界执行；隔离世界升级已列入计划。导航后 `browser_snapshot` 的元素 ref 会失效。
 - **存活浏览器状态** — 会话回放恢复的是记录的对话数据，而非 guest 进程或页面。
 - **workspace 级登录态** — agent 共享 workspace 分区的 cookie；同一 workspace 内没有按 Session 的隔离。
 - **Loader 组合测试** — dispose 释放将由真实 Loader 的后续 spec 覆盖；本包单测覆盖 acquire、execute 与独占槽位。
