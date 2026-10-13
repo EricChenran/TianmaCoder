@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -181,6 +181,55 @@ export function apply(ctx: Context, input: Config): void {
           const { selector } = z.object({ selector: z.string() }).parse(parsed)
           const result = await executeOnLease(agent, 'check', { selector })
           return { content: [{ type: 'text', text: `${selector} is ${result.checked === true ? 'checked' : 'unchecked'}` }] }
+        },
+      },
+      {
+        name: 'browser_back',
+        rawName: 'back',
+        description: 'Go back one step in the guest session history and report the settled page.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'back', {})
+          return { content: [{ type: 'text', text: `Back at ${String(result.url)} (${String(result.title)})` }] }
+        },
+      },
+      {
+        name: 'browser_forward',
+        rawName: 'forward',
+        description: 'Go forward one step in the guest session history and report the settled page.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'forward', {})
+          return { content: [{ type: 'text', text: `Forward at ${String(result.url)} (${String(result.title)})` }] }
+        },
+      },
+      {
+        name: 'browser_reload',
+        rawName: 'reload',
+        description: 'Reload the guest page and report the settled page.',
+        input: z.object({}),
+        run: async (agent) => {
+          const result = await executeOnLease(agent, 'reload', {})
+          return { content: [{ type: 'text', text: `Reloaded ${String(result.url)} (${String(result.title)})` }] }
+        },
+      },
+      {
+        name: 'browser_select',
+        rawName: 'select',
+        description: 'Select one option of a dropdown by CSS selector and option value or visible label, firing real change events.',
+        input: z.object({ selector: z.string(), value: z.string().optional(), label: z.string().optional() }),
+        run: async (agent, parsed) => {
+          const { selector, value, label } = z.object({
+            selector: z.string(),
+            value: z.string().optional(),
+            label: z.string().optional(),
+          }).parse(parsed)
+          const result = await executeOnLease(agent, 'select', {
+            ...(value === undefined ? {} : { value }),
+            ...(label === undefined ? {} : { label: label }),
+            selector,
+          })
+          return { content: [{ type: 'text', text: `Selected ${result.selected ?? label ?? value ?? ''} in ${selector}` }] }
         },
       },
       {

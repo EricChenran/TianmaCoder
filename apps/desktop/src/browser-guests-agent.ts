@@ -20,6 +20,12 @@ export interface AgentGuestElectronView {
   setBounds(bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void
 }
 
+/** The slice of session history the history command drives (reload lives on WebContents). */
+export interface AgentGuestHistory {
+  goBack(): void
+  goForward(): void
+}
+
 /** The slice of a captured page image the screenshot command uses. */
 export interface AgentGuestCapture {
   isEmpty(): boolean
@@ -28,7 +34,9 @@ export interface AgentGuestCapture {
 
 /** One navigable guest the service drives. */
 export interface AgentGuestView {
-  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'executeJavaScript'> & {
+  readonly webContents: Pick<WebContents, 'loadURL' | 'getURL' | 'getTitle' | 'close' | 'isDestroyed' | 'insertText' | 'sendInputEvent' | 'executeJavaScript' | 'reload'> & {
+    /** Electron marks goBack/goForward on WebContents deprecated in favor of the history member. */
+    readonly navigationHistory: AgentGuestHistory
     capturePage(): Promise<AgentGuestCapture>
   }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
@@ -115,6 +123,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const view = this.guest(request.leaseId)
     switch (request.command) {
       case 'navigate': return this.navigate(view, request.args)
+      case 'back': return this.history(view, 'goBack')
+      case 'forward': return this.history(view, 'goForward')
+      case 'reload': return this.history(view, 'reload')
+      case 'select': return this.selectOption(view, request.args)
       case 'screenshot': return this.screenshot(view)
       case 'getState': return this.state(view)
       case 'type': return this.type(view, request.args)
@@ -134,6 +146,52 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   private state(view: AgentGuestView): ShellBrowserJson {
     if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
     return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
+  }
+
+  /** Walk session history or reload, reporting the page facts after issuing the action. */
+  private history(view: AgentGuestView, action: 'goBack' | 'goForward' | 'reload'): ShellBrowserJson {
+    if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
+    if (action === 'reload') {
+      view.webContents.reload()
+    } else {
+      view.webContents.navigationHistory[action]()
+    }
+    return this.state(view)
+  }
+
+  /** Select one option of a dropdown by CSS selector and value or visible label. */
+  private async selectOption(view: AgentGuestView, args: ShellBrowserJson): Promise<ShellBrowserJson> {
+    const parsed = argsObject(args)
+    const selector = typeof parsed.selector === 'string' ? parsed.selector : undefined
+    const value = typeof parsed.value === 'string' ? parsed.value : undefined
+    const label = typeof parsed.label === 'string' ? parsed.label : undefined
+    if (selector === undefined || selector.length === 0 || (value === undefined && label === undefined)) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: select requires a selector and value or label', 'browser_invalid_args'))
+    }
+    const result = await view.webContents.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el || el.tagName !== 'SELECT') return { found: false };
+        const wanted = ${JSON.stringify(value)} ?? null;
+        const wantedLabel = ${JSON.stringify(label)} ?? null;
+        for (const option of el.options) {
+          if ((wanted !== null && option.value === wanted) || (wantedLabel !== null && option.text === wantedLabel)) {
+            el.value = option.value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { found: true, value: el.value, label: option.text };
+          }
+        }
+        return { found: true, matched: false };
+      })()`,
+    ) as { found: boolean; matched?: boolean; value?: string; label?: string }
+    if (!result.found) {
+      return Promise.reject(new ShellBrowserControlError(`desktop browser: element not found or not a select for ${JSON.stringify(selector)}`, 'browser_element_not_found'))
+    }
+    if (result.matched === false) {
+      return Promise.reject(new ShellBrowserControlError('desktop browser: no matching option', 'browser_option_not_found'))
+    }
+    return { selected: result.value ?? '', label: result.label ?? '' }
   }
 
   /** Insert trusted text into the focused element of the guest page. */

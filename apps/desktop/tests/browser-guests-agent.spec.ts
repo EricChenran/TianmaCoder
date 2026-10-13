@@ -62,6 +62,14 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
         getTitle: () => 'Example',
         close: () => { this.closed += 1 },
         isDestroyed: () => this.destroyed,
+        goBack: () => { this.currentUrl = 'https://example.com/back' },
+        goForward: () => { this.currentUrl = 'https://example.com/forward' },
+        reload: () => { this.loadedUrls.push(this.currentUrl) },
+        navigationHistory: {
+          goBack: () => { this.currentUrl = 'https://example.com/back' },
+          goForward: () => { this.currentUrl = 'https://example.com/forward' },
+          reload: async () => { this.loadedUrls.push(this.currentUrl) },
+        },
         insertText: async (text: string): Promise<void> => { this.insertedTexts.push(text) },
         sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]): void => { this.inputEvents.push(event) },
         executeJavaScript: async (code: string): Promise<unknown> => {
@@ -112,6 +120,11 @@ const { FakeView, makeWrappedGuest } = vi.hoisted((): {
           insertText: async (text) => { await view.webContents.insertText(text) },
           sendInputEvent: (event: Parameters<WebContents['sendInputEvent']>[0]) => { view.webContents.sendInputEvent(event) },
           executeJavaScript: async (code: string) => { return view.webContents.executeJavaScript(code) },
+          reload: () => { view.webContents.reload() },
+          navigationHistory: {
+            goBack: () => { view.webContents.navigationHistory.goBack() },
+            goForward: () => { view.webContents.navigationHistory.goForward() },
+          },
           capturePage: async () => view.webContents.capturePage(),
         },
         attach: (target) => { view.attach(target) },
@@ -228,7 +241,7 @@ describe('AgentBrowserGuests', () => {
     await expect(guests.execute({ type: 'browser', requestId: 1, op: 'execute', leaseId: 'gone', command: 'navigate', args: {} }))
       .rejects.toMatchObject({ code: 'browser_lease_unknown' })
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 2, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
-    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'select', args: {} }))
+    await expect(guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'drag', args: {} }))
       .rejects.toMatchObject({ code: 'browser_unknown_command' })
     await expect(guests.release({ leaseId })).resolves.toBeNull()
     const record = lastRecord()
