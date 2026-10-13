@@ -12,6 +12,8 @@ export interface DesktopAgentBrowserPane {
 export interface DesktopAgentBrowserActivity {
   /** Lease the fact belongs to. */
   readonly leaseId: string
+  /** Session the lease was acquired for; a pane only reacts to its own Session. */
+  readonly sessionKey?: string
   /** True while one agent command is executing against this lease. */
   readonly busy: boolean
   /** Command name of the in-flight operation, present only while busy. */
@@ -38,12 +40,4 @@ export interface DesktopAgentBrowserBridge {
    * @returns unsubscribe callback.
    */
   onActivity(listener: (activity: DesktopAgentBrowserActivity) => void): () => void
-}
-
-/** Props the Agent Browser body receives from its slot shares. */
-export interface AgentBrowserBodyProps {
-  /** Session that owns the tab instance. */
-  readonly sessionId: string
-  /** Binds the tab's pane to the Session's agent browser lease; absent outside the Desktop shell. */
-  readonly present?: (pane: DesktopAgentBrowserPane | null) => void
 }

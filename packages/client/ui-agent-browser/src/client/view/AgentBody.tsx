@@ -1,20 +1,39 @@
-/** Agent tab body: reports its pane rectangle so the shell places the agent guest here. */
+/** Agent tab body: reports its surface rectangle and shows the agent's activity. */
 import { useEffect, useRef, type ReactElement } from 'react'
-import type { AgentBrowserBodyProps } from '../../types.ts'
+import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+import type { DesktopAgentBrowserPane } from '../../types.ts'
+import type { AgentBrowserState, AgentBrowserStore } from '../store.ts'
+
+/** Data the pane injects: binds the Session's guest to this occurrence's surface. */
+export interface AgentBrowserInjected {
+  /** Bind the Session's lease to a surface rectangle, or `null` to stop presenting. */
+  readonly present: (pane: DesktopAgentBrowserPane | null) => void
+}
+
+/** Props the Agent Browser body receives from its slot shares. */
+export type AgentBrowserBodyProps = PropsRuntime<'sidebar.right.pane.tab'>
+  & PropsStore<AgentBrowserStore>
+  & PropsLocale<'agentBrowser'>
+  & Partial<AgentBrowserInjected>
+
+/** Stable selector: the pane renders the whole activity state. */
+const selectActivity = (state: AgentBrowserState): AgentBrowserState => state
 
 /**
- * Reports the pane the guest should occupy. The shell owns the guest and draws it
- * over this rectangle; the body itself only measures, so the component holds no
- * Electron access and subscribes to no external data.
+ * The shell draws the agent guest over the measured surface, so the status strip
+ * stays above it. The body only measures; it holds no Electron access and
+ * subscribes to nothing.
  * @param props - slot shares; `present` is absent outside the Desktop shell.
- * @returns the measured pane placeholder.
+ * @returns the status strip and the surface placeholder.
  */
 export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
-  const host = useRef<HTMLDivElement | null>(null)
+  const surface = useRef<HTMLDivElement | null>(null)
   const present = useRef(props.present)
   present.current = props.present
+  const activity = props.useStore(selectActivity)
+  const { t } = props
   useEffect(() => {
-    const element = host.current
+    const element = surface.current
     if (element === null || present.current === undefined) return
     const report = (): void => {
       const rect = element.getBoundingClientRect()
@@ -33,5 +52,13 @@ export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
       present.current?.(null)
     }
   }, [])
-  return <div className="dsh-agent-browser-body" ref={host} />
+  const status = activity.busy
+    ? (activity.command === undefined ? t('activity.busy') : `${t('activity.busy')} · ${activity.command}`)
+    : activity.presented ? t('activity.idle') : t('activity.offscreen')
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div role="status">{status}</div>
+      <div ref={surface} style={{ flex: 1, minHeight: 0 }} />
+    </div>
+  )
 }

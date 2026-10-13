@@ -12,6 +12,7 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../locale/tsconfig.client.json" },
+    { "path": "../store" },
     { "path": "../ui-session" },
     { "path": "../ui-sidebar-right" },
     { "path": "../ui-slots" }

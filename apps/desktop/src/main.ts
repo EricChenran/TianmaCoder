@@ -451,12 +451,13 @@ async function main(): Promise<void> {
     const hostReference: { current?: DesktopHostProcess } = {}
     const controlReference: { current?: ShellBrowserControlEndpoint } = {}
     /** Last activity fact per lease, merged with presentation state before the window sees it. */
-    const agentActivity = new Map<string, { busy: boolean; command?: string; presented: boolean }>()
+    const agentActivity = new Map<string, { busy: boolean; command?: string; presented: boolean; sessionKey?: string }>()
     const publishAgentActivity = (leaseId: string): void => {
       const fact = agentActivity.get(leaseId)
       if (fact === undefined || mainWindow === undefined || mainWindow.isDestroyed()) return
       mainWindow.webContents.send(DESKTOP_IPC.agentBrowserActivity, {
         leaseId, busy: fact.busy, presented: fact.presented,
+        ...(fact.sessionKey === undefined ? {} : { sessionKey: fact.sessionKey }),
         ...(fact.command === undefined ? {} : { command: fact.command }),
       })
     }
@@ -475,24 +476,26 @@ async function main(): Promise<void> {
       deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
       emit: (event) => {
         controlReference.current?.emit(event.name, event.payload, event.leaseId)
-        const payload = event.payload as { active?: unknown; command?: unknown; presented?: unknown; closed?: unknown }
-        if (event.name === 'browser-activity') {
-          const previous = agentActivity.get(event.leaseId)
-          agentActivity.set(event.leaseId, {
-            busy: payload.active === true,
-            presented: previous?.presented ?? false,
-            ...(typeof payload.command === 'string' ? { command: payload.command } : {}),
-          })
-        } else if (payload.closed === true) {
-          agentActivity.delete(event.leaseId)
-        } else {
-          const previous = agentActivity.get(event.leaseId)
-          agentActivity.set(event.leaseId, {
-            busy: previous?.busy ?? false,
-            presented: payload.presented === true,
-            ...(previous?.command === undefined ? {} : { command: previous.command }),
-          })
+        const payload = event.payload as {
+          active?: unknown
+          command?: unknown
+          presented?: unknown
+          closed?: unknown
+          sessionKey?: unknown
         }
+        const previous = agentActivity.get(event.leaseId)
+        const closed = payload.closed === true
+        const busy = closed ? false : event.name === 'browser-activity' ? payload.active === true : previous?.busy ?? false
+        const presented = closed
+          ? false
+          : event.name === 'browser-activity' ? previous?.presented ?? false : payload.presented === true
+        const sessionKey = typeof payload.sessionKey === 'string' ? payload.sessionKey : previous?.sessionKey
+        agentActivity.set(event.leaseId, {
+          busy,
+          presented,
+          ...(busy && typeof payload.command === 'string' ? { command: payload.command } : {}),
+          ...(sessionKey === undefined ? {} : { sessionKey }),
+        })
         publishAgentActivity(event.leaseId)
       },
     })

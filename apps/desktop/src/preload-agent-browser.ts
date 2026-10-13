@@ -35,10 +35,12 @@ function readActivity(message: unknown): DesktopAgentBrowserActivity | undefined
   if (typeof candidate.leaseId !== 'string' || typeof candidate.busy !== 'boolean'
     || typeof candidate.presented !== 'boolean') return undefined
   if (candidate.command !== undefined && typeof candidate.command !== 'string') return undefined
+  if (candidate.sessionKey !== undefined && typeof candidate.sessionKey !== 'string') return undefined
   return {
     leaseId: candidate.leaseId,
     busy: candidate.busy,
     presented: candidate.presented,
+    ...(candidate.sessionKey === undefined ? {} : { sessionKey: candidate.sessionKey }),
     ...(candidate.command === undefined ? {} : { command: candidate.command }),
   }
 }

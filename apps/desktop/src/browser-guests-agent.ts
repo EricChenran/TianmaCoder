@@ -302,6 +302,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       leaseId,
       payload: {
         leaseId,
+        sessionKey: lease.sessionKey ?? null,
         closed: false,
         activeTabId: lease.activeTabId,
         presented: lease.pane !== undefined,
@@ -318,10 +319,16 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** Publish one command's in-flight state so a pane can light up while the automation acts. */
   private publishActivity(leaseId: string, active: boolean, command?: string): void {
+    const lease = this.#leases.get(leaseId)
     this.options.emit?.({
       name: 'browser-activity',
       leaseId,
-      payload: { leaseId, active, ...(command === undefined ? {} : { command }) },
+      payload: {
+        leaseId,
+        sessionKey: lease?.sessionKey ?? null,
+        active,
+        ...(command === undefined ? {} : { command }),
+      },
     })
   }
 
