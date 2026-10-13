@@ -81,7 +81,7 @@ export function apply(ctx: Context, input: Config): void {
       },
     })
     disposers.push(() => resources.dispose())
-    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number }> => {
+    const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; suspended?: boolean; evicted?: string[] }> => {
       const resource = await resources.get(agent)
       return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
@@ -157,14 +157,14 @@ export function apply(ctx: Context, input: Config): void {
       {
         name: 'browser_tabs',
         rawName: 'tabs',
-        description: 'List guest tabs, open a new tab, activate one, or close one; other browser tools act on the active tab.',
+        description: 'List guest tabs, open a new tab, activate one, close one, or mark one suspended or resumed; other browser tools act on the active tab.',
         input: z.object({
-          action: z.enum(['list', 'new', 'close', 'activate']),
+          action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume']),
           tabId: z.string().optional(),
         }),
         run: async (agent, parsed) => {
           const { action, tabId } = z.object({
-            action: z.enum(['list', 'new', 'close', 'activate']),
+            action: z.enum(['list', 'new', 'close', 'activate', 'suspend', 'resume']),
             tabId: z.string().optional(),
           }).parse(parsed)
           const result = await executeOnLease(agent, 'tabs', { action, ...(tabId === undefined ? {} : { tabId }) })
@@ -172,8 +172,14 @@ export function apply(ctx: Context, input: Config): void {
             const lines = (result.tabs ?? []).map(tab => `${tab.tabId.slice(0, 8)}\t${tab.active === true ? '*' : ' '}\t${tab.url} ${tab.title}`)
             return { content: [{ type: 'text', text: lines.join('\n') || '(no tabs)' }] }
           }
-          if (action === 'new') return { content: [{ type: 'text', text: `Opened tab ${String(result.tabId).slice(0, 8)}` }] }
+          if (action === 'new') {
+            const evicted = result.evicted ?? []
+            const note = evicted.length === 0 ? '' : `; closed ${evicted.map(id => id.slice(0, 8)).join(', ')} to stay within the resident tab limit`
+            return { content: [{ type: 'text', text: `Opened tab ${String(result.tabId).slice(0, 8)}${note}` }] }
+          }
           if (action === 'close') return { content: [{ type: 'text', text: `Closed tab ${String(result.closed).slice(0, 8)}` }] }
+          if (action === 'suspend') return { content: [{ type: 'text', text: `Suspended tab ${String(tabId).slice(0, 8)}` }] }
+          if (action === 'resume') return { content: [{ type: 'text', text: `Resumed tab ${String(tabId).slice(0, 8)}` }] }
           return { content: [{ type: 'text', text: `Active tab ${String(result.activeTabId).slice(0, 8)}` }] }
         },
       },

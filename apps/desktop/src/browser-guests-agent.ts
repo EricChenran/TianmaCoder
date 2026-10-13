@@ -3,6 +3,7 @@
 import { WebContentsView, app, clipboard, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { getAriaInjectedScriptSource } from './aria-injected-script.ts'
+import { AGENT_TAB_LIMIT, selectAgentTabVictim, type AgentTabResidencyCandidate } from './browser-tab-residency.ts'
 import type { BrowserControlBounds } from './browser-control-main.ts'
 import type { ShellBrowserAcquireRequest, ShellBrowserExecuteRequest, ShellBrowserJson } from './browser-control-main.ts'
 import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './browser-control-main.ts'
@@ -54,8 +55,8 @@ export const AGENT_ISOLATED_WORLD_ID = 999
 /** One-paint settle before a screenshot so freshly delivered input is visible. */
 export const SCREENSHOT_SETTLE_MS = 120
 
-/** Upper bound on tabs per lease, mirroring ZCode's residency budget. */
-export const AGENT_MAX_TABS = 32
+/** Empty captures a screenshot retries before reporting the failure. */
+export const AGENT_CAPTURE_ATTEMPTS = 3
 
 /** Default deadline for one guest navigation. */
 export const AGENT_NAVIGATE_TIMEOUT_MS = 10_000
@@ -122,10 +123,26 @@ interface AgentRef {
   readonly text?: string
 }
 
+/** One agent tab: its carrier, the ref cache, and the residency facts the limit reads. */
+interface AgentTab {
+  readonly view: AgentGuestView
+  readonly refs: Map<string, AgentRef>
+  readonly openedAt: number
+  lastActivityAt: number
+  lastSelectedAt: number | null
+  /**
+   * A suspended tab keeps its logical slot and live guest but leaves the protected
+   * set, so the residency limit may close it before a tab the human can see.
+   */
+  suspended: boolean
+  operationActive: boolean
+  captureActive: boolean
+}
+
 /** One lease: a tab set with an active pointer, all sharing one workspace partition. */
 interface GuestLease {
   readonly workspaceKey: string
-  readonly tabs: Map<string, { view: AgentGuestView; refs: Map<string, AgentRef> }>
+  readonly tabs: Map<string, AgentTab>
   activeTabId: string
   bounds: { x: number; y: number; width: number; height: number }
   /** Page viewport size the automation asked for; applied to the attached view while the lease is visible. */
@@ -138,6 +155,8 @@ interface GuestLease {
 
 export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   readonly #leases = new Map<string, GuestLease>()
+  /** One in-flight capture per lease; a second request joins the running one instead of stacking. */
+  readonly #captures = new Map<string, Promise<ShellBrowserJson>>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -160,7 +179,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /** @returns The active tab of one lease: its navigation surface and ref cache. */
-  tab(leaseId: string): { view: AgentGuestView; refs: Map<string, AgentRef> } {
+  tab(leaseId: string): AgentTab {
     const lease = this.#leases.get(leaseId)
     if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
     const tab = lease.tabs.get(lease.activeTabId)
@@ -173,9 +192,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const tabId = randomUUID()
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
     const bounds = request.bounds ?? { x: 0, y: 0, width: 1, height: 1 }
+    const now = Date.now()
     this.#leases.set(leaseId, {
       workspaceKey: request.workspaceKey,
-      tabs: new Map([[tabId, { view, refs: new Map() }]]),
+      tabs: new Map([[tabId, this.newTab(view, now)]]),
       activeTabId: tabId,
       bounds,
       viewport: { width: bounds.width, height: bounds.height },
@@ -189,14 +209,27 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   async execute(request: ShellBrowserExecuteRequest): Promise<ShellBrowserJson> {
-    const { view, refs } = this.tab(request.leaseId)
+    const tab = this.tab(request.leaseId)
+    tab.operationActive = true
+    try {
+      const result = await this.dispatch(request, tab)
+      tab.lastActivityAt = Date.now()
+      return result
+    } finally {
+      tab.operationActive = false
+    }
+  }
+
+  /** Run one command against the active tab's carrier. */
+  private dispatch(request: ShellBrowserExecuteRequest, tab: AgentTab): Promise<ShellBrowserJson> | ShellBrowserJson {
+    const { view, refs } = tab
     switch (request.command) {
       case 'navigate': return this.navigate(view, request.args)
       case 'back': return this.history(view, 'goBack')
       case 'forward': return this.history(view, 'goForward')
       case 'reload': return this.history(view, 'reload')
       case 'select': return this.selectOption(view, request.args)
-      case 'screenshot': return this.screenshot(view)
+      case 'screenshot': return this.screenshot(request.leaseId, tab)
       case 'getState': return this.state(view)
       case 'type': return this.type(view, request.args, refs)
       case 'fill': return this.fill(view, request.args)
@@ -218,7 +251,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
   }
 
-  /** List, open, activate, or close guest tabs; every other command runs on the active tab. */
+  /** List, open, activate, close, suspend, or resume guest tabs; every other command runs on the active tab. */
   private async tabsOp(leaseId: string, args: ShellBrowserJson): Promise<ShellBrowserJson> {
     const lease = this.#leases.get(leaseId)
     if (lease === undefined) throw new ShellBrowserControlError('desktop browser: lease is unknown', 'browser_lease_unknown')
@@ -232,43 +265,104 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         url: tab.view.webContents.getURL(),
         title: tab.view.webContents.getTitle(),
         active: id === lease.activeTabId,
+        suspended: tab.suspended,
       })),
       activeTabId: lease.activeTabId,
     })
+    const known = tabId !== undefined && lease.tabs.has(tabId)
     if (action === 'list') return list()
     if (action === 'new') {
-      if (lease.tabs.size >= AGENT_MAX_TABS) {
-        return Promise.reject(new ShellBrowserControlError(`desktop browser: at most ${String(AGENT_MAX_TABS)} tabs per lease`, 'browser_invalid_args'))
-      }
-      const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
       const created = randomUUID()
-      lease.tabs.set(created, { view, refs: new Map() })
+      const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(lease.workspaceKey))
+      lease.tabs.set(created, this.newTab(view, Date.now()))
       this.activateTab(lease, created, window)
-      return { ...list(), tabId: created }
+      const evicted = this.enforceLimit(lease)
+      return { ...list(), tabId: created, ...(evicted.length === 0 ? {} : { evicted }) }
     }
     if (action === 'close') {
-      if (tabId === undefined || !lease.tabs.has(tabId)) {
+      if (!known) {
         return Promise.reject(new ShellBrowserControlError('desktop browser: close requires a known tabId', 'browser_invalid_args'))
       }
       if (lease.tabs.size === 1) {
         return Promise.reject(new ShellBrowserControlError('desktop browser: cannot close the last tab', 'browser_invalid_args'))
       }
-      const closing = lease.tabs.get(tabId)
-      if (closing !== undefined) closing.view.destroy()
-      lease.tabs.delete(tabId)
+      this.closeTab(lease, tabId)
       if (lease.activeTabId === tabId) {
         this.activateTab(lease, [...lease.tabs.keys()].at(-1) ?? '', window)
       }
       return { closed: tabId, ...list() }
     }
     if (action === 'activate') {
-      if (tabId === undefined || !lease.tabs.has(tabId)) {
+      if (!known) {
         return Promise.reject(new ShellBrowserControlError('desktop browser: activate requires a known tabId', 'browser_invalid_args'))
       }
       this.activateTab(lease, tabId, window)
       return { ...list(), tabId }
     }
-    return Promise.reject(new ShellBrowserControlError('desktop browser: tabs requires action list/new/close/activate', 'browser_invalid_args'))
+    if (action === 'suspend' || action === 'resume') {
+      if (!known) {
+        return Promise.reject(new ShellBrowserControlError(`desktop browser: ${action} requires a known tabId`, 'browser_invalid_args'))
+      }
+      if (action === 'suspend' && tabId === lease.activeTabId) {
+        return Promise.reject(new ShellBrowserControlError('desktop browser: cannot suspend the active tab', 'browser_invalid_args'))
+      }
+      const tab = lease.tabs.get(tabId)
+      if (tab !== undefined) {
+        tab.suspended = action === 'suspend'
+        tab.lastActivityAt = Date.now()
+      }
+      return { ...list(), tabId, suspended: action === 'suspend' }
+    }
+    return Promise.reject(new ShellBrowserControlError('desktop browser: tabs requires action list/new/close/activate/suspend/resume', 'browser_invalid_args'))
+  }
+
+  /** @returns A fresh tab record with the residency clock started. */
+  private newTab(view: AgentGuestView, now: number): AgentTab {
+    return {
+      view, refs: new Map(), openedAt: now, lastActivityAt: now, lastSelectedAt: now,
+      suspended: false, operationActive: false, captureActive: false,
+    }
+  }
+
+  /** Detach and close one tab's carrier and drop its slot. */
+  private closeTab(lease: GuestLease, tabId: string): void {
+    const closing = lease.tabs.get(tabId)
+    lease.tabs.delete(tabId)
+    if (closing !== undefined) closing.view.destroy()
+  }
+
+  /**
+   * Close unprotected tabs until the lease is back within its residency limit.
+   * @param lease - lease whose pool may exceed {@link AGENT_TAB_LIMIT}.
+   * @returns The closed tab ids, in eviction order.
+   */
+  private enforceLimit(lease: GuestLease): string[] {
+    const evicted: string[] = []
+    for (;;) {
+      const victim = selectAgentTabVictim(this.residencyCandidates(lease), AGENT_TAB_LIMIT)
+      if (victim === null) return evicted
+      this.closeTab(lease, victim.tabId)
+      evicted.push(victim.tabId)
+    }
+  }
+
+  /** @returns Every tab of one lease as residency facts for the limit policy. */
+  private residencyCandidates(lease: GuestLease): AgentTabResidencyCandidate[] {
+    return [...lease.tabs.entries()].map(([tabId, tab]) => {
+      const selected = tabId === lease.activeTabId
+      return {
+        tabId,
+        residency: tab.suspended ? 'suspended' : selected && lease.visible ? 'live-visible' : 'live-background',
+        guestAttached: !tab.view.webContents.isDestroyed(),
+        openedAt: tab.openedAt,
+        lastActivityAt: tab.lastActivityAt,
+        lastSelectedAt: tab.lastSelectedAt,
+        selected,
+        visible: selected && lease.visible,
+        operationActive: tab.operationActive,
+        captureActive: tab.captureActive,
+      }
+    })
   }
 
   /** Point the active pointer at one tab and swap the on-screen bounds between old and new. */
@@ -283,6 +377,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     lease.activeTabId = tabId
     const active = lease.tabs.get(tabId)
+    if (active !== undefined) {
+      active.suspended = false
+      active.lastSelectedAt = Date.now()
+      active.lastActivityAt = active.lastSelectedAt
+    }
     if (window !== undefined && !window.isDestroyed() && active !== undefined) {
       active.view.attach(window, lease.bounds)
     }
@@ -477,13 +576,50 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return { url: view.webContents.getURL(), title: view.webContents.getTitle() }
   }
 
-  /** Capture the guest page as PNG for durable model-visible attachment, settling one paint first. */
-  private async screenshot(view: AgentGuestView): Promise<ShellBrowserJson> {
+  /**
+   * Capture the active tab as PNG for durable model-visible attachment. Captures
+   * serialize per lease through one in-flight slot, so a repeated request joins the
+   * running capture rather than stacking another surface request.
+   * @param leaseId - lease whose active tab is captured.
+   * @param tab - active tab; carries the capture-in-flight residency fact.
+   * @returns Base64 PNG, the page URL, and the calibrated pixel size.
+   */
+  private async screenshot(leaseId: string, tab: AgentTab): Promise<ShellBrowserJson> {
+    const inFlight = this.#captures.get(leaseId)
+    if (inFlight !== undefined) return inFlight
+    const pending = this.captureOnce(this.lease(leaseId), tab).finally(() => { this.#captures.delete(leaseId) })
+    this.#captures.set(leaseId, pending)
+    return pending
+  }
+
+  /** Settle one paint, capture with bounded retries, and read the size from the PNG header. */
+  private async captureOnce(lease: GuestLease, tab: AgentTab): Promise<ShellBrowserJson> {
+    const { view } = tab
     if (view.webContents.isDestroyed()) throw new ShellBrowserControlError('desktop browser: guest is closed', 'browser_guest_closed')
-    await new Promise((resolve) => { setTimeout(resolve, SCREENSHOT_SETTLE_MS) })
-    const image = await view.webContents.capturePage()
-    if (image.isEmpty()) throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
-    return { base64: image.toPNG().toString('base64'), mimeType: 'image/png', url: view.webContents.getURL() }
+    tab.captureActive = true
+    try {
+      for (let attempt = 1; ; attempt += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, SCREENSHOT_SETTLE_MS) })
+        const image = await view.webContents.capturePage()
+        if (!image.isEmpty()) {
+          const png = image.toPNG()
+          const size = pngSize(png)
+          return {
+            base64: png.toString('base64'),
+            mimeType: 'image/png',
+            url: view.webContents.getURL(),
+            ...(size === undefined ? {} : { width: size.width, height: size.height }),
+            sizeCorrected: size !== undefined
+              && (size.width !== lease.viewport.width || size.height !== lease.viewport.height),
+          }
+        }
+        if (attempt >= AGENT_CAPTURE_ATTEMPTS) {
+          throw new ShellBrowserControlError('desktop browser: captured an empty page image', 'browser_empty_capture')
+        }
+      }
+    } finally {
+      tab.captureActive = false
+    }
   }
 
   /** Copy the page selection: trusted copy, then hold the text in the lease's virtual clipboard. */
@@ -759,4 +895,11 @@ function viewportDimension(value: unknown, fallback: number, min: number, max: n
       `desktop browser: viewport dimension must be an integer between ${String(min)} and ${String(max)}`, 'browser_invalid_args')
   }
   return value
+}
+
+/** @returns The pixel size from a PNG IHDR chunk, or `undefined` when the bytes are not a PNG. */
+function pngSize(bytes: Buffer): { width: number; height: number } | undefined {
+  if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.readUInt32BE(4) !== 0x0d0a1a0a) return undefined
+  if (bytes.toString('latin1', 12, 16) !== 'IHDR') return undefined
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
 }

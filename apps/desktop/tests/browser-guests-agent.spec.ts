@@ -2,6 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WebContents } from 'electron'
 import type { AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
 import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
+import { AGENT_TAB_LIMIT } from '../src/browser-tab-residency.ts'
+
+/** Minimal PNG header carrying the given pixel size, so capture calibration can be asserted. */
+function pngHeader(width: number, height: number): Buffer {
+  const bytes = Buffer.alloc(24)
+  bytes.writeUInt32BE(0x89504e47, 0)
+  bytes.writeUInt32BE(0x0d0a1a0a, 4)
+  bytes.writeUInt32BE(13, 8)
+  bytes.write('IHDR', 12, 'latin1')
+  bytes.writeUInt32BE(width, 16)
+  bytes.writeUInt32BE(height, 20)
+  return bytes
+}
 
 /** Recorded navigation outcome of one fake guest. */
 interface FakeGuestRecord {
@@ -13,6 +26,8 @@ interface FakeGuestRecord {
   closed: number
   destroyed: boolean
   emptyCapture: boolean
+  pngBytes: Buffer
+  captures: number
   bounds: Array<{ x: number; y: number; width: number; height: number }>
   lastPreferences: unknown
 }
@@ -45,6 +60,8 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
     closed = 0
     destroyed = false
     emptyCapture = false
+    pngBytes: Buffer = Buffer.from('png-bytes')
+    captures = 0
     bounds: Array<{ x: number; y: number; width: number; height: number }> = []
     lastPreferences: unknown
     currentUrl = 'about:blank'
@@ -84,10 +101,13 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
           this.executedScripts.push(script)
           return this.jsResult
         },
-        capturePage: async () => ({
-          isEmpty: () => this.emptyCapture,
-          toPNG: () => Buffer.from('png-bytes'),
-        }),
+        capturePage: async () => {
+          this.captures += 1
+          return {
+            isEmpty: () => this.emptyCapture,
+            toPNG: () => this.pngBytes,
+          }
+        },
       }
       FakeView.instances.push(this)
     }
@@ -117,6 +137,9 @@ const { FakeView, makeWrappedGuest, clipboardStore } = vi.hoisted((): {
         get closed() { return view.closed },
         get destroyed() { return view.destroyed },
         get emptyCapture() { return view.emptyCapture },
+        get pngBytes() { return view.pngBytes },
+        set pngBytes(value: Buffer) { view.pngBytes = value },
+        get captures() { return view.captures },
         bounds: view.bounds,
         lastPreferences: view.lastPreferences,
         webContents: {
@@ -488,6 +511,90 @@ describe('AgentBrowserGuests', () => {
     }) as { width: number; height: number; visible: boolean }
     expect(result).toEqual({ width: 500, height: 400, visible: false })
     expect(lastRecord().bounds).toHaveLength(attachments)
+  })
+
+  it('reports the PNG pixel size and flags a capture that misses the viewport', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', bounds: { x: 0, y: 0, width: 800, height: 600 },
+    }) as { leaseId: string }
+    lastRecord().pngBytes = pngHeader(800, 600)
+    const exact = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width: number; height: number; sizeCorrected: boolean }
+    expect(exact).toMatchObject({ width: 800, height: 600, sizeCorrected: false })
+    lastRecord().pngBytes = pngHeader(1600, 1200)
+    const scaled = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width: number; height: number; sizeCorrected: boolean }
+    expect(scaled).toMatchObject({ width: 1600, height: 1200, sizeCorrected: true })
+    lastRecord().pngBytes = Buffer.from('not a png')
+    const opaque = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width?: number; sizeCorrected: boolean }
+    expect(opaque.width).toBeUndefined()
+    expect(opaque.sizeCorrected).toBe(false)
+  })
+
+  it('shares one in-flight capture between concurrent screenshot requests', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    const before = lastRecord().captures
+    const [first, second] = await Promise.all([
+      guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {} }),
+      guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'screenshot', args: {} }),
+    ])
+    expect(lastRecord().captures).toBe(before + 1)
+    expect(first).toEqual(second)
+  })
+
+  it('suspends and resumes a background tab', async () => {
+    const { guests } = makeGuests()
+    const { leaseId, tabId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string; tabId: string }
+    const opened = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' },
+    }) as { tabId: string }
+    await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'tabs', args: { action: 'activate', tabId } })
+    const suspended = await guests.execute({
+      type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'tabs', args: { action: 'suspend', tabId: opened.tabId },
+    }) as { suspended: boolean; tabs: Array<{ tabId: string; suspended?: boolean }> }
+    expect(suspended.suspended).toBe(true)
+    expect(suspended.tabs.find(tab => tab.tabId === opened.tabId)?.suspended).toBe(true)
+    const resumed = await guests.execute({
+      type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'tabs', args: { action: 'resume', tabId: opened.tabId },
+    }) as { suspended: boolean }
+    expect(resumed.suspended).toBe(false)
+    await expect(guests.execute({ type: 'browser', requestId: 6, op: 'execute', leaseId, command: 'tabs', args: { action: 'suspend', tabId } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    await expect(guests.execute({ type: 'browser', requestId: 7, op: 'execute', leaseId, command: 'tabs', args: { action: 'suspend', tabId: 'missing' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+    const reactivated = await guests.execute({
+      type: 'browser', requestId: 8, op: 'execute', leaseId, command: 'tabs', args: { action: 'activate', tabId: opened.tabId },
+    }) as { tabs: Array<{ tabId: string; suspended?: boolean }> }
+    expect(reactivated.tabs.find(tab => tab.tabId === opened.tabId)?.suspended).toBe(false)
+    await expect(guests.execute({ type: 'browser', requestId: 9, op: 'execute', leaseId, command: 'tabs', args: { action: 'nope' } }))
+      .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('closes the oldest background tab when a new one exceeds the residency limit', async () => {
+    const { guests } = makeGuests()
+    const { leaseId, tabId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string; tabId: string }
+    const opened: string[] = [tabId]
+    for (let index = 1; index < AGENT_TAB_LIMIT; index += 1) {
+      const created = await guests.execute({
+        type: 'browser', requestId: 100 + index, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' },
+      }) as { tabId: string; evicted?: string[] }
+      expect(created.evicted).toBeUndefined()
+      opened.push(created.tabId)
+    }
+    const overflow = await guests.execute({
+      type: 'browser', requestId: 200, op: 'execute', leaseId, command: 'tabs', args: { action: 'new' },
+    }) as { evicted?: string[]; tabs: Array<{ tabId: string; active?: boolean }> }
+    expect(overflow.evicted).toHaveLength(1)
+    expect(opened).toContain(overflow.evicted?.[0] ?? '')
+    expect(overflow.tabs).toHaveLength(AGENT_TAB_LIMIT)
+    expect(overflow.tabs.some(tab => tab.tabId === overflow.evicted?.[0])).toBe(false)
+    expect(overflow.tabs.filter(tab => tab.active === true)).toHaveLength(1)
   })
 })
 
