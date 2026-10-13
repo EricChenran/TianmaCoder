@@ -256,8 +256,27 @@ describe('AgentBrowserGuests', () => {
     expect(record.closed).toBe(1)
   })
 
-  it('captures the guest page as base64 png on screenshot', async () => {
+  it('focuses a selector or ref with a trusted click before typing', async () => {
     const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    lastRecord().jsResult = { found: true, x: 12, y: 34 }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'type', args: { selector: '#q', text: 'hello' } })
+    const record = lastRecord()
+    expect(record.insertedTexts).toEqual(['hello'])
+    expect(record.inputEvents.map(event => (event as { type?: string }).type)).toEqual(['mouseMove', 'mouseDown', 'mouseUp'])
+    const scriptsBefore = record.executedScripts.length
+    lastRecord().jsResult = { url: 'https://example.com/', title: 'Example', elements: [{ ref: 'e1', tag: 'button', x: 1, y: 2 }] }
+    const snapshotResult = await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'snapshot', args: {} }) as { elements: Array<{ ref: string }> }
+    expect(snapshotResult.elements[0]!.ref).toBe('e1')
+    await guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'type', args: { ref: 'e1', text: 'again' } })
+    expect(lastRecord().insertedTexts.at(-1)).toBe('again')
+    expect(lastRecord().executedScripts).toHaveLength(scriptsBefore + 1)
+    lastRecord().jsResult = { found: false }
+    await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'type', args: { ref: 'gone', text: 'x' } }))
+      .rejects.toMatchObject({ code: 'browser_element_not_found' })
+  })
+
+  it('captures the guest page as base64 png on screenshot', async () => {    const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
     const result = await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {} }) as { base64: string; mimeType: string }
     expect(result.mimeType).toBe('image/png')
