@@ -59,7 +59,7 @@ The plugin registers through `ctx.slots.inject` against `'sidebar.right.pane.tab
 
 ### Carrier
 
-The guest is a hardened offscreen `WebContentsView` created by the Desktop main process; the client half of this package remains presentation-only and holds no Electron or Node access.
+The guest is a hardened offscreen `WebContentsView` created by the Desktop main process. The tab's body measures its pane with a `ResizeObserver` and reports the rectangle over the application preload; main attaches the active tab's view at that rectangle, so the human watches the page the automation drives. The client half of this package stays presentation-only and holds no Electron or Node access.
 
 </details>
 
@@ -88,9 +88,9 @@ None; watching a guest page does not enter a model request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- The tab body does not yet render the live guest surface. It registers the tab type, title, and guide entry, and the pane reports its placeholder until the Desktop carrier publishes guest frames; until then the automation is observable only through the lease bounds the provider configures.
+- The tab body measures its pane and reports the rectangle to the Desktop shell, which draws the agent guest over it; the pane itself draws no page content, and it stays empty until the automation opens a lease for the same Session.
+- The pane reports geometry but does not yet show an in-flight indicator, element highlights, dialog prompts, or download progress.
 - The tab attaches to a Session's agent browser lease and owns no navigation of its own: there is no address bar, and opening the tab never loads a URL the automation did not load.
-- Automation state that the model does not request, such as element highlights, dialog prompts, and download progress, is not yet drawn here.
 
 <a id="dev-note"></a>
 ### Dev Note

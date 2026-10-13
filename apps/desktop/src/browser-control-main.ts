@@ -29,6 +29,7 @@ export function isShellBrowserControlRequest(message: unknown): message is Shell
   switch (candidate.op) {
     case 'acquire': {
       if (typeof candidate.workspaceKey !== 'string' || candidate.workspaceKey.length === 0) return false
+      if (candidate.sessionKey !== undefined && typeof candidate.sessionKey !== 'string') return false
       const bounds = candidate.bounds as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined
       if (bounds === undefined) return true
       return Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
@@ -103,6 +104,16 @@ export class ShellBrowserControlEndpoint {
     if (!isShellBrowserControlRequest(message)) return false
     void this.dispatch(message)
     return true
+  }
+
+  /**
+   * Publish one unsolicited fact about the shell's guests to the Host.
+   * @param name - event name the Host-side consumer branches on.
+   * @param payload - structured-clone JSON payload.
+   * @param leaseId - lease the fact belongs to, when it concerns one lease.
+   */
+  emit(name: string, payload: ShellBrowserJson, leaseId?: string): void {
+    this.send({ type: 'browser-event', name, payload, ...(leaseId === undefined ? {} : { leaseId }) })
   }
 
   private async dispatch(request: ShellBrowserRequest): Promise<void> {

@@ -59,7 +59,7 @@ kind: "package-reference"
 
 ### 载体
 
-guest 是 Desktop 主进程创建的加固离屏 `WebContentsView`；本包的 client 半边仅负责呈现，不持有 Electron 或 Node 能力。
+guest 是 Desktop 主进程创建的加固离屏 `WebContentsView`。tab 主体用 `ResizeObserver` 测量自身面板，并经应用 preload 上报矩形；主进程据此把活动 tab 的视图 attach 到该矩形，人类由此看到自动化正在操作的页面。本包的 client 半边仅负责呈现，不持有 Electron 或 Node 能力。
 
 </details>
 
@@ -88,9 +88,9 @@ guest 是 Desktop 主进程创建的加固离屏 `WebContentsView`；本包的 c
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- tab 主体尚未渲染实时 guest 画面。当前注册的是 tab 类型、标题与 guide 条目，面板在 Desktop 载体发布 guest 帧之前只呈现占位内容；在此之前只能通过 provider 配置的租约 bounds 观察自动化。
+- tab 主体会测量自己的面板并把矩形上报给 Desktop shell，由 shell 把 agent guest 绘制在其上；面板本身不绘制页面内容，且在自动化为同一 Session 打开租约之前保持空白。
+- 面板目前只上报几何信息，尚未绘制"正在操作"指示、元素高亮、弹窗提示与下载进度。
 - 该 tab 附着于 Session 的 agent 浏览器租约，自身不拥有导航：没有地址栏，打开 tab 也不会加载自动化未加载过的 URL。
-- 模型未请求的自动化状态——如元素高亮、弹窗提示与下载进度——尚未在此绘制。
 
 <a id="dev-note"></a>
 ### 开发备注

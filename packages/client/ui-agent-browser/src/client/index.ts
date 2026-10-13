@@ -1,5 +1,6 @@
 /** Register the Agent Browser tab type in the right Sidebar. */
 import type { Context } from '@deepseek-ai/cordis'
+import type { DesktopAgentBrowserBridge, DesktopAgentBrowserPane } from '../types.ts'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -11,14 +12,33 @@ import { AgentBody } from './view/AgentBody.tsx'
 /** Required Agent Browser services. */
 export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs']
 
+/** @returns the Desktop agent browser carrier, or `undefined` in the Web profile. */
+function desktopCarrier(): DesktopAgentBrowserBridge | undefined {
+  const carrier = (globalThis as typeof globalThis & {
+    dshDesktop?: { readonly protocolVersion: number; readonly agentBrowser?: DesktopAgentBrowserBridge }
+  }).dshDesktop
+  return carrier?.protocolVersion === 1 ? carrier.agentBrowser : undefined
+}
+
 /** Register the Agent Browser type, localized copy, body, and title. */
 export function apply(ctx: Context): void {
   const t = ctx.locale.bind(AGENT_BROWSER_NAMESPACE)
+  const bridge = desktopCarrier()
   ctx.effect(() => ctx.locale.register(AGENT_BROWSER_NAMESPACE, { zh, en }), 'ui-agent-browser.copy')
   ctx.effect(() => ctx.sidebarRightTabs.register(agentBrowserDefinition(t)), 'ui-agent-browser.type')
-  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-    name: 'sidebar.right.pane.tab', key: AGENT_BROWSER_ID, locale: AGENT_BROWSER_NAMESPACE,
-  }, AgentBody)), 'ui-agent-browser.body')
+  // The Desktop shell places the guest over the pane the body measures; the Web profile has no carrier.
+  const body = { name: 'sidebar.right.pane.tab', key: AGENT_BROWSER_ID, locale: AGENT_BROWSER_NAMESPACE } as const
+  if (bridge === undefined) {
+    ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab',
+      () => ctx.slots.register(body, AgentBody)), 'ui-agent-browser.body')
+  } else {
+    ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+      ...body,
+      inject: sessionId => ({
+        present: (pane: DesktopAgentBrowserPane | null): void => { void bridge.present(sessionId, pane) },
+      }),
+    }, AgentBody)), 'ui-agent-browser.body')
+  }
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab.title', key: AGENT_BROWSER_ID, locale: AGENT_BROWSER_NAMESPACE,
   }, () => t('type.label'))), 'ui-agent-browser.title')

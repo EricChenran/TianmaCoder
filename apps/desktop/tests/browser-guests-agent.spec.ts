@@ -188,6 +188,7 @@ function makeGuests(overrides?: {
   navigateTimeoutMs?: number
   ariaMaxChars?: number
   loadURL?: (url: string) => Promise<void>
+  emit?: (event: { name: string; leaseId: string; payload: unknown }) => void
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -206,6 +207,7 @@ function makeGuests(overrides?: {
     partitionFor: workspace => `partition-${workspace}`,
     ...(navigateTimeoutMs === undefined ? {} : { navigateTimeoutMs }),
     ...(ariaMaxChars === undefined ? {} : { ariaMaxChars }),
+    ...(overrides?.emit === undefined ? {} : { emit: overrides.emit }),
     ...(loadURL === undefined ? {} : { createView: (): AgentGuestView => makeWrappedGuest(loadURL) }),
   })
   return { guests }
@@ -574,6 +576,45 @@ describe('AgentBrowserGuests', () => {
     expect(reactivated.tabs.find(tab => tab.tabId === opened.tabId)?.suspended).toBe(false)
     await expect(guests.execute({ type: 'browser', requestId: 9, op: 'execute', leaseId, command: 'tabs', args: { action: 'nope' } }))
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
+  })
+
+  it('binds a Sidebar pane to the lease acquired for its Session', async () => {
+    const events: Array<{ name: string; leaseId: string; payload: Record<string, unknown> }> = []
+    const { guests } = makeGuests({ emit: event => events.push(event as never) })
+    await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 'session-1',
+    })
+    const attachments = lastRecord().bounds.length
+    expect(guests.present('another-session', { x: 0, y: 0, width: 10, height: 10 })).toBe(false)
+    expect(guests.present('session-1', { x: 5, y: 6, width: 700, height: 500 })).toBe(true)
+    expect(lastRecord().bounds).toHaveLength(attachments + 1)
+    const presented = events.filter(event => event.name === 'browser-state').at(-1)
+    expect(presented?.payload.presented).toBe(true)
+    expect(presented?.payload.tabs).toHaveLength(1)
+    expect(guests.present('session-1', null)).toBe(true)
+    const released = events.filter(event => event.name === 'browser-state').at(-1)
+    expect(released?.payload.presented).toBe(false)
+  })
+
+  it('publishes activity around each command and a closed state on release', async () => {
+    const events: Array<{ name: string; leaseId: string; payload: Record<string, unknown> }> = []
+    const { guests } = makeGuests({ emit: event => events.push(event as never) })
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'getState', args: {} })
+    const activity = events.filter(event => event.name === 'browser-activity').map(event => event.payload)
+    expect(activity[0]).toMatchObject({ active: true, command: 'getState' })
+    expect(activity.at(-1)).toMatchObject({ active: false })
+    await guests.release({ leaseId })
+    const closed = events.at(-1)
+    expect(closed?.name).toBe('browser-state')
+    expect(closed?.payload).toMatchObject({ closed: true, presented: false })
+  })
+
+  it('rejects an unknown command with a structured code', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
+    await expect(guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'nope', args: {} }))
+      .rejects.toMatchObject({ code: 'browser_unknown_command' })
   })
 
   it('closes the oldest background tab when a new one exceeds the residency limit', async () => {

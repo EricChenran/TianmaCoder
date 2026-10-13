@@ -113,6 +113,14 @@ const SNAPSHOT_SCRIPT = `(() => {
  * browser's per-workspace storage partition, so the agent operates with the same
  * login state the human browser holds; URL policy matches the human sidebar.
  */
+/** One unsolicited fact about an agent lease, published for the Host and the window. */
+export interface ShellBrowserGuestEvent {
+  /** `browser-state` carries the tab list; `browser-activity` carries one command's in-flight state. */
+  readonly name: 'browser-state' | 'browser-activity'
+  readonly leaseId: string
+  readonly payload: ShellBrowserJson
+}
+
 /** One element address captured by the last snapshot: its click point and the semantics read at capture time. */
 interface AgentRef {
   readonly x: number
@@ -142,9 +150,13 @@ interface AgentTab {
 /** One lease: a tab set with an active pointer, all sharing one workspace partition. */
 interface GuestLease {
   readonly workspaceKey: string
+  /** Session this lease belongs to; a pane presenting it must match. */
+  readonly sessionKey?: string
   readonly tabs: Map<string, AgentTab>
   activeTabId: string
   bounds: { x: number; y: number; width: number; height: number }
+  /** Pane rectangle the window last reported for this lease; absent means nothing is showing it. */
+  pane?: { x: number; y: number; width: number; height: number }
   /** Page viewport size the automation asked for; applied to the attached view while the lease is visible. */
   viewport: { width: number; height: number }
   /** Whether this lease placed its view on screen at acquire time. */
@@ -171,6 +183,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly createView?: (partition: string) => AgentGuestView
     readonly navigateTimeoutMs?: number
     readonly ariaMaxChars?: number
+    /** Receives lease state and activity facts for the Host seam and the window that presents them. */
+    readonly emit?: (event: ShellBrowserGuestEvent) => void
   }) {}
 
   /** Upper bound for one ARIA snapshot result, applied to the complete emitted value. */
@@ -193,30 +207,96 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const view = (this.options.createView ?? createWebContentsViewGuest)(this.options.partitionFor(request.workspaceKey))
     const bounds = request.bounds ?? { x: 0, y: 0, width: 1, height: 1 }
     const now = Date.now()
-    this.#leases.set(leaseId, {
+    const lease: GuestLease = {
       workspaceKey: request.workspaceKey,
+      ...(request.sessionKey === undefined ? {} : { sessionKey: request.sessionKey }),
       tabs: new Map([[tabId, this.newTab(view, now)]]),
       activeTabId: tabId,
       bounds,
       viewport: { width: bounds.width, height: bounds.height },
       visible: request.bounds !== undefined,
-    })
-    const window = this.options.getWindow()
-    if (window !== undefined && !window.isDestroyed()) {
-      view.attach(window, bounds)
     }
+    this.#leases.set(leaseId, lease)
+    this.attachActive(lease)
+    this.publishState(leaseId, lease)
     return Promise.resolve({ leaseId, tabId })
+  }
+
+  /**
+   * Bind a Sidebar pane to the lease acquired for one Session.
+   * @param sessionKey - Session the pane reports; must equal the lease's acquire key.
+   * @param pane - pane rectangle in window coordinates, or `null` to stop presenting.
+   * @returns Whether a lease matched and now presents there.
+   */
+  present(sessionKey: string, pane: { x: number; y: number; width: number; height: number } | null): boolean {
+    for (const [leaseId, lease] of this.#leases) {
+      if (lease.sessionKey !== sessionKey) continue
+      if (pane === null) delete lease.pane
+      else lease.pane = pane
+      this.attachActive(lease)
+      this.publishState(leaseId, lease)
+      return true
+    }
+    return false
+  }
+
+  /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
+  private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
+    if (lease.pane !== undefined) return lease.pane
+    return lease.visible ? lease.bounds : { x: 0, y: 0, width: 1, height: 1 }
+  }
+
+  /** Attach the active tab at its resolved rectangle when a window can host it. */
+  private attachActive(lease: GuestLease): void {
+    const window = this.options.getWindow()
+    const active = lease.tabs.get(lease.activeTabId)
+    if (window === undefined || window.isDestroyed() || active === undefined) return
+    active.view.attach(window, this.attachTarget(lease))
+  }
+
+  /** Publish the tab list of one lease for the Host seam and the pane that presents it. */
+  private publishState(leaseId: string, lease: GuestLease): void {
+    this.options.emit?.({
+      name: 'browser-state',
+      leaseId,
+      payload: {
+        leaseId,
+        closed: false,
+        activeTabId: lease.activeTabId,
+        presented: lease.pane !== undefined,
+        tabs: [...lease.tabs.entries()].map(([tabId, tab]) => ({
+          tabId,
+          url: tab.view.webContents.isDestroyed() ? '' : tab.view.webContents.getURL(),
+          title: tab.view.webContents.isDestroyed() ? '' : tab.view.webContents.getTitle(),
+          active: tabId === lease.activeTabId,
+          suspended: tab.suspended,
+        })),
+      },
+    })
+  }
+
+  /** Publish one command's in-flight state so a pane can light up while the automation acts. */
+  private publishActivity(leaseId: string, active: boolean, command?: string): void {
+    this.options.emit?.({
+      name: 'browser-activity',
+      leaseId,
+      payload: { leaseId, active, ...(command === undefined ? {} : { command }) },
+    })
   }
 
   async execute(request: ShellBrowserExecuteRequest): Promise<ShellBrowserJson> {
     const tab = this.tab(request.leaseId)
     tab.operationActive = true
+    this.publishActivity(request.leaseId, true, request.command)
     try {
       const result = await this.dispatch(request, tab)
       tab.lastActivityAt = Date.now()
       return result
     } finally {
       tab.operationActive = false
+      this.publishActivity(request.leaseId, false)
+      const lease = this.#leases.get(request.leaseId)
+      if (lease !== undefined) this.publishState(request.leaseId, lease)
     }
   }
 
@@ -382,9 +462,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       active.lastSelectedAt = Date.now()
       active.lastActivityAt = active.lastSelectedAt
     }
-    if (window !== undefined && !window.isDestroyed() && active !== undefined) {
-      active.view.attach(window, lease.bounds)
-    }
+    this.attachActive(lease)
   }
 
   /** Current page facts without navigating. */
@@ -763,14 +841,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     const width = viewportDimension(parsed.width, AGENT_VIEWPORT_DEFAULT.width, AGENT_VIEWPORT_MIN.width, AGENT_VIEWPORT_MAX.width)
     const height = viewportDimension(parsed.height, AGENT_VIEWPORT_DEFAULT.height, AGENT_VIEWPORT_MIN.height, AGENT_VIEWPORT_MAX.height)
     lease.viewport = { width, height }
-    if (lease.visible) {
-      lease.bounds = { ...lease.bounds, width, height }
-      const window = this.options.getWindow()
-      const active = lease.tabs.get(lease.activeTabId)
-      if (window !== undefined && !window.isDestroyed() && active !== undefined) active.view.attach(window, lease.bounds)
+    if (lease.visible || lease.pane !== undefined) {
+      if (lease.visible) lease.bounds = { ...lease.bounds, width, height }
+      this.attachActive(lease)
     }
-    return { width, height, visible: lease.visible }
-  }
+    return { width, height, visible: lease.visible }  }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
   private async click(
@@ -818,6 +893,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     this.#leases.delete(request.leaseId)
     for (const tab of lease.tabs.values()) tab.view.destroy()
+    this.options.emit?.({
+      name: 'browser-state',
+      leaseId: request.leaseId,
+      payload: { leaseId: request.leaseId, closed: true, presented: false, tabs: [] },
+    })
     return Promise.resolve(null)
   }
 }

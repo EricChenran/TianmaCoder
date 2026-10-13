@@ -31,6 +31,12 @@ export type BrowserControlRequest = {
   readonly op: 'acquire'
   /** Workspace storage identity the lease belongs to; mirrors the sidebar browser lease key. */
   readonly workspaceKey: string
+  /**
+   * Session the lease belongs to. The shell matches it against the pane a Sidebar
+   * tab reports, so the guest the automation drives can be shown where the human
+   * is looking. Absent means no pane can be bound to this lease.
+   */
+  readonly sessionKey?: string
   /** Optional on-screen rectangle; absent means the guest stays invisible (placeholder bounds). */
   readonly bounds?: BrowserControlBounds
 } | {
@@ -87,6 +93,7 @@ export function isBrowserControlRequest(message: unknown): message is BrowserCon
   switch (candidate.op) {
     case 'acquire': {
       if (typeof candidate.workspaceKey !== 'string' || candidate.workspaceKey.length === 0) return false
+      if (candidate.sessionKey !== undefined && typeof candidate.sessionKey !== 'string') return false
       const bounds = candidate.bounds as { x?: unknown; y?: unknown; width?: unknown; height?: unknown } | undefined
       if (bounds === undefined) return true
       return Number.isFinite(bounds.x) && Number.isFinite(bounds.y)

@@ -56,6 +56,7 @@ import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.t
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
 import { AgentBrowserGuests } from './browser-guests-agent.ts'
+import type { DesktopAgentBrowserPane } from '@deepseek-ai/dsh-client-ui-agent-browser/types'
 import { ShellBrowserControlEndpoint } from './browser-control-main.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
@@ -443,17 +444,53 @@ async function main(): Promise<void> {
   }
   const platformView = new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
-  const backend = new DesktopBackendController((onFailure) => {
-    const hostInspectPort = developmentHostInspectPort(development)
+  /** Bound once the backend owns its agent guests; absent until then. */
+  const agentPane: { current?: (sessionKey: string, pane: DesktopAgentBrowserPane | null) => boolean } = {}
+  const backend = new DesktopBackendController((onFailure) => {    const hostInspectPort = developmentHostInspectPort(development)
     const hostReference: { current?: DesktopHostProcess } = {}
+    const controlReference: { current?: ShellBrowserControlEndpoint } = {}
+    /** Last activity fact per lease, merged with presentation state before the window sees it. */
+    const agentActivity = new Map<string, { busy: boolean; command?: string; presented: boolean }>()
+    const publishAgentActivity = (leaseId: string): void => {
+      const fact = agentActivity.get(leaseId)
+      if (fact === undefined || mainWindow === undefined || mainWindow.isDestroyed()) return
+      mainWindow.webContents.send(DESKTOP_IPC.agentBrowserActivity, {
+        leaseId, busy: fact.busy, presented: fact.presented,
+        ...(fact.command === undefined ? {} : { command: fact.command }),
+      })
+    }
     const agentGuests = new AgentBrowserGuests({
       hostUrl: () => hostUrl,
       getWindow: () => mainWindow,
       partitionFor: workspace => browserGuests.partitionFor(workspace),
+      emit: (event) => {
+        controlReference.current?.emit(event.name, event.payload, event.leaseId)
+        const payload = event.payload as { active?: unknown; command?: unknown; presented?: unknown; closed?: unknown }
+        if (event.name === 'browser-activity') {
+          const previous = agentActivity.get(event.leaseId)
+          agentActivity.set(event.leaseId, {
+            busy: payload.active === true,
+            presented: previous?.presented ?? false,
+            ...(typeof payload.command === 'string' ? { command: payload.command } : {}),
+          })
+        } else if (payload.closed === true) {
+          agentActivity.delete(event.leaseId)
+        } else {
+          const previous = agentActivity.get(event.leaseId)
+          agentActivity.set(event.leaseId, {
+            busy: previous?.busy ?? false,
+            presented: payload.presented === true,
+            ...(previous?.command === undefined ? {} : { command: previous.command }),
+          })
+        }
+        publishAgentActivity(event.leaseId)
+      },
     })
     const browserControl = new ShellBrowserControlEndpoint(
       (message) => { hostReference.current?.postToHost(message) },
       agentGuests)
+    controlReference.current = browserControl
+    agentPane.current = (sessionKey, pane) => agentGuests.present(sessionKey, pane)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
@@ -720,6 +757,32 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.browserRelease, (event, lease: unknown) => {
     assertProductSender(event)
     return browserGuests.release(event.sender, lease)
+  })
+
+  ipcMain.handle(DESKTOP_IPC.agentBrowserPresent, (event, request: unknown) => {
+    assertProductSender(event)
+    if (typeof request !== 'object' || request === null) throw new Error('dsh desktop: rejected an agent browser pane report')
+    const candidate = request as { sessionKey?: unknown; pane?: unknown }
+    if (typeof candidate.sessionKey !== 'string' || candidate.sessionKey.length === 0) {
+      throw new Error('dsh desktop: an agent browser pane report requires a session key')
+    }
+    if (candidate.pane === null) return agentPane.current?.(candidate.sessionKey, null) ?? false
+    const pane = candidate.pane as Record<string, unknown> | undefined
+    const read = (key: string): number | undefined => {
+      const value = pane?.[key]
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    }
+    const x = read('x')
+    const y = read('y')
+    const width = read('width')
+    const height = read('height')
+    if (x === undefined || y === undefined || width === undefined || height === undefined) {
+      throw new Error('dsh desktop: an agent browser pane report requires finite bounds or null')
+    }
+    return agentPane.current?.(candidate.sessionKey, {
+      x: Math.round(x), y: Math.round(y),
+      width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)),
+    }) ?? false
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {
