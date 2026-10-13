@@ -55,6 +55,7 @@ import { readDesktopSettings } from './settings.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
+import { ShellBrowserControlEndpoint, UnsupportedShellBrowserHandler } from './browser-control-main.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -443,10 +444,16 @@ async function main(): Promise<void> {
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
+    const hostReference: { current?: DesktopHostProcess } = {}
+    const browserControl = new ShellBrowserControlEndpoint(
+      (message) => { hostReference.current?.postToHost(message) },
+      new UnsupportedShellBrowserHandler())
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) },
+      (request) => { browserControl.handle(request) })
+    hostReference.current = host
     return {
       start: async () => {
         const ready = await host.start()

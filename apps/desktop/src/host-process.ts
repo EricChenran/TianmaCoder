@@ -3,6 +3,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
+import { isShellBrowserControlRequest, type ShellBrowserRequest } from './browser-control-main.ts'
 import { desktopNodeEnvironment } from './node-environment.ts'
 
 interface ReadyEvent {
@@ -177,6 +178,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly onBrowserControl?: (request: ShellBrowserRequest) => void,
   ) {}
 
   /**
@@ -204,6 +206,10 @@ export class DesktopHostProcess {
     child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
     child.stdout?.pipe(process.stdout)
     child.on('message', (message: unknown) => {
+      if (isShellBrowserControlRequest(message)) {
+        this.onBrowserControl?.(message)
+        return
+      }
       if (!isDesktopHostEvent(message)) {
         this.fail(new Error('dsh desktop host sent an invalid IPC event'))
         child.kill('SIGTERM')
@@ -305,6 +311,17 @@ export class DesktopHostProcess {
       // This diagnostic reaches expandable UI; arbitrary plugin stderr can contain credentials.
       throw new DesktopHostUncleanExitError(`desktop update: Host did not complete graceful task teardown (exit ${String(child.exitCode)}, signal ${String(child.signalCode)}, shutdown acknowledged ${String(this.shutdownCompleted)}, graceful deadline exceeded ${String(!graceful)})`)
     }
+  }
+
+  /**
+   * Deliver one message object to the running Host child.
+   * @returns Whether the child is connected and accepted the message.
+   */
+  postToHost(message: object): boolean {
+    const child = this.child
+    if (child === undefined || !child.connected) return false
+    child.send(message, (error) => { if (error !== null) this.fail(error) })
+    return true
   }
 
   private fail(error: Error): void {

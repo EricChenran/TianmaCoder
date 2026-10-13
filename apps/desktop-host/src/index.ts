@@ -14,6 +14,7 @@ import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+import { installDesktopBrowserControl } from './browser-control.ts'
 import { desktopWebPort } from './web-port.ts'
 
 async function main(): Promise<void> {
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
   const control: {
     updateTasks?: ReturnType<typeof installDesktopUpdateTaskControl>
     quitInspection?: ReturnType<typeof installDesktopQuitInspection>
+    browser?: (message: unknown) => boolean
   } = {}
   const send = (message: object): Promise<void> => new Promise((resolve, reject) => {
     if (!process.connected || process.send === undefined) { resolve(); return }
@@ -59,6 +61,7 @@ async function main(): Promise<void> {
   })()
   process.on('message', (message: unknown) => {
     if (typeof message !== 'object' || message === null || !('type' in message)) return
+    if (control.browser?.(message) === true) return
     if (message.type === 'shutdown') { void stop(); return }
     if (message.type === 'quit-inspection') {
       if (!('requestId' in message) || !Number.isSafeInteger(message.requestId)) return
@@ -93,6 +96,7 @@ async function main(): Promise<void> {
   const { ctx } = await application
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
   control.quitInspection = installDesktopQuitInspection(ctx)
+  control.browser = installDesktopBrowserControl(ctx, send)
   await ctx.plugin(desktopOffice, {
     runtimeDir,
     source: process.argv[4] ?? join(runtimeDir, '..', 'runtime', 'primary-runtime'),
