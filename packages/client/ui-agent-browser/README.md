@@ -91,7 +91,7 @@ None; watching a guest page does not enter a model request.
 - The tab body measures its pane and reports the rectangle to the Desktop shell, which draws the agent guest over it; the pane itself draws no page content, and it stays empty until the automation opens a lease for the same Session.
 - The strip names the in-flight command and the toolbar shows the viewport in force, but the pane still shows no element highlights, dialog prompts, or download progress.
 - The tab attaches to a Session's agent browser lease: its toolbar drives that lease's guest, so an address the human types loads in the page the automation is driving, and every control stays disabled while no lease holds the Session.
-- A page lays out only in a surface something presents; while the tab is closed and no watch rectangle is configured, the guest waits at one pixel, so a viewport the automation asks for takes effect once a pane shows the lease.
+- The pane is where you watch an automation, not what makes it work: while the tab is closed the shell parks the guest at its requested viewport size under the application document, so the size the automation asked for and its captures stay real with nothing on screen.
 
 <a id="dev-note"></a>
 ### Dev Note

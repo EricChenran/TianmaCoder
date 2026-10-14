@@ -178,7 +178,6 @@ describe('Desktop guest provider', () => {
     // Nothing presents the lease yet: the size is recorded, and in force once a pane shows it.
     shellClient.viewportReply = { width: 1600, height: 900, scale: 0.5, visible: false }
     const parked = await viewport.execute({ width: 1600, height: 900 }, minimalExec) as { content: Array<{ text: string }> }
-    expect(parked.content[0]!.text)
-      .toBe('Viewport 1600x900 recorded; the page lays out in it once the Agent Browser tab shows it')
+    expect(parked.content[0]!.text).toBe('Viewport 1600x900; no pane is showing the page')
   })
 })

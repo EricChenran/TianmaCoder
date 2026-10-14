@@ -394,7 +394,7 @@ function makeGuests(overrides?: {
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
-      addChildView: () => {},
+      addChildView: (_view, index) => { viewStack.push(index) },
       removeChildView: () => {},
     },
     isDestroyed: () => false,
@@ -428,7 +428,13 @@ function lastRecord(): FakeWrappedGuest {
   return record
 }
 
-beforeEach(() => { FakeView.instances.length = 0 })
+/** Stacking index of each attach, in order: 0 parks a view under the application document. */
+const viewStack: Array<number | undefined> = []
+
+beforeEach(() => {
+  FakeView.instances.length = 0
+  viewStack.length = 0
+})
 afterEach(() => { FakeView.instances.length = 0 })
 
 describe('Agent guest URL policy', () => {
@@ -453,9 +459,11 @@ describe('AgentBrowserGuests', () => {
     expect(typeof result.leaseId).toBe('string')
     const record = lastRecord()
     expect(record.lastPreferences).toMatchObject({ partition: 'partition-ws-1', sandbox: true, nodeIntegration: false })
-    // A guest nothing presents stays inside the window at one pixel. A view clipped
-    // outside the window gets a zero-sized renderer viewport, which breaks layout.
-    expect(record.bounds).toEqual([{ x: 0, y: 0, width: 1, height: 1 }])
+    // A guest nothing presents keeps the layout viewport it was asked for, stacked under
+    // the application document so nobody sees it. Shrinking it to one pixel instead laid
+    // the page out in one pixel; detaching it gives a zero-sized renderer viewport.
+    expect(record.bounds).toEqual([{ x: 0, y: 0, width: 1280, height: 720 }])
+    expect(viewStack.at(-1)).toBe(0)
   })
 
   it('creates the lease without attachment when no window is available', async () => {
@@ -698,6 +706,8 @@ describe('AgentBrowserGuests', () => {
       type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-1',
     }) as { leaseId: string }
     expect(guests.present('s-1', { x: 10, y: 20, width: 420, height: 900 })).toBe(true)
+    // A pane shows it, so the view is stacked in front again.
+    expect(viewStack.at(-1)).toBeUndefined()
     const sized = await guests.execute({
       type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 375, height: 667 },
     }) as { width: number; height: number; scale: number; follow: boolean; visible: boolean }
@@ -807,7 +817,7 @@ describe('AgentBrowserGuests', () => {
     expect(result).toEqual({ width: 500, height: 400, scale: 1, follow: false, visible: false })
     // Only a presented surface gives the page the size it lays out in; the parked
     // rectangle stays inside the window so the renderer keeps a real viewport.
-    expect(lastRecord().bounds.at(-1)).toEqual({ x: 0, y: 0, width: 1, height: 1 })
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: 0, y: 0, width: 500, height: 400 })
   })
 
   it('reports the PNG pixel size and flags a capture that misses the viewport', async () => {

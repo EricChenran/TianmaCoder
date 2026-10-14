@@ -24,7 +24,11 @@ import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './bro
 /** The slice of an Electron window the carrier needs to host one guest view. */
 export interface AgentGuestHostWindow {
   readonly contentView: {
-    addChildView(view: AgentGuestElectronView): void
+    /**
+     * @param view - child view to add.
+     * @param index - stacking position; `0` puts it under the application document.
+     */
+    addChildView(view: AgentGuestElectronView, index?: number): void
     removeChildView(view: AgentGuestElectronView): void
   }
   isDestroyed(): boolean
@@ -40,6 +44,8 @@ export interface AgentGuestSurface {
   readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
   /** Page scale; the layout viewport is the rectangle divided by this factor. */
   readonly zoom: number
+  /** True when no pane shows this surface, so it stays under the application document. */
+  readonly parked: boolean
 }
 
 /** The slice of session history the history command drives (reload lives on WebContents). */
@@ -63,8 +69,14 @@ export interface AgentGuestView {
     evaluateInIsolatedWorld(script: string): Promise<unknown>
     capturePage(): Promise<AgentGuestCapture>
   }
-  /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
-  attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds): void
+  /**
+   * Attach to the window at the requested rectangle.
+   * @param window - window hosting the view.
+   * @param bounds - rectangle the view occupies, in window coordinates.
+   * @param placement - `back` stacks the view under the application document, which is
+   *   how a page nothing shows keeps its own layout without appearing; `front` shows it.
+   */
+  attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds, placement?: 'front' | 'back'): void
   /**
    * Scale the page, so the layout viewport becomes the attached rectangle divided by
    * the factor. Absent when the carrier cannot zoom, which leaves the page at 1:1.
@@ -478,13 +490,13 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   private surfaceFor(lease: GuestLease): AgentGuestSurface {
     const pane = this.presentingPane(lease)
     const reference = pane ?? (lease.visible ? lease.bounds : undefined)
-    if (reference === undefined) return { bounds: parkedSurface(), zoom: 1 }
+    if (reference === undefined) return { bounds: parkedSurface(lease.viewport), zoom: 1, parked: true }
     // A borrowed page the window owns is never scaled: its carrier has no zoom, so the
     // reference rectangle alone decides, exactly as it does without a requested viewport.
     const zoomable = lease.tabs.get(lease.activeTabId)?.view.setZoom !== undefined
-    if (!lease.explicitViewport || !zoomable) return { bounds: reference, zoom: 1 }
+    if (!lease.explicitViewport || !zoomable) return { bounds: reference, zoom: 1, parked: false }
     const zoom = viewportZoom(reference, lease.viewport)
-    return { bounds: centeredSurface(reference, lease.viewport, zoom), zoom }
+    return { bounds: centeredSurface(reference, lease.viewport, zoom), zoom, parked: false }
   }
 
   /**
@@ -509,7 +521,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     // A usable pane is the fact the reveal retry stops on: the human now owns the tab.
     if (this.presentingPane(lease) !== undefined) lease.presentedOnce = true
     lease.zoom = surface.zoom
-    active.view.attach(window, surface.bounds)
+    active.view.attach(window, surface.bounds, surface.parked ? 'back' : 'front')
     active.view.setZoom?.(surface.zoom)
   }
 
@@ -872,7 +884,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   ): void {
     const previous = lease.tabs.get(lease.activeTabId)
     if (window !== undefined && !window.isDestroyed() && previous !== undefined && lease.activeTabId !== tabId) {
-      previous.view.attach(window, parkedSurface())
+      previous.view.attach(window, parkedSurface(lease.viewport), 'back')
     }
     lease.activeTabId = tabId
     const active = lease.tabs.get(tabId)
@@ -1769,9 +1781,10 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       evaluateInIsolatedWorld: (script: string) => web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
       capturePage: () => web.capturePage(),
     },
-    attach(target, bounds) {
+    attach(target, bounds, placement) {
       window = target
-      window.contentView.addChildView(view)
+      // A parked view is stacked under the application document; anything else is shown.
+      window.contentView.addChildView(view, placement === 'back' ? 0 : undefined)
       view.setBounds(bounds)
     },
     setZoom(factor) {
@@ -1913,16 +1926,21 @@ function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'met
 const AGENT_FRAME_MAX_DEPTH = 4
 
 /**
- * Rectangle that parks a guest nothing is showing: one pixel inside the window.
- * A view positioned outside the window is fully clipped, and Chromium then gives its
- * renderer a zero-sized viewport: the page gets no layout, no hit testing, and no
- * frames, so every command fails and captures come back empty. A parked guest
- * therefore keeps a real, if tiny, layout; the pane and watch rectangles give it the
- * surface interaction and capture need.
- * @returns The in-window parked rectangle.
+ * Rectangle that parks a guest nothing is showing: its full layout viewport, stacked
+ * under the application document so no human sees it.
+ *
+ * The older choice was a single pixel, which kept the renderer alive but laid the page
+ * out in one pixel: a parked page measured a layout viewport of 1x1 and its controls at
+ * x = -77, captures came back one pixel wide, and a click reported success at (1, 78)
+ * while changing nothing. Detaching instead is not an option either: a view clipped out
+ * of the window gets a zero-sized renderer viewport, so the page has no layout at all.
+ * @param viewport - layout viewport the lease is using.
+ * @returns The parked rectangle, in window coordinates.
  */
-function parkedSurface(): { x: number; y: number; width: number; height: number } {
-  return { x: 0, y: 0, width: 1, height: 1 }
+function parkedSurface(
+  viewport: { readonly width: number; readonly height: number },
+): { x: number; y: number; width: number; height: number } {
+  return { x: 0, y: 0, width: viewport.width, height: viewport.height }
 }
 
 /** Smallest pane rectangle the guest may present in; a smaller report measured no area. */
