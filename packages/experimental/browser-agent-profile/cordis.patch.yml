@@ -1,0 +1,13 @@
+# Desktop agent browser automation, shipped switched off: the launcher lists this
+# bundle in OPTIONAL_BUNDLES, no shipped profile selects it, and the Desktop Host
+# already provides the browser control seam the guest provider injects.
+
+- insert:
+    - id: browser-use
+      name: '@deepseek-ai/dsh-browser-use'
+
+    - id: browser-use-desktop-guest
+      name: '@deepseek-ai/dsh-experimental-browser-use-desktop-guest'
+      config:
+        # Storage partition and login state the agent guests share with the sidebar browser.
+        workspaceKey: default

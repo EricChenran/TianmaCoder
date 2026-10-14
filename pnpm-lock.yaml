@@ -295,6 +295,9 @@ importers:
       '@deepseek-ai/dsh-experimental-badge-skill-bundle':
         specifier: workspace:*
         version: link:../../packages/experimental/badge-skill-bundle
+      '@deepseek-ai/dsh-experimental-browser-agent-profile':
+        specifier: workspace:*
+        version: link:../../packages/experimental/browser-agent-profile
       '@deepseek-ai/dsh-experimental-cot-translation-bundle':
         specifier: workspace:*
         version: link:../../packages/experimental/cot-translation-bundle
@@ -3246,6 +3249,12 @@ importers:
       '@deepseek-ai/dsh-client-store':
         specifier: workspace:*
         version: link:../store
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../ui-renderer
+      '@deepseek-ai/dsh-client-ui-session':
+        specifier: workspace:*
+        version: link:../ui-session
       '@deepseek-ai/dsh-client-ui-sidebar-right':
         specifier: workspace:*
         version: link:../ui-sidebar-right
@@ -7589,6 +7598,19 @@ importers:
         specifier: workspace:~
         version: link:../../../vendor/cordis
 
+  packages/experimental/browser-agent-profile:
+    dependencies:
+      '@deepseek-ai/dsh-browser-use':
+        specifier: workspace:*
+        version: link:../../browser-use/browser-use
+      '@deepseek-ai/dsh-experimental-browser-use-desktop-guest':
+        specifier: workspace:*
+        version: link:../browser-use-desktop-guest
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+
   packages/experimental/browser-use-chrome-devtools-mcp:
     dependencies:
       '@deepseek-ai/dsh-experimental-browser-use-runtime':
@@ -10141,7 +10163,11 @@ importers:
         specifier: workspace:*
         version: link:../../core/tools
 
-  packages/host/browser-control: {}
+  packages/host/browser-control:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
 
   packages/host/directory-picker:
     devDependencies:

@@ -1057,6 +1057,9 @@
   "packages/experimental/auto-review/tests/auto-review.spec.ts": {
     "5bb6193769cfbb9fc09abd705fed714917784de269546fde14ac1171fb00644b": 1
   },
+  "packages/experimental/browser-use-desktop-guest/tests/loader-composition.spec.ts": {
+    "2bacab667d9b30188705724df1ae681fd51fb4ebc2668d8e062bfd37d6eb54f1": 1
+  },
   "packages/experimental/browser-use-runtime/src/index.ts": {
     "04bc8a44533574365dfedf563e2356458bcf95f990a00906938c977c1d683356": 1
   },
