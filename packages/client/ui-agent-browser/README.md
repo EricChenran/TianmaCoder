@@ -25,7 +25,7 @@ Report the embedded browser page an agent automation is currently driving, as a 
 <a id="use-this-package"></a>
 ## Use this package
 
-Open **Agent Browser** from the right-Sidebar guide, or let an automation open it: the tab appears by itself when the agent acquires its browser lease for the Session on screen, because the pane is both where the human watches the agent work and the surface the guest measures. The tab attaches to the agent browser lease of its Session, so the pane follows the page the automation is working on without a second navigation of its own. The tab is multiple-capable, matching the Browser tab next to it.
+Open **Agent Browser** from the right-Sidebar guide, or let an automation open it: the tab appears by itself when the agent acquires its browser lease for the Session on screen, because the pane is both where the human watches the agent work and the surface the guest measures. A request that cannot open at that moment — another Session is on screen, or the column has no surface yet — is held and retried as the on-screen Session changes, and the shell keeps asking until a pane has shown the lease. The tab attaches to the agent browser lease of its Session, so the pane follows the page the automation is working on without a second navigation of its own. Its strip names what the automation is doing and its toolbar drives the same guest — back, forward, reload, an address field, and a viewport control — so the human and the model work the same page. The tab is multiple-capable, matching the Browser tab next to it.
 
 ### When to choose it
 
@@ -59,7 +59,7 @@ The plugin registers through `ctx.slots.inject` against `'sidebar.right.pane.tab
 
 ### Carrier
 
-The guest is a hardened offscreen `WebContentsView` created by the Desktop main process. The tab's body measures its pane with a `ResizeObserver` and reports the rectangle over the application preload; main attaches the active tab's view at that rectangle, so the human watches the page the automation drives. The client half of this package stays presentation-only and holds no Electron or Node access.
+The guest is a hardened offscreen `WebContentsView` created by the Desktop main process. The tab's body measures its pane with a `ResizeObserver` and reports the rectangle over the application preload; main attaches the active tab's view at that rectangle, so the human watches the page the automation drives. A viewport the automation asks for governs the page's layout size: the view is scaled down to fit the pane instead of being clipped, and input the page reports as layout coordinates is scaled back into view coordinates on the way in. The toolbar's controls travel the same preload to the same lease, so the pane needs no second implementation of navigation. The client half of this package stays presentation-only and holds no Electron or Node access.
 
 </details>
 
@@ -89,8 +89,9 @@ None; watching a guest page does not enter a model request.
 <a id="known-limitations-and-deferred-work"></a>
 
 - The tab body measures its pane and reports the rectangle to the Desktop shell, which draws the agent guest over it; the pane itself draws no page content, and it stays empty until the automation opens a lease for the same Session.
-- The pane reports geometry but does not yet show an in-flight indicator, element highlights, dialog prompts, or download progress.
-- The tab attaches to a Session's agent browser lease and owns no navigation of its own: there is no address bar, and opening the tab never loads a URL the automation did not load.
+- The strip names the in-flight command and the toolbar shows the viewport in force, but the pane still shows no element highlights, dialog prompts, or download progress.
+- The tab attaches to a Session's agent browser lease: its toolbar drives that lease's guest, so an address the human types loads in the page the automation is driving, and every control stays disabled while no lease holds the Session.
+- A page lays out only in a surface something presents; while the tab is closed and no watch rectangle is configured, the guest waits at one pixel, so a viewport the automation asks for takes effect once a pane shows the lease.
 
 <a id="dev-note"></a>
 ### Dev Note

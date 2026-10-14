@@ -13,6 +13,8 @@ let agent: { id: SessionId; session: { id: SessionId }; ctx: Context }
 
 const shellClient = {
   snapshotElements: [] as Array<{ ref: string; tag: string; name?: string; text?: string }>,
+  /** What the shell answers a `viewport` command with; `undefined` echoes the request. */
+  viewportReply: undefined as { width: number; height: number; scale?: number; visible?: boolean } | undefined,
   request: async (request: Record<string, unknown>) => {
     sent.push(request)
     if (request.op === 'acquire') return { leaseId: 'l-1' }
@@ -30,7 +32,7 @@ const shellClient = {
     }
     if (request.op === 'execute' && request.command === 'viewport') {
       const args = request.args as { width?: number; height?: number } | undefined
-      return { width: args?.width ?? 1280, height: args?.height ?? 720, visible: true }
+      return shellClient.viewportReply ?? { width: args?.width ?? 1280, height: args?.height ?? 720, visible: true }
     }
     if (request.op === 'execute') return { url: request.args ? (request.args as { url: string }).url : '', title: 'Example' }
     return null
@@ -46,6 +48,7 @@ beforeEach(() => {
   sent.length = 0
   registered.length = 0
   sections.length = 0
+  shellClient.viewportReply = undefined
   ctx = new Context()
   new BrowserUseRegistry(ctx)
   agent = { id: SessionId('writer'), session: { id: SessionId('writer') }, ctx }
@@ -159,7 +162,7 @@ describe('Desktop guest provider', () => {
     expect(sent.find(message => message.command === 'elementInfo')?.args).toEqual({ selector: '#name' })
   })
 
-  it('reports the effective viewport of the guest tab', async () => {
+  it('reports the effective viewport, and where it stands', async () => {
     applyProvider()
     const viewport = registered.find(tool => tool.name === 'browser_viewport')
     if (viewport === undefined) throw new Error('browser_viewport is not registered')
@@ -168,5 +171,14 @@ describe('Desktop guest provider', () => {
     const bare = await viewport.execute({}, minimalExec) as { content: Array<{ text: string }> }
     expect(bare.content[0]!.text).toBe('Viewport 1280x720')
     expect(sent.find(message => message.command === 'viewport')?.args).toEqual({ width: 1024, height: 768 })
+    // A pane narrower than the request scales the page to fit, and the model is told the scale.
+    shellClient.viewportReply = { width: 1600, height: 900, scale: 0.5, visible: true }
+    const scaled = await viewport.execute({ width: 1600, height: 900 }, minimalExec) as { content: Array<{ text: string }> }
+    expect(scaled.content[0]!.text).toBe('Viewport 1600x900, scaled 0.5x to fit the pane')
+    // Nothing presents the lease yet: the size is recorded, and in force once a pane shows it.
+    shellClient.viewportReply = { width: 1600, height: 900, scale: 0.5, visible: false }
+    const parked = await viewport.execute({ width: 1600, height: 900 }, minimalExec) as { content: Array<{ text: string }> }
+    expect(parked.content[0]!.text)
+      .toBe('Viewport 1600x900 recorded; the page lays out in it once the Agent Browser tab shows it')
   })
 })

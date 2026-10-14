@@ -22,6 +22,7 @@ export const DESKTOP_IPC = {
   browserRelease: 'dsh-desktop:browser-release',
   browserOpenRequested: 'dsh-desktop:browser-open-requested',
   agentBrowserPresent: 'dsh-desktop:agent-browser-present',
+  agentBrowserCommand: 'dsh-desktop:agent-browser-command',
   agentBrowserActivity: 'dsh-desktop:agent-browser-activity',
   agentBrowserReveal: 'dsh-desktop:agent-browser-reveal',
   directoryPick: 'dsh-desktop:directory-pick',

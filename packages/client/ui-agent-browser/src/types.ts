@@ -20,7 +20,21 @@ export interface DesktopAgentBrowserActivity {
   readonly command?: string
   /** True once the window has bound a pane, so the guest is on screen rather than offscreen. */
   readonly presented: boolean
+  /** Address of the lease's active tab, as the pane's own controls show it. */
+  readonly url?: string
+  /** Title of the lease's active tab. */
+  readonly title?: string
+  /** Page viewport in force, whether the automation asked for it or the pane decided it. */
+  readonly viewport?: { readonly width: number; readonly height: number }
+  /** True while the pane's own size decides the page viewport. */
+  readonly follow?: boolean
 }
+
+/** Arguments the pane's own controls pass to one agent browser command. */
+export type DesktopAgentBrowserCommandArgs = Readonly<Record<string, string | number | boolean>>
+
+/** Result of a command the pane asked for: the command's JSON result, or absence. */
+export type DesktopAgentBrowserCommandResult = Readonly<Record<string, unknown>> | undefined
 
 /**
  * Agent browser operations the window may perform. No Electron object or
@@ -35,6 +49,15 @@ export interface DesktopAgentBrowserBridge {
    * @returns Whether a lease matched; `false` means the automation has not opened one yet.
    */
   present(sessionKey: string, pane: DesktopAgentBrowserPane | null): Promise<boolean>
+  /**
+   * Run one command on this Session's agent browser, so the pane's own controls drive
+   * the same guest the automation does.
+   * @param sessionKey - Session whose pane asks.
+   * @param command - command name: `back`, `forward`, `reload`, `navigate`, `viewport`, or `getState`.
+   * @param args - command arguments, such as a navigation `url`.
+   * @returns The command result, or `undefined` when no lease holds this Session.
+   */
+  command(sessionKey: string, command: string, args: DesktopAgentBrowserCommandArgs): Promise<DesktopAgentBrowserCommandResult>
   /**
    * @param listener - receives activity for every lease the shell reports.
    * @returns unsubscribe callback.

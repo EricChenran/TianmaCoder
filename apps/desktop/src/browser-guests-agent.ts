@@ -35,6 +35,13 @@ export interface AgentGuestElectronView {
   setBounds(bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void
 }
 
+/** One attached surface: the rectangle the view occupies and the page scale inside it. */
+export interface AgentGuestSurface {
+  readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+  /** Page scale; the layout viewport is the rectangle divided by this factor. */
+  readonly zoom: number
+}
+
 /** The slice of session history the history command drives (reload lives on WebContents). */
 export interface AgentGuestHistory {
   goBack(): void
@@ -58,6 +65,18 @@ export interface AgentGuestView {
   }
   /** Attach to the window with the requested on-screen rectangle (placeholder 1×1 when absent). */
   attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds): void
+  /**
+   * Scale the page, so the layout viewport becomes the attached rectangle divided by
+   * the factor. Absent when the carrier cannot zoom, which leaves the page at 1:1.
+   * @param factor - page scale, at most 1.
+   */
+  setZoom?(factor: number): void
+  /**
+   * Page scale in force; input coordinates multiply by it, because a point read from
+   * the page is a layout viewport coordinate. Absent means 1:1.
+   * @returns The scale last applied by {@link setZoom}.
+   */
+  zoom?(): number
   /** Detach from its window and close the underlying contents. */
   destroy(): void
   /**
@@ -225,8 +244,19 @@ interface GuestLease {
   bounds: { x: number; y: number; width: number; height: number }
   /** Pane rectangle the window last reported for this lease; absent means nothing is showing it. */
   pane?: { x: number; y: number; width: number; height: number }
-  /** Page viewport size the automation asked for; applied to the attached view while the lease is visible. */
+  /** Page viewport size in force; the automation's request once it makes one. */
   viewport: { width: number; height: number }
+  /**
+   * True once the automation asked for a viewport. Only then does the request govern
+   * the page's layout size; until then the surface a human sees decides it.
+   */
+  explicitViewport: boolean
+  /** Page scale of the last attached surface; input coordinates scale by it. */
+  zoom: number
+  /** True once a usable pane presented this lease, so a later signal would fight a human close. */
+  presentedOnce: boolean
+  /** When this lease last asked its pane to open; bounds the retry rate. */
+  revealAt: number
   /** Whether this lease placed its view on screen at acquire time. */
   readonly visible: boolean
   /** Virtual clipboard text held per lease so agent copy/paste never bleeds across sessions. */
@@ -334,6 +364,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       activeTabId: tabId,
       bounds,
       viewport: { width: bounds.width, height: bounds.height },
+      explicitViewport: false,
+      zoom: 1,
+      presentedOnce: false,
+      revealAt: 0,
       visible: request.bounds !== undefined,
     }
     this.#leases.set(leaseId, lease)
@@ -344,9 +378,27 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     this.publishState(leaseId, lease)
     this.watchDownloads(leaseId, lease)
     // The human watches the pane the agent drives, and a guest nothing presents has no
-    // usable surface, so the Session's pane is asked to open once per acquisition.
-    if (request.sessionKey !== undefined) this.options.revealPane?.(request.sessionKey)
+    // usable surface, so the Session's pane is asked to open.
+    this.requestReveal(lease)
     return Promise.resolve({ leaseId, tabId })
+  }
+
+  /**
+   * Ask the Session's pane to open while nothing has presented this lease yet. The
+   * first request is the acquisition's own; the retries cover a pane that could not
+   * open at that moment — a collapsed column, another Session on screen, or a renderer
+   * that reloaded — because an unopened pane leaves the guest without a usable surface.
+   * Once a pane has presented the lease the human owns the tab, so no later request
+   * reopens it after they close it.
+   * @param lease - lease whose pane should show it.
+   */
+  private requestReveal(lease: GuestLease): void {
+    const sessionKey = lease.sessionKey
+    if (sessionKey === undefined || lease.presentedOnce) return
+    const now = Date.now()
+    if (now - lease.revealAt < AGENT_REVEAL_RETRY_MS) return
+    lease.revealAt = now
+    this.options.revealPane?.(sessionKey)
   }
 
   /**
@@ -407,7 +459,32 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
   private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
-    return this.presentingPane(lease) ?? (lease.visible ? lease.bounds : parkedSurface())
+    return this.surfaceFor(lease).bounds
+  }
+
+  /**
+   * Resolve the surface one lease attaches at, and the page scale inside it.
+   *
+   * A surface a human can see is the reference rectangle: the pane when one presents
+   * the lease, otherwise the configured watch rectangle. The automation's requested
+   * viewport then governs the *layout* size by scaling the page inside that rectangle,
+   * because the page lays out in the view's size divided by its scale — so a viewport
+   * narrower than the surface draws 1:1, and one wider is scaled down to fit rather
+   * than clipped. Before the automation asks for a viewport the surface alone decides,
+   * which keeps the human's pane the natural default.
+   * @param lease - lease whose active tab is being attached.
+   * @returns The rectangle and the scale to apply there.
+   */
+  private surfaceFor(lease: GuestLease): AgentGuestSurface {
+    const pane = this.presentingPane(lease)
+    const reference = pane ?? (lease.visible ? lease.bounds : undefined)
+    if (reference === undefined) return { bounds: parkedSurface(), zoom: 1 }
+    // A borrowed page the window owns is never scaled: its carrier has no zoom, so the
+    // reference rectangle alone decides, exactly as it does without a requested viewport.
+    const zoomable = lease.tabs.get(lease.activeTabId)?.view.setZoom !== undefined
+    if (!lease.explicitViewport || !zoomable) return { bounds: reference, zoom: 1 }
+    const zoom = viewportZoom(reference, lease.viewport)
+    return { bounds: centeredSurface(reference, lease.viewport, zoom), zoom }
   }
 
   /**
@@ -423,12 +500,17 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     return pane
   }
 
-  /** Attach the active tab at its resolved rectangle when a window can host it. */
+  /** Attach the active tab at its resolved surface when a window can host it. */
   private attachActive(lease: GuestLease): void {
     const window = this.options.getWindow()
     const active = lease.tabs.get(lease.activeTabId)
     if (window === undefined || window.isDestroyed() || active === undefined) return
-    active.view.attach(window, this.attachTarget(lease))
+    const surface = this.surfaceFor(lease)
+    // A usable pane is the fact the reveal retry stops on: the human now owns the tab.
+    if (this.presentingPane(lease) !== undefined) lease.presentedOnce = true
+    lease.zoom = surface.zoom
+    active.view.attach(window, surface.bounds)
+    active.view.setZoom?.(surface.zoom)
   }
 
   /** Publish the tab list of one lease for the Host seam and the pane that presents it. */
@@ -475,6 +557,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     // talks to a process that is gone. Listing tabs is exempt: it is how the model
     // learns the tab died, and it reads nothing from the renderer.
     if (tab.crashed && request.command !== 'tabs') this.recoverTab(tab)
+    // A guest no pane presents has no usable surface, so every command keeps asking
+    // its Session for one until a pane has shown this lease.
+    this.requestReveal(this.lease(request.leaseId))
     tab.operationActive = true
     this.publishActivity(request.leaseId, true, request.command)
     try {
@@ -487,6 +572,24 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       const lease = this.#leases.get(request.leaseId)
       if (lease !== undefined) this.publishState(request.leaseId, lease)
     }
+  }
+
+  /**
+   * Run one command on the lease a Session's pane is showing, for the pane's own
+   * controls. The window drives the same commands the automation does, so its back,
+   * forward, reload, and address controls need no second implementation.
+   * @param sessionKey - Session whose pane asks; the lease was acquired for it.
+   * @param command - command name, as the command handler dispatches it.
+   * @param args - command arguments.
+   * @returns The command result, or `undefined` when that Session holds no lease.
+   */
+  async commandForSession(sessionKey: string, command: string, args: ShellBrowserJson): Promise<ShellBrowserJson | undefined> {
+    for (const [leaseId, lease] of this.#leases) {
+      if (lease.sessionKey !== sessionKey) continue
+      // The request id is correlation for the Host channel, which this local call does not use.
+      return this.execute({ type: 'browser', requestId: 0, op: 'execute', leaseId, command, args })
+    }
+    return undefined
   }
 
   /** Run one command against the active tab's carrier. */
@@ -1146,7 +1249,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     if (point === undefined) {
       return Promise.reject(new ShellBrowserControlError('desktop browser: cuaScroll needs x and y, a ref, or a selector', 'browser_invalid_args'))
     }
-    view.webContents.sendInputEvent({ type: 'mouseWheel', ...point, deltaX, deltaY })
+    view.webContents.sendInputEvent({ type: 'mouseWheel', ...scaledPoint(point, view.zoom?.() ?? 1), deltaX, deltaY })
     return { scrolled: { deltaX, deltaY }, x: point.x, y: point.y }
   }
 
@@ -1167,17 +1270,20 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     }
     const requested = typeof parsed.steps === 'number' ? parsed.steps : 8
     const steps = Math.min(Math.max(Math.round(requested), 1), 64)
-    view.webContents.sendInputEvent({ type: 'mouseMove', ...from })
-    view.webContents.sendInputEvent({ type: 'mouseDown', ...from, button: 'left', clickCount: 1 })
+    const zoom = view.zoom?.() ?? 1
+    const start = scaledPoint(from, zoom)
+    const end = scaledPoint(to, zoom)
+    view.webContents.sendInputEvent({ type: 'mouseMove', ...start })
+    view.webContents.sendInputEvent({ type: 'mouseDown', ...start, button: 'left', clickCount: 1 })
     for (let step = 1; step <= steps; step += 1) {
       view.webContents.sendInputEvent({
         type: 'mouseMove',
-        x: Math.round(from.x + (to.x - from.x) * step / steps),
-        y: Math.round(from.y + (to.y - from.y) * step / steps),
+        x: Math.round(start.x + (end.x - start.x) * step / steps),
+        y: Math.round(start.y + (end.y - start.y) * step / steps),
         button: 'left',
       })
     }
-    view.webContents.sendInputEvent({ type: 'mouseUp', ...to, button: 'left', clickCount: 1 })
+    view.webContents.sendInputEvent({ type: 'mouseUp', ...end, button: 'left', clickCount: 1 })
     return { dragged: { from, to, steps } }
   }
 
@@ -1435,22 +1541,32 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   }
 
   /**
-   * Set the page viewport of one lease, applying it to the attached view while the lease is visible.
+   * Set the page viewport of one lease. Once a viewport is requested it governs the
+   * page's layout size on every surface the lease attaches at; `follow` returns the
+   * lease to the surface's own size, which is what the pane's control asks for.
    * @param leaseId - lease whose active tab is resized.
-   * @param args - optional `width` and `height`; each defaults to the reference viewport.
-   * @returns The effective viewport and whether the view is on screen.
+   * @param args - optional `width` and `height`, each defaulting to the viewport in force, or `follow`.
+   * @returns The effective viewport, the scale it is drawn at, and whether the view is on screen.
    */
   private setViewport(leaseId: string, args: ShellBrowserJson): ShellBrowserJson {
     const lease = this.lease(leaseId)
     const parsed = argsObject(args)
-    const width = viewportDimension(parsed.width, AGENT_VIEWPORT_DEFAULT.width, AGENT_VIEWPORT_MIN.width, AGENT_VIEWPORT_MAX.width)
-    const height = viewportDimension(parsed.height, AGENT_VIEWPORT_DEFAULT.height, AGENT_VIEWPORT_MIN.height, AGENT_VIEWPORT_MAX.height)
-    lease.viewport = { width, height }
-    // The parked surface derives from the viewport, so every lease re-attaches here,
-    // not only the ones a human can see.
-    if (lease.visible) lease.bounds = { ...lease.bounds, width, height }
+    if (parsed.follow === true) lease.explicitViewport = false
+    else {
+      const width = viewportDimension(parsed.width, lease.viewport.width, AGENT_VIEWPORT_MIN.width, AGENT_VIEWPORT_MAX.width)
+      const height = viewportDimension(parsed.height, lease.viewport.height, AGENT_VIEWPORT_MIN.height, AGENT_VIEWPORT_MAX.height)
+      lease.viewport = { width, height }
+      lease.explicitViewport = true
+    }
     this.attachActive(lease)
-    return { width, height, visible: lease.visible || this.presentingPane(lease) !== undefined }  }
+    return {
+      width: lease.viewport.width,
+      height: lease.viewport.height,
+      scale: lease.zoom,
+      follow: !lease.explicitViewport,
+      visible: this.presentingPane(lease) !== undefined || lease.visible,
+    }
+  }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
   private async click(
@@ -1484,10 +1600,11 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       }
       point = { x: Math.round(probed.x), y: Math.round(probed.y) }
     }
-    view.webContents.sendInputEvent({ type: 'mouseMove', ...point })
+    const at = scaledPoint(point, view.zoom?.() ?? 1)
+    view.webContents.sendInputEvent({ type: 'mouseMove', ...at })
     if (click) {
-      view.webContents.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
-      view.webContents.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      view.webContents.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 })
+      view.webContents.sendInputEvent({ type: 'mouseUp', ...at, button: 'left', clickCount: 1 })
     }
     return Promise.resolve({ x: point.x, y: point.y, clicked: click })
   }
@@ -1580,6 +1697,8 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
     },
   })
   let window: AgentGuestHostWindow | undefined
+  /** Page scale this carrier last applied; input coordinates scale by it. */
+  let appliedZoom = 1
   const web = view.webContents
   const crashListeners = new Set<(event: AgentCrashEvent) => void>()
   const onRenderProcessGone = (_event: Electron.Event, details: Electron.RenderProcessGoneDetails): void => {
@@ -1655,6 +1774,14 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       window.contentView.addChildView(view)
       view.setBounds(bounds)
     },
+    setZoom(factor) {
+      appliedZoom = factor
+      if (web.isDestroyed()) return
+      web.setZoomFactor(factor)
+    },
+    // The requested factor is what input coordinates scale by; reading the page back
+    // would report Chromium's own rounding instead of the surface the pool attached.
+    zoom: () => appliedZoom,
     destroy() {
       releaseDebugger()
       releaseCrashWatch()
@@ -1748,6 +1875,16 @@ function viewportDimension(value: unknown, fallback: number, min: number, max: n
   return value
 }
 
+/**
+ * Move one layout viewport point into the view coordinates input events carry.
+ * @param point - point read from the page, in layout viewport coordinates.
+ * @param zoom - page scale the view is attached with.
+ * @returns The same point in view coordinates.
+ */
+function scaledPoint(point: { readonly x: number; readonly y: number }, zoom: number): { x: number; y: number } {
+  return { x: Math.round(point.x * zoom), y: Math.round(point.y * zoom) }
+}
+
 /** @returns The pixel size from a PNG IHDR chunk, or `undefined` when the bytes are not a PNG. */
 function pngSize(bytes: Buffer): { width: number; height: number } | undefined {
   if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.readUInt32BE(4) !== 0x0d0a1a0a) return undefined
@@ -1790,6 +1927,51 @@ function parkedSurface(): { x: number; y: number; width: number; height: number 
 
 /** Smallest pane rectangle the guest may present in; a smaller report measured no area. */
 const AGENT_PANE_MIN_SIDE = 2
+
+/** Shortest interval between two pane-open requests for one lease. */
+export const AGENT_REVEAL_RETRY_MS = 1000
+
+/** Nothing is scaled below this factor; a narrower viewport than this would be unreadable. */
+const AGENT_ZOOM_MIN = 0.1
+
+/**
+ * Page scale that makes a requested viewport fit one surface. The factor is capped at
+ * 1, so a viewport the surface already fits draws at its own size instead of magnifying.
+ * @param surface - rectangle the view occupies.
+ * @param viewport - layout viewport the automation asked for.
+ * @returns The scale to apply, between {@link AGENT_ZOOM_MIN} and 1.
+ */
+function viewportZoom(
+  surface: { readonly width: number; readonly height: number },
+  viewport: { readonly width: number; readonly height: number },
+): number {
+  const fit = Math.min(surface.width / viewport.width, surface.height / viewport.height, 1)
+  return Math.max(Math.round(fit * 1000) / 1000, AGENT_ZOOM_MIN)
+}
+
+/**
+ * Rectangle one scaled viewport occupies inside a surface, centred so the unused space
+ * is split evenly. The view is never larger than the surface, so the page is whole
+ * rather than clipped.
+ * @param surface - rectangle the view may occupy.
+ * @param viewport - layout viewport the automation asked for.
+ * @param zoom - scale applied to the page.
+ * @returns The centred rectangle, at least one pixel in each direction.
+ */
+function centeredSurface(
+  surface: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+  viewport: { readonly width: number; readonly height: number },
+  zoom: number,
+): { x: number; y: number; width: number; height: number } {
+  const width = Math.max(1, Math.min(surface.width, Math.round(viewport.width * zoom)))
+  const height = Math.max(1, Math.min(surface.height, Math.round(viewport.height * zoom)))
+  return {
+    x: surface.x + Math.round((surface.width - width) / 2),
+    y: surface.y + Math.round((surface.height - height) / 2),
+    width,
+    height,
+  }
+}
 
 /** What {@link elementProbeScript} reports back. */
 interface AgentProbeResult {

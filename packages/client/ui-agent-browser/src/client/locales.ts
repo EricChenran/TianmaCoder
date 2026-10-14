@@ -7,6 +7,15 @@ export const zh = {
   'activity.busy': 'Agent 正在操作这个页面',
   'activity.idle': '等待 agent 操作',
   'activity.offscreen': '自动化尚未在这里显示页面',
+  'toolbar.back': '后退',
+  'toolbar.forward': '前进',
+  'toolbar.reload': '刷新',
+  'toolbar.address': '网页地址',
+  'toolbar.addressHint': '输入地址后回车',
+  'toolbar.go': '打开这个地址',
+  'toolbar.viewport': '视口',
+  'toolbar.viewportFollow': '跟随窗格',
+  'toolbar.viewportCustom': '自定义',
 } satisfies Record<string, string>
 
 /** Agent Browser dictionary key union. */
@@ -21,6 +30,15 @@ export const en = {
   'activity.busy': 'The agent is working on this page',
   'activity.idle': 'Waiting for the agent',
   'activity.offscreen': 'The automation has not shown a page here yet',
+  'toolbar.back': 'Back',
+  'toolbar.forward': 'Forward',
+  'toolbar.reload': 'Reload',
+  'toolbar.address': 'Page address',
+  'toolbar.addressHint': 'Type an address and press Enter',
+  'toolbar.go': 'Open this address',
+  'toolbar.viewport': 'Viewport',
+  'toolbar.viewportFollow': 'Follow the pane',
+  'toolbar.viewportCustom': 'Custom',
 } satisfies Record<AgentBrowserKey, string>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

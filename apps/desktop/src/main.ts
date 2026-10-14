@@ -59,7 +59,7 @@ import { DesktopBrowserGuests } from './browser-guests.ts'
 import { AgentBrowserGuests } from './browser-guests-agent.ts'
 import type { DesktopAgentBrowserPane } from '@deepseek-ai/dsh-client-ui-agent-browser/types'
 import type { AgentDownloadEvent } from './agent-downloads.ts'
-import { ShellBrowserControlEndpoint } from './browser-control-main.ts'
+import { ShellBrowserControlEndpoint, type ShellBrowserJson } from './browser-control-main.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
@@ -448,11 +448,24 @@ async function main(): Promise<void> {
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   /** Bound once the backend owns its agent guests; absent until then. */
   const agentPane: { current?: (sessionKey: string, pane: DesktopAgentBrowserPane | null) => boolean } = {}
+  /** Runs one command on a pane's lease; bound beside {@link agentPane} once the backend owns guests. */
+  const agentPaneCommand: {
+    current?: (sessionKey: string, command: string, args: ShellBrowserJson) => Promise<ShellBrowserJson | undefined>
+  } = {}
   const backend = new DesktopBackendController((onFailure) => {    const hostInspectPort = developmentHostInspectPort(development)
     const hostReference: { current?: DesktopHostProcess } = {}
     const controlReference: { current?: ShellBrowserControlEndpoint } = {}
     /** Last activity fact per lease, merged with presentation state before the window sees it. */
-    const agentActivity = new Map<string, { busy: boolean; command?: string; presented: boolean; sessionKey?: string }>()
+    const agentActivity = new Map<string, {
+      busy: boolean
+      command?: string
+      presented: boolean
+      sessionKey?: string
+      url?: string
+      title?: string
+      viewport?: { width: number; height: number }
+      follow?: boolean
+    }>()
     const publishAgentActivity = (leaseId: string): void => {
       const fact = agentActivity.get(leaseId)
       if (fact === undefined || mainWindow === undefined || mainWindow.isDestroyed()) return
@@ -460,6 +473,10 @@ async function main(): Promise<void> {
         leaseId, busy: fact.busy, presented: fact.presented,
         ...(fact.sessionKey === undefined ? {} : { sessionKey: fact.sessionKey }),
         ...(fact.command === undefined ? {} : { command: fact.command }),
+        ...(fact.url === undefined ? {} : { url: fact.url }),
+        ...(fact.title === undefined ? {} : { title: fact.title }),
+        ...(fact.viewport === undefined ? {} : { viewport: fact.viewport }),
+        ...(fact.follow === undefined ? {} : { follow: fact.follow }),
       })
     }
     const agentGuests = new AgentBrowserGuests({
@@ -514,6 +531,9 @@ async function main(): Promise<void> {
           presented?: unknown
           closed?: unknown
           sessionKey?: unknown
+          tabs?: unknown
+          viewport?: unknown
+          follow?: unknown
         }
         const previous = agentActivity.get(event.leaseId)
         const closed = payload.closed === true
@@ -522,11 +542,26 @@ async function main(): Promise<void> {
           ? false
           : event.name === 'browser-activity' ? previous?.presented ?? false : payload.presented === true
         const sessionKey = typeof payload.sessionKey === 'string' ? payload.sessionKey : previous?.sessionKey
+        // The tab list carries what the pane's own controls show: the active tab's
+        // address and title, plus the viewport the automation put in force.
+        const tabs = Array.isArray(payload.tabs) ? payload.tabs as Array<Record<string, unknown>> : undefined
+        const activeTab = tabs?.find(tab => tab.active === true)
+        const url = typeof activeTab?.url === 'string' && activeTab.url !== '' ? activeTab.url : previous?.url
+        const title = typeof activeTab?.title === 'string' && activeTab.title !== '' ? activeTab.title : previous?.title
+        const size = payload.viewport as { width?: unknown; height?: unknown } | undefined
+        const viewport = typeof size?.width === 'number' && typeof size.height === 'number'
+          ? { width: size.width, height: size.height }
+          : previous?.viewport
+        const follow = typeof payload.follow === 'boolean' ? payload.follow : previous?.follow
         agentActivity.set(event.leaseId, {
           busy,
           presented,
           ...(busy && typeof payload.command === 'string' ? { command: payload.command } : {}),
           ...(sessionKey === undefined ? {} : { sessionKey }),
+          ...(url === undefined ? {} : { url }),
+          ...(title === undefined ? {} : { title }),
+          ...(viewport === undefined ? {} : { viewport }),
+          ...(follow === undefined ? {} : { follow }),
         })
         publishAgentActivity(event.leaseId)
       },
@@ -536,6 +571,7 @@ async function main(): Promise<void> {
       agentGuests)
     controlReference.current = browserControl
     agentPane.current = (sessionKey, pane) => agentGuests.present(sessionKey, pane)
+    agentPaneCommand.current = (sessionKey, command, args) => agentGuests.commandForSession(sessionKey, command, args)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
@@ -802,6 +838,21 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.browserRelease, (event, lease: unknown) => {
     assertProductSender(event)
     return browserGuests.release(event.sender, lease)
+  })
+
+  ipcMain.handle(DESKTOP_IPC.agentBrowserCommand, (event, request: unknown) => {
+    assertProductSender(event)
+    if (typeof request !== 'object' || request === null) throw new Error('dsh desktop: rejected an agent browser command')
+    const candidate = request as { sessionKey?: unknown; command?: unknown; args?: unknown }
+    if (typeof candidate.sessionKey !== 'string' || candidate.sessionKey.length === 0) {
+      throw new Error('dsh desktop: an agent browser command requires a session key')
+    }
+    if (typeof candidate.command !== 'string' || candidate.command.length === 0) {
+      throw new Error('dsh desktop: an agent browser command requires a command name')
+    }
+    const args = typeof candidate.args === 'object' && candidate.args !== null && !Array.isArray(candidate.args)
+      ? candidate.args as ShellBrowserJson : {}
+    return agentPaneCommand.current?.(candidate.sessionKey, candidate.command, args) ?? Promise.resolve(undefined)
   })
 
   ipcMain.handle(DESKTOP_IPC.agentBrowserPresent, (event, request: unknown) => {

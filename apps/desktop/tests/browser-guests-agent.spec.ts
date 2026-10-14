@@ -6,7 +6,7 @@ import type { WebContents } from 'electron'
 import type { AgentRecorderPort, AgentRecordingResult } from '../src/agent-recorder.ts'
 import type { AgentDownloadEvent, AgentDownloadWatcher } from '../src/agent-downloads.ts'
 import type { AgentClaimedWebContents, AgentGuestHostWindow, AgentGuestView } from '../src/browser-guests-agent.ts'
-import { AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
+import { AGENT_REVEAL_RETRY_MS, AgentBrowserGuests, createWebContentsViewGuest, isAgentNavigableUrl } from '../src/browser-guests-agent.ts'
 import { AGENT_TAB_LIMIT } from '../src/browser-tab-residency.ts'
 
 /** Minimal PNG header carrying the given pixel size, so capture calibration can be asserted. */
@@ -62,6 +62,8 @@ interface FakeDebugger {
 /** The full fake guest: recorded state plus the AgentGuestView surface. */
 interface FakeWrappedGuest extends FakeGuestRecord {
   readonly webContents: AgentGuestView['webContents']
+  /** Page scales applied to this guest, in order. */
+  readonly zoomFactors: number[]
   attach(window: AgentGuestHostWindow): void
   destroy(): void
 }
@@ -104,6 +106,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
     }
 
     bounds: Array<{ x: number; y: number; width: number; height: number }> = []
+    /** Page scale applied to this guest, in order; the last one is in force. */
+    zoomFactors: number[] = []
     lastPreferences: unknown
     currentUrl = 'about:blank'
     readonly webContents
@@ -152,6 +156,7 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         debugger: createFakeDebugger(),
         isLoading: (): boolean => this.loading,
         isCurrentlyAudible: (): boolean => this.audible,
+        setZoomFactor: (factor: number): void => { this.zoomFactors.push(factor) },
         on: (event: string, listener: (...args: unknown[]) => void): void => {
           if (event === 'render-process-gone') this.crashListeners.add(listener)
           if (event === 'media-started-playing') this.mediaStarted.add(listener)
@@ -231,6 +236,7 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
         playMedia: () => { view.playMedia() },
         pauseMedia: () => { view.pauseMedia() },
         bounds: view.bounds,
+        zoomFactors: view.zoomFactors,
         lastPreferences: view.lastPreferences,
         webContents: {
           loadURL: async (url: string) => { await loadURL(url) },
@@ -258,6 +264,8 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
           removeListener: view.webContents.removeListener,
         },
         attach: (target) => { view.attach(target) },
+        setZoom: (factor: number) => { view.webContents.setZoomFactor(factor) },
+        zoom: () => view.zoomFactors.at(-1) ?? 1,
         destroy: () => { view.destroy() },
       }
     },
@@ -684,21 +692,62 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
   })
 
-  it('applies a viewport to a visible lease and rejects out-of-range dimensions', async () => {
+  it('lays the page out at the viewport the automation asked for, centred in a pane that fits it', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({
-      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', bounds: { x: 0, y: 0, width: 800, height: 600 },
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-1',
     }) as { leaseId: string }
-    const attachments = lastRecord().bounds.length
+    expect(guests.present('s-1', { x: 10, y: 20, width: 420, height: 900 })).toBe(true)
     const sized = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 375, height: 667 },
+    }) as { width: number; height: number; scale: number; follow: boolean; visible: boolean }
+    expect(sized).toEqual({ width: 375, height: 667, scale: 1, follow: false, visible: true })
+    // The pane is the surface; a viewport it can hold draws at its own size, centred.
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: 33, y: 137, width: 375, height: 667 })
+    expect(lastRecord().zoomFactors.at(-1)).toBe(1)
+  })
+
+  it('scales a viewport the pane cannot fit and maps input through that scale', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-2',
+    }) as { leaseId: string }
+    guests.present('s-2', { x: 0, y: 0, width: 420, height: 900 })
+    const sized = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 1280, height: 720 },
+    }) as { scale: number }
+    expect(sized.scale).toBe(0.328)
+    const record = lastRecord()
+    // Scaled down to fit rather than clipped, so the whole page stays visible.
+    expect(record.bounds.at(-1)).toEqual({ x: 0, y: 332, width: 420, height: 236 })
+    expect(record.zoomFactors.at(-1)).toBe(0.328)
+    record.inputEvents.length = 0
+    const clicked = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'click', args: { x: 100, y: 50 },
+    }) as { x: number; y: number }
+    // A point read from the page is a layout viewport coordinate; the events it turns
+    // into are view coordinates, so they carry the page scale.
+    expect(record.inputEvents).toEqual([
+      { type: 'mouseMove', x: 33, y: 16 },
+      { type: 'mouseDown', x: 33, y: 16, button: 'left', clickCount: 1 },
+      { type: 'mouseUp', x: 33, y: 16, button: 'left', clickCount: 1 },
+    ])
+    expect(clicked).toMatchObject({ x: 100, y: 50 })
+  })
+
+  it('defaults a partial viewport request to the size in force and rejects out-of-range dimensions', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-3',
+    }) as { leaseId: string }
+    guests.present('s-3', { x: 0, y: 0, width: 800, height: 600 })
+    await guests.execute({
       type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 1024, height: 768 },
-    }) as { width: number; height: number; visible: boolean }
-    expect(sized).toEqual({ width: 1024, height: 768, visible: true })
-    expect(lastRecord().bounds).toHaveLength(attachments + 1)
-    const fallback = await guests.execute({
-      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'viewport', args: {},
+    })
+    const widened = await guests.execute({
+      type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'viewport', args: { width: 640 },
     }) as { width: number; height: number }
-    expect(fallback).toMatchObject({ width: 1280, height: 720 })
+    expect(widened).toMatchObject({ width: 640, height: 768 })
     await expect(guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'viewport', args: { width: 100 } }))
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
     await expect(guests.execute({ type: 'browser', requestId: 5, op: 'execute', leaseId, command: 'viewport', args: { height: 1.5 } }))
@@ -707,13 +756,55 @@ describe('AgentBrowserGuests', () => {
       .rejects.toMatchObject({ code: 'browser_invalid_args' })
   })
 
+  it('returns the page to the pane\u2019s own size, and finds the lease a pane drives', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-4',
+    }) as { leaseId: string }
+    guests.present('s-4', { x: 5, y: 6, width: 700, height: 500 })
+    await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 375, height: 667 },
+    })
+    expect(lastRecord().zoomFactors.at(-1)).toBe(0.75)
+    const followed = await guests.commandForSession('s-4', 'viewport', { follow: true }) as { follow: boolean; scale: number }
+    expect(followed).toMatchObject({ follow: true, scale: 1 })
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: 5, y: 6, width: 700, height: 500 })
+    expect(await guests.commandForSession('no-such-session', 'reload', {})).toBeUndefined()
+  })
+
+  it('keeps asking the pane to open until one presents the lease', async () => {
+    vi.useFakeTimers()
+    try {
+      const revealPane = vi.fn()
+      const { guests } = makeGuests({ revealPane })
+      const { leaseId } = await guests.acquire({
+        type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-5',
+      }) as { leaseId: string }
+      expect(revealPane).toHaveBeenCalledExactlyOnceWith('s-5')
+      // An unopened pane leaves the guest without a surface, so the request is repeated —
+      // rate-limited, not on every command.
+      await guests.execute({ type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'reload', args: {} })
+      expect(revealPane).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(AGENT_REVEAL_RETRY_MS)
+      await guests.execute({ type: 'browser', requestId: 3, op: 'execute', leaseId, command: 'reload', args: {} })
+      expect(revealPane).toHaveBeenCalledTimes(2)
+      // Once a pane has shown the lease the human owns the tab, so closing it is final.
+      guests.present('s-5', { x: 0, y: 0, width: 300, height: 200 })
+      vi.advanceTimersByTime(AGENT_REVEAL_RETRY_MS * 3)
+      await guests.execute({ type: 'browser', requestId: 4, op: 'execute', leaseId, command: 'reload', args: {} })
+      expect(revealPane).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('records the requested viewport and keeps a parked lease inside the window', async () => {
     const { guests } = makeGuests()
     const { leaseId } = await guests.acquire({ type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws' }) as { leaseId: string }
     const result = await guests.execute({
       type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 500, height: 400 },
     }) as { width: number; height: number; visible: boolean }
-    expect(result).toEqual({ width: 500, height: 400, visible: false })
+    expect(result).toEqual({ width: 500, height: 400, scale: 1, follow: false, visible: false })
     // Only a presented surface gives the page the size it lays out in; the parked
     // rectangle stays inside the window so the renderer keeps a real viewport.
     expect(lastRecord().bounds.at(-1)).toEqual({ x: 0, y: 0, width: 1, height: 1 })

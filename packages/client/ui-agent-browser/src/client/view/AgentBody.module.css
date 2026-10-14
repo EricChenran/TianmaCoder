@@ -33,6 +33,91 @@
   min-height: 0;
 }
 
+/* The pane's own controls: the guest is a native view, so its navigation and size are
+   driven from here. It sits above the measured surface, which shrinks to match. */
+.toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 5px 6px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.tool {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+}
+
+.tool:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-module-platform);
+}
+
+.tool:disabled {
+  color: var(--dsw-alias-label-quaternary);
+  cursor: default;
+}
+
+.addressBox {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 2px;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 28px;
+  padding: 0 2px 0 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.address {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.addressGo {
+  width: 24px;
+  height: 24px;
+}
+
+/* The viewport the page lays out in; the automation drives the same setting. */
+.viewport {
+  flex: 0 0 auto;
+  max-width: 96px;
+  height: 28px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  background: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.viewport:disabled {
+  color: var(--dsw-alias-label-quaternary);
+  cursor: default;
+}
+
 /* Shown while nothing is presented; the guest covers it once attached. */
 .placeholder {
   display: flex;

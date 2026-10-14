@@ -19,8 +19,10 @@ function bridgeStub() {
     reveal: [] as Array<(sessionKey: string) => void>,
   }
   const present = vi.fn(() => Promise.resolve(true))
+  const command = vi.fn(() => Promise.resolve(undefined))
   const bridge: DesktopAgentBrowserBridge = {
     present,
+    command,
     onActivity(listener) {
       handlers.activity.push(listener)
       return () => { handlers.activity = handlers.activity.filter(entry => entry !== listener) }
@@ -30,7 +32,7 @@ function bridgeStub() {
       return () => { handlers.reveal = handlers.reveal.filter(entry => entry !== listener) }
     },
   }
-  return { bridge, handlers, present }
+  return { bridge, handlers, present, command }
 }
 
 /** The mounting context the plugin needs, capturing every registration it makes. */
@@ -40,6 +42,8 @@ function hostContext(options: { readonly mounted?: string | undefined; readonly 
   const dictionaries = new Map<string, unknown>()
   const disposers: Array<() => void> = []
   const openTab = vi.fn()
+  const mountedListeners = new Set<() => void>()
+  let mounted = options.mounted
   const ctx = {
     locale: {
       bind: () => (key: string) => key,
@@ -65,11 +69,22 @@ function hostContext(options: { readonly mounted?: string | undefined; readonly 
       get: (id: string) => (options.registeredType === false ? undefined : { id }),
     },
     sidebarRight: {
-      mounted: { getSnapshot: () => options.mounted },
+      mounted: {
+        getSnapshot: () => mounted,
+        subscribe: (listener: () => void) => {
+          mountedListeners.add(listener)
+          return () => { mountedListeners.delete(listener) }
+        },
+      },
       openTab,
     },
   }
-  return { ctx: ctx as never, registrations, injections, dictionaries, disposers, openTab }
+  /** Move the Session the column shows, as the runtime does when the human switches. */
+  const showSession = (sessionKey: string | undefined): void => {
+    mounted = sessionKey
+    for (const listener of [...mountedListeners]) listener()
+  }
+  return { ctx: ctx as never, registrations, injections, dictionaries, disposers, openTab, showSession }
 }
 
 /** Mount the Client plugin and run the injections that register its contributions. */
@@ -135,6 +150,7 @@ describe('Agent Browser pane injection', () => {
       const host = mount({ mounted })
       const inject = bodyRegistration(host).registration.inject as (id: string, actions: { set: (value: unknown) => void }) => {
         readonly present: (pane: { x: number; y: number; width: number; height: number } | null) => void
+        readonly command: (name: string, args: Record<string, string | number | boolean>) => void
       }
       const actions = { set: vi.fn() }
       return { host, stub, face: inject(SESSION, actions), actions }
@@ -151,6 +167,22 @@ describe('Agent Browser pane injection', () => {
     expect(stub.present).toHaveBeenLastCalledWith(SESSION, null)
   })
 
+  it('runs the pane\u2019s own controls on the Session\u2019s lease', () => {
+    const { stub, face } = injectFace(SESSION)
+    face.command('reload', {})
+    expect(stub.command).toHaveBeenCalledWith(SESSION, 'reload', {})
+  })
+
+  it('reports a refused control command instead of failing the pane', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { stub, face } = injectFace(SESSION)
+    stub.command.mockRejectedValueOnce(new Error('navigation target is not allowed'))
+    face.command('navigate', { url: 'https://example.com' })
+    await Promise.resolve()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('ends every Session subscription with the plugin', () => {
     const { host, stub } = injectFace(SESSION)
     expect(stub.handlers.activity).toHaveLength(1)
@@ -164,6 +196,18 @@ describe('Agent Browser pane injection', () => {
     expect(actions.set).not.toHaveBeenCalled()
     stub.handlers.activity[0]?.({ leaseId: 'l-1', sessionKey: SESSION, busy: true, presented: true, command: 'navigate' })
     expect(actions.set).toHaveBeenCalledWith({ busy: true, presented: true, command: 'navigate' })
+  })
+
+  it('carries the address and the viewport the pane\u2019s controls show', () => {
+    const { stub, actions } = injectFace(SESSION)
+    stub.handlers.activity[0]?.({
+      leaseId: 'l-1', sessionKey: SESSION, busy: false, presented: true,
+      url: 'https://example.com/', title: 'Example', viewport: { width: 375, height: 667 }, follow: false,
+    })
+    expect(actions.set).toHaveBeenCalledWith({
+      busy: false, presented: true, url: 'https://example.com/', title: 'Example',
+      viewport: { width: 375, height: 667 }, follow: false,
+    })
   })
 
   it('subscribes once per Session occurrence', () => {
@@ -186,11 +230,30 @@ describe('Agent Browser pane injection', () => {
     expect(host.openTab).toHaveBeenCalledWith(AGENT_BROWSER_ID)
   })
 
-  it('leaves the tab alone for another Session or an unregistered type', () => {
-    const other = injectFace('session-2')
-    other.stub.handlers.reveal[0]?.(SESSION)
-    expect(other.host.openTab).not.toHaveBeenCalled()
+  it('holds a reveal for another Session and opens it once that Session arrives', () => {
+    // The automation can start in a Session the human is not looking at; the request is
+    // kept rather than dropped, because an unopened pane leaves the guest with no surface.
+    const { host, stub } = injectFace('session-2')
+    stub.handlers.reveal[0]?.(SESSION)
+    expect(host.openTab).not.toHaveBeenCalled()
+    host.showSession(SESSION)
+    expect(host.openTab).toHaveBeenCalledWith(AGENT_BROWSER_ID)
+  })
 
+  it('retries a reveal the column had no surface for, and stops once it opens', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { host, stub } = injectFace(SESSION)
+    host.openTab.mockImplementationOnce(() => { throw new Error('no session surface is mounted') })
+    stub.handlers.reveal[0]?.(SESSION)
+    expect(warn).toHaveBeenCalled()
+    host.showSession(SESSION)
+    expect(host.openTab).toHaveBeenCalledTimes(2)
+    host.showSession(SESSION)
+    expect(host.openTab).toHaveBeenCalledTimes(2)
+    warn.mockRestore()
+  })
+
+  it('holds a reveal until the tab type is registered', () => {
     const stub = bridgeStub()
     ;(globalThis as { dshDesktop?: unknown }).dshDesktop = { protocolVersion: 1, agentBrowser: stub.bridge }
     try {
@@ -200,14 +263,5 @@ describe('Agent Browser pane injection', () => {
     } finally {
       delete (globalThis as { dshDesktop?: unknown }).dshDesktop
     }
-  })
-
-  it('keeps working when the right Sidebar has no Session surface to open into', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { host, stub } = injectFace(SESSION)
-    host.openTab.mockImplementation(() => { throw new Error('no session surface is mounted') })
-    expect(() => { stub.handlers.reveal[0]?.(SESSION) }).not.toThrow()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
   })
 })

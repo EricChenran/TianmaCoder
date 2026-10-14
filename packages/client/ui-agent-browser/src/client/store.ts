@@ -9,6 +9,14 @@ export interface AgentBrowserState {
   presented: boolean
   /** Command name of the in-flight operation, present only while busy. */
   command?: string
+  /** Address of the lease's active tab, shown in the pane's own address field. */
+  url?: string
+  /** Title of the lease's active tab. */
+  title?: string
+  /** Page viewport in force, whether the automation asked for it or the pane decided it. */
+  viewport?: { readonly width: number; readonly height: number }
+  /** True while the pane's own size decides the page viewport. */
+  follow?: boolean
 }
 
 type AgentBrowserActions = {
@@ -28,6 +36,14 @@ export function createAgentBrowserStore(): EngineStoreHandle<AgentBrowserState, 
         draft.presented = state.presented
         if (state.command === undefined) delete draft.command
         else draft.command = state.command
+        if (state.url === undefined) delete draft.url
+        else draft.url = state.url
+        if (state.title === undefined) delete draft.title
+        else draft.title = state.title
+        if (state.viewport === undefined) delete draft.viewport
+        else draft.viewport = state.viewport
+        if (state.follow === undefined) delete draft.follow
+        else draft.follow = state.follow
       },
     },
   })
