@@ -9,8 +9,8 @@
   en: 647df0634f310ae6
   zh: bd82881987bfc8ed
 /deepseek-ai-dsh-experimental-browser-use-desktop-guest/summary:
-  en: 74783fd952201f6f
-  zh: ac91a4dab8e0b12f
+  en: cfbce23134c08f8d
+  zh: 810cf602c23078cc
 /deepseek-ai-dsh-experimental-browser-use-desktop-guest/table-of-contents:
   en: d152484eb41ac6b4
   zh: ffab54373e9e61f0
@@ -50,9 +50,21 @@
 /deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/native-browser-tools-and-results/kv-cache-effect:
   en: 6e3f7433e8248bf8
   zh: 59e8b0a923ce5b5f
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/bundled-web-gui-tester-skill:
+  en: 18f856a8fb88900b
+  zh: d55a5e11bd128216
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/bundled-web-gui-tester-skill/what-the-model-sees:
+  en: dc166dc286ab329e
+  zh: 54bc027b3137d70f
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/bundled-web-gui-tester-skill/token-effect:
+  en: 2e12bdf2485b4a87
+  zh: 3a0c41b4bb373714
+/deepseek-ai-dsh-experimental-browser-use-desktop-guest/model-experience/bundled-web-gui-tester-skill/kv-cache-effect:
+  en: 69cfd556f2ec408e
+  zh: 2165f50e63990892
 /deepseek-ai-dsh-experimental-browser-use-desktop-guest/known-limitations-and-deferred-work:
-  en: 9f38fa7099c7a2d5
-  zh: 0dac4ada53dcf0f7
+  en: 40df0dda6468ba3f
+  zh: 893e9ed73f301859
 /deepseek-ai-dsh-experimental-browser-use-desktop-guest/known-limitations-and-deferred-work/dev-note:
   en: 273a18ba615be346
   zh: ca1087e012bdd218

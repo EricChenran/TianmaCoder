@@ -14,6 +14,7 @@ import type {
   DesktopBrowserControl,
 } from '@deepseek-ai/dsh-host-browser-control'
 import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client'
+import { registerWebGuiTesterSkill } from './skill.ts'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-browser-use'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -624,6 +625,7 @@ export function apply(ctx: Context, input: Config): void {
       })))
     }
     ctx.systemPrompt.section({ name: 'browser-use:desktop-guest', text: GUIDANCE, order: ctx.systemPrompt.getSectionOrder('TOOL_COMPUTER_USE') })
+    registerWebGuiTesterSkill(ctx)
     return async () => {
       for (const dispose of disposers.reverse()) await dispose()
     }

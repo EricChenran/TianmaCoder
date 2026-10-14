@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tool catalog (navigate, snapshot, aria, elementInfo, screenshot, viewport, record, downloads, dialog, state, click, hover, fill, check, type, press, scroll, cuaKeypress, cuaScroll, cuaDrag, back, forward, reload, select, wait, tabs, copy, paste): the tools drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released when the Session runtime is disposed. Browser state is not restored from the Session log.
+Mount beside the [browser-use service](../../browser-use/browser-use/README.md) to give a Session's model the desktop browser tools (navigate, snapshot, aria, elementInfo, screenshot, viewport, record, downloads, dialog, state, click, hover, fill, check, type, press, scroll, cuaKeypress, cuaScroll, cuaDrag, back, forward, reload, select, wait, tabs, copy, paste): they drive one hardened guest web page that the Electron shell owns, reusing the workspace's sidebar-browser login state. The guest lives with the live Session — one lease per Session, released with its runtime. Browser state is not restored from the Session log. The provider also registers the bundled `web-gui-tester` skill for black-box frontend testing.
 
 ## Table of Contents
 
@@ -92,10 +92,25 @@ Each result adds a short text block to the Session history.
 
 Results append to the main Session history; the tool catalog itself is static.
 
+### Bundled Web GUI tester skill
+
+#### What the model sees
+
+The provider registers one bundled skill, `web-gui-tester`, into the calling context's layer, so every preset that mounts this row carries the catalog entry. Its description routes black-box frontend testing to it; loading returns the whole method — the five principles, the tool-family discipline (snapshot refs as the only locator ground truth, re-observing after a failed locator, one state-changing action per observation, judging an action by its expected effect, choosing tabs by URL or title, screenshot evidence for every test point), the four phases, and the environment limits. The entry carries no companion files beyond the `SKILL.md` body it reports as its resource base.
+
+#### Token effect
+
+The catalog entry adds one description to the skill catalog the agent already reads; the body reaches the conversation only when the model loads the skill.
+
+#### KV Cache effect
+
+The catalog entry extends the skill catalog in the prompt prefix; a preset that does not mount this row carries no entry.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **The bundled skill is optional** — `web-gui-tester` registers only when the composition mounts a skill registry; a composition without one still gets the browser tools. The extracted resource copy lives in a private temporary directory owned by the provider's fiber and is removed on disposal.
 - **Chromium HTTP(S) only** — the shell's navigation allowlist rejects other schemes; file targets stay with document-preview flows.
 - **Claimed tabs are borrowed** — `listUserTabs` and `claim` reach the pages the human already has open in the Sidebar. Commands then drive that same page, and the pool never closes it: finalizing a claimed tab or releasing the lease leaves the page exactly as it was.
 - **Downloads are tracked per lease** — a download is attributed to the tab that was active when it started, and the residency limit will not close a tab while one of its downloads runs. The list covers the current lease only.

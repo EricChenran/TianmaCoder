@@ -11,6 +11,7 @@
     { "path": "../../core/system-prompt" },
     { "path": "../../host/browser-control" },
     { "path": "../../mcp/mcp-client" },
+    { "path": "../../skill/skill" },
     { "path": "../browser-use-runtime" }
   ]
 }

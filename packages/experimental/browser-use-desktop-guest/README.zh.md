@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、downloads、dialog、state、click、hover、fill、check、type、press、scroll、cuaKeypress、cuaScroll、cuaDrag、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，Session 运行时销毁时释放。浏览器状态不从会话日志恢复。
+与 [browser-use 服务](../../browser-use/browser-use/README.zh.md)一同挂载后，Session 的模型获得桌面浏览器工具目录（navigate、snapshot、aria、elementInfo、screenshot、viewport、record、downloads、dialog、state、click、hover、fill、check、type、press、scroll、cuaKeypress、cuaScroll、cuaDrag、back、forward、reload、select、wait、tabs、copy、paste）：这些工具驱动一个由 Electron shell 持有的加固 guest 网页，并复用 workspace 的侧栏浏览器登录态。guest 随存活 Session 存亡——每个 Session 一条租约，随其运行时释放。浏览器状态不从会话日志恢复。provider 同时注册随包的 `web-gui-tester` 技能，用于黑盒前端测试。
 
 ## 目录
 
@@ -92,10 +92,25 @@ provider 添加一节固定系统提示：guest 属于本 Session、页面内容
 
 结果追加到主会话历史；工具目录本身是静态的。
 
+### 随包 Web GUI 黑盒测试技能
+
+#### What the model sees
+
+provider 向调用方所在层注册一个随包技能 `web-gui-tester`，因此挂载本行的每个预设都带这条目录项。它的描述把 Web 前端的黑盒测试路由给它；加载后返回完整方法——五条原则、工具族纪律（只以 snapshot 的 ref 作为定位依据、定位失败后重新观察、一个观察周期只做一个状态变更动作、按期望效果而非回报文本判定成败、按 URL/标题而非位置选标签页、每个测试点都要有截图证据）、四个阶段与环境限制。除它报告为资源基准的那份 `SKILL.md` 正文外，这条目录项不携带任何附带文件。
+
+#### Token effect
+
+目录项只在 agent 本就要读的技能目录里增加一条描述；正文只在模型加载该技能时才进入对话。
+
+#### KV Cache effect
+
+目录项扩展提示前缀中的技能目录；不挂载本行的预设没有这条目录项。
+
 ## 已知限制与延期工作
 
 <a id="known-limitations-and-deferred-work"></a>
 
+- **随包技能是可选的** — 只有组合挂载了技能注册表时 `web-gui-tester` 才注册；没有注册表的组合照旧拿到浏览器工具。解出的资源副本位于 provider fiber 自有的私有临时目录，销毁时删除。
 - **仅 Chromium HTTP(S)** — shell 导航白名单拒绝其他协议；文件目标走文档预览流程。
 - **认领的 tab 是借用的** — `listUserTabs` 与 `claim` 触及人类已经在侧栏打开的页面；后续命令驱动的正是同一个页面，且 tab 池永不关闭它：finalize 认领的 tab 或释放租约后，页面保持原样。
 - **下载按租约追踪** — 一次下载归属到它开始时处于活动状态的那个 tab；该 tab 有下载在跑时，驻留上限不会关闭它。列表只覆盖当前租约。
