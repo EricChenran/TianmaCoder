@@ -402,7 +402,10 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
   private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
-    if (lease.pane !== undefined) return lease.pane
+    // A pane that measured no area is not a surface; a configured watch rectangle
+    // still gives the page something to lay out in.
+    if (lease.pane !== undefined && lease.pane.width >= AGENT_PANE_MIN_SIDE
+      && lease.pane.height >= AGENT_PANE_MIN_SIDE) return lease.pane
     return lease.visible ? lease.bounds : parkedSurface()
   }
 
@@ -1770,6 +1773,9 @@ const AGENT_FRAME_MAX_DEPTH = 4
 function parkedSurface(): { x: number; y: number; width: number; height: number } {
   return { x: 0, y: 0, width: 1, height: 1 }
 }
+
+/** Smallest pane rectangle the guest may present in; a smaller report measured no area. */
+const AGENT_PANE_MIN_SIDE = 2
 
 /** What {@link elementProbeScript} reports back. */
 interface AgentProbeResult {

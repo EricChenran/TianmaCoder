@@ -1162,6 +1162,20 @@ describe('AgentBrowserGuests', () => {
     expect(record.crashListeners.size).toBe(0)
   })
 
+  it('keeps the configured watch rectangle over a pane that measured no area', async () => {
+    const { guests } = makeGuests()
+    const { leaseId } = await guests.acquire({
+      type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 'session-watch',
+      bounds: { x: 0, y: 0, width: 1280, height: 720 },
+    }) as { leaseId: string }
+    // A collapsed measurement still reaches the shell; it must not become the surface.
+    guests.present('session-watch', { x: 5, y: 6, width: 1, height: 1 })
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: 0, y: 0, width: 1280, height: 720 })
+    guests.present('session-watch', { x: 7, y: 8, width: 400, height: 300 })
+    expect(lastRecord().bounds.at(-1)).toEqual({ x: 7, y: 8, width: 400, height: 300 })
+    expect(leaseId).toBeDefined()
+  })
+
   it('attaches a lease at the pane its Session reported', async () => {
     const { guests } = makeGuests()
     // The pane renders before the first tool call, so its report arrives with no lease.

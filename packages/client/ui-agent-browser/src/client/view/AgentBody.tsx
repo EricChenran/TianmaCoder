@@ -28,19 +28,25 @@ const selectActivity = (state: AgentBrowserState): AgentBrowserState => state
  */
 export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
   const surface = useRef<HTMLDivElement | null>(null)
-  const present = useRef(props.present)
-  present.current = props.present
+  const { present, t } = props
   const activity = props.useStore(selectActivity)
-  const { t } = props
+  // A pane can render before its Session binding resolves, and the presenter then
+  // arrives or changes with the resolved Session, so measurement follows its identity
+  // instead of running once on mount and reporting under a key no lease ever had.
   useEffect(() => {
     const element = surface.current
-    if (element === null || present.current === undefined) return
+    if (element === null || present === undefined) return
     const report = (): void => {
       const rect = element.getBoundingClientRect()
-      present.current?.({
-        x: Math.round(rect.left), y: Math.round(rect.top),
-        width: Math.round(rect.width), height: Math.round(rect.height),
-      })
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      // A collapsed measurement is not a surface: presenting one pixel would leave the
+      // page laid out in nothing, which breaks every interaction without a symptom.
+      if (width < 2 || height < 2) {
+        present(null)
+        return
+      }
+      present({ x: Math.round(rect.left), y: Math.round(rect.top), width, height })
     }
     report()
     const observer = new ResizeObserver(report)
@@ -49,14 +55,14 @@ export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
     return () => {
       observer.disconnect()
       window.removeEventListener('resize', report)
-      present.current?.(null)
+      present(null)
     }
-  }, [])
+  }, [present])
   const status = activity.busy
     ? (activity.command === undefined ? t('activity.busy') : `${t('activity.busy')} · ${activity.command}`)
     : activity.presented ? t('activity.idle') : t('activity.offscreen')
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flex: '1 1 auto', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div role="status">{status}</div>
       <div ref={surface} style={{ flex: 1, minHeight: 0 }} />
     </div>

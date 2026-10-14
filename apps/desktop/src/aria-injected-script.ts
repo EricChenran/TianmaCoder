@@ -46,7 +46,7 @@ export function getAriaInjectedScriptSource(): string {
   if (cachedSource !== undefined) return cachedSource
 
   const [packageJsonEntry, generatedEntry] = ARIA_INJECTED_SCRIPT_FILES
-  const packageJsonPath = runtimeRequire.resolve(packageJsonEntry)
+  const packageJsonPath = runtimeRequire.resolve(`playwright-core/${packageJsonEntry}`)
   const generatedSourcePath = join(dirname(packageJsonPath), generatedEntry)
   const generatedModule = readFileSync(generatedSourcePath, 'utf8')
   const assignment = GENERATED_SOURCE_ASSIGNMENT.exec(generatedModule)
