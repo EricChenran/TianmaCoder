@@ -207,6 +207,14 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('在询问验收方式前不启动应用、也不打开 Agent 浏览器')
   })
 
+  it('verifies cross-platform mini-programs through an H5 build in the Agent browser', () => {
+    const text = plugin.departmentPrompt('tech')
+    expect(text).toContain('跨端框架（uni-app / Taro）工程先编译 H5 构建')
+    expect(text).toContain('不调用微信开发者工具')
+    // The H5 path cannot exercise platform-only capabilities, so they stay explicitly unverified.
+    expect(text).toContain('须如实标为未验证并交用户真机预览复核')
+  })
+
   it('publishes the bundled 公文 skill byte for byte where the interpreter reads it', () => {
     const skillDir = join(temporaryDirectory(), 'skill')
     expect(plugin.materializeDepartmentSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
