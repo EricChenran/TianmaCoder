@@ -259,6 +259,12 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   readonly #downloadWatchers = new Map<string, () => void>()
   /** Page dialogs this lease's tabs opened and have not answered yet. */
   readonly #dialogs = new Map<string, AgentDialogRecord[]>()
+  /**
+   * The latest pane rectangle each Session reported. A pane renders before the first
+   * tool call creates its lease, so the report is held here and applied to the lease
+   * that later claims the Session.
+   */
+  readonly #panes = new Map<string, { x: number; y: number; width: number; height: number }>()
 
   /**
    * @param options - Collaborators: the application-host URL guard, the primary
@@ -329,6 +335,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
       visible: request.bounds !== undefined,
     }
     this.#leases.set(leaseId, lease)
+    // A pane that already reported this Session presents the new lease immediately.
+    const reported = request.sessionKey === undefined ? undefined : this.#panes.get(request.sessionKey)
+    if (reported !== undefined) lease.pane = reported
     this.attachActive(lease)
     this.publishState(leaseId, lease)
     this.watchDownloads(leaseId, lease)
@@ -364,24 +373,37 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
    * Bind a Sidebar pane to the lease acquired for one Session.
    * @param sessionKey - Session the pane reports; must equal the lease's acquire key.
    * @param pane - pane rectangle in window coordinates, or `null` to stop presenting.
-   * @returns Whether a lease matched and now presents there.
+   * @returns Whether a lease of that Session is present there now.
    */
   present(sessionKey: string, pane: { x: number; y: number; width: number; height: number } | null): boolean {
+    if (pane === null) this.#panes.delete(sessionKey)
+    else this.#panes.set(sessionKey, pane)
+    return this.applyPane(sessionKey)
+  }
+
+  /**
+   * Attach every lease of one Session at its current pane rectangle.
+   * @param sessionKey - Session whose leases should present.
+   * @returns Whether any lease belongs to that Session.
+   */
+  private applyPane(sessionKey: string): boolean {
+    const pane = this.#panes.get(sessionKey)
+    let matched = false
     for (const [leaseId, lease] of this.#leases) {
       if (lease.sessionKey !== sessionKey) continue
-      if (pane === null) delete lease.pane
+      if (pane === undefined) delete lease.pane
       else lease.pane = pane
       this.attachActive(lease)
       this.publishState(leaseId, lease)
-      return true
+      matched = true
     }
-    return false
+    return matched
   }
 
   /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
   private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
     if (lease.pane !== undefined) return lease.pane
-    return lease.visible ? lease.bounds : parkedSurface(lease.viewport)
+    return lease.visible ? lease.bounds : parkedSurface()
   }
 
   /** Attach the active tab at its resolved rectangle when a window can host it. */
@@ -730,7 +752,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   ): void {
     const previous = lease.tabs.get(lease.activeTabId)
     if (window !== undefined && !window.isDestroyed() && previous !== undefined && lease.activeTabId !== tabId) {
-      previous.view.attach(window, parkedSurface(lease.viewport))
+      previous.view.attach(window, parkedSurface())
     }
     lease.activeTabId = tabId
     const active = lease.tabs.get(tabId)
@@ -1257,6 +1279,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
           const png = image.toPNG()
           const size = pngSize(png)
           const scale = this.scaleFactor()
+          // A presented pane is the surface the page really lays out in, so a capture
+          // that matches it is exact even when the requested viewport differs.
+          const surface = lease.pane ?? lease.viewport
           return {
             base64: png.toString('base64'),
             mimeType: 'image/png',
@@ -1264,8 +1289,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
             scaleFactor: scale,
             ...(size === undefined ? {} : { width: size.width, height: size.height }),
             sizeCorrected: size !== undefined
-              && (size.width !== Math.round(lease.viewport.width * scale)
-                || size.height !== Math.round(lease.viewport.height * scale)),
+              && (size.width !== Math.round(surface.width * scale)
+                || size.height !== Math.round(surface.height * scale)),
           }
         }
         if (attempt >= AGENT_CAPTURE_ATTEMPTS) {
@@ -1734,14 +1759,16 @@ function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'met
 const AGENT_FRAME_MAX_DEPTH = 4
 
 /**
- * Rectangle that parks a guest nothing is showing: it keeps the full viewport so a
- * capture has a real surface to read, and sits entirely outside the window content
- * area so it never covers what the human sees.
- * @param viewport - page viewport the lease asked for.
- * @returns The off-screen rectangle.
+ * Rectangle that parks a guest nothing is showing: one pixel inside the window.
+ * A view positioned outside the window is fully clipped, and Chromium then gives its
+ * renderer a zero-sized viewport: the page gets no layout, no hit testing, and no
+ * frames, so every command fails and captures come back empty. A parked guest
+ * therefore keeps a real, if tiny, layout; the pane and watch rectangles give it the
+ * surface interaction and capture need.
+ * @returns The in-window parked rectangle.
  */
-function parkedSurface(viewport: { width: number; height: number }): { x: number; y: number; width: number; height: number } {
-  return { x: -viewport.width, y: 0, width: viewport.width, height: viewport.height }
+function parkedSurface(): { x: number; y: number; width: number; height: number } {
+  return { x: 0, y: 0, width: 1, height: 1 }
 }
 
 /** What {@link elementProbeScript} reports back. */

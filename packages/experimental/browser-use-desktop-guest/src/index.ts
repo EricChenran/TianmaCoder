@@ -66,9 +66,9 @@ export function apply(ctx: Context, input: Config): void {
     const resources = new SessionResources<{ leaseId: string }>(ctx, {
       label: 'desktop-guest',
       exclusive: false,
-      open: async () => {
+      open: async (agent) => {
         const created = await ctx.desktopBrowserControl.request<{ leaseId: string }>({
-          op: 'acquire', workspaceKey: config.workspaceKey,
+          op: 'acquire', workspaceKey: config.workspaceKey, sessionKey: String(agent.session.id),
           ...(watch === undefined ? {} : { bounds: watch }),
         })
         if (typeof created.leaseId !== 'string') throw new Error('desktop guest: the shell did not return a lease id')

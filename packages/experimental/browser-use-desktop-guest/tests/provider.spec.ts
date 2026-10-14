@@ -9,7 +9,7 @@ const sent: Array<Record<string, unknown>> = []
 const registered: Array<{ name: string; execute: (args: unknown, exec: unknown) => Promise<unknown> }> = []
 const sections: Array<{ name: string; text: string }> = []
 let ctx: Context
-let agent: { id: SessionId; ctx: Context }
+let agent: { id: SessionId; session: { id: SessionId }; ctx: Context }
 
 const shellClient = {
   snapshotElements: [] as Array<{ ref: string; tag: string; name?: string; text?: string }>,
@@ -48,7 +48,7 @@ beforeEach(() => {
   sections.length = 0
   ctx = new Context()
   new BrowserUseRegistry(ctx)
-  agent = { id: SessionId('writer'), ctx }
+  agent = { id: SessionId('writer'), session: { id: SessionId('writer') }, ctx }
   ctx.provide('agents', { requireInitiator: () => agent, get: (id: SessionId) => (id === agent.id ? agent : undefined) } as never)
   ctx.provide('tools', {
     register: (definition: ToolDefinition) => {
@@ -96,6 +96,8 @@ describe('Desktop guest provider', () => {
     await navigate.execute({ url: 'https://example.com/b' }, minimalExec)
     expect(sent.map(message => message.op)).toEqual(['acquire', 'execute', 'execute'])
     expect(sent[0]!.workspaceKey).toBe('ws-1')
+    // The lease carries its Session so the pane a Sidebar tab reports can bind to it.
+    expect(sent[0]!.sessionKey).toBe('writer')
     expect(sent[1]!.leaseId).toBe('l-1')
     expect(sent[2]!.leaseId).toBe('l-1')
   })
