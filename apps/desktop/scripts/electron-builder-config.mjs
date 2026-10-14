@@ -2,7 +2,8 @@ import { officePackageDirectories } from '../../../scripts/libreoffice-packages.
 import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { join, relative, sep } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -96,6 +97,10 @@ export function createElectronBuilderConfig(
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const packaged = resolveDesktopBuildCommit(env)
+  // The ARIA snapshot reads the pinned Playwright runtime's generated injected script
+  // at run time, and electron-builder's production collection does not carry that
+  // package into the archive, so the files the loader resolves are named explicitly.
+  const playwrightCoreDirectory = dirname(createRequire(import.meta.url).resolve('playwright-core/package.json'))
   return {
     appId,
     protocols: [{ name: 'TianmaCoder', schemes: ['dsh'] }],
@@ -138,6 +143,7 @@ export function createElectronBuilderConfig(
       { from: buildPaths.dsh, to: 'dsh', filter: ['**/*'] },
       // electron-builder excludes a source directory's root node_modules.
       { from: join(buildPaths.dsh, 'node_modules'), to: 'dsh/node_modules', filter: ['**/*'] },
+      { from: playwrightCoreDirectory, to: 'node_modules/playwright-core', filter: ['package.json', 'lib/generated/**/*'] },
     ],
     asarUnpack: unpack,
     extraResources: [

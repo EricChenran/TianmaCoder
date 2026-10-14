@@ -5,6 +5,12 @@ import { runInNewContext } from 'node:vm'
 
 const runtimeRequire = createRequire(import.meta.url)
 const GENERATED_SOURCE_ASSIGNMENT = /const source\s*=\s*/
+/**
+ * Files this loader resolves inside the pinned Playwright package. The Desktop installer
+ * copies exactly these into the archive, so the packaging file set and these entries move
+ * together.
+ */
+export const ARIA_INJECTED_SCRIPT_FILES = ['package.json', 'lib/generated/injectedScriptSource.js'] as const
 
 let cachedSource: string | undefined
 
@@ -39,8 +45,9 @@ function readStringLiteralEnd(source: string, start: number): number {
 export function getAriaInjectedScriptSource(): string {
   if (cachedSource !== undefined) return cachedSource
 
-  const packageJsonPath = runtimeRequire.resolve('playwright-core/package.json')
-  const generatedSourcePath = join(dirname(packageJsonPath), 'lib', 'generated', 'injectedScriptSource.js')
+  const [packageJsonEntry, generatedEntry] = ARIA_INJECTED_SCRIPT_FILES
+  const packageJsonPath = runtimeRequire.resolve(packageJsonEntry)
+  const generatedSourcePath = join(dirname(packageJsonPath), generatedEntry)
   const generatedModule = readFileSync(generatedSourcePath, 'utf8')
   const assignment = GENERATED_SOURCE_ASSIGNMENT.exec(generatedModule)
   if (assignment === null) {

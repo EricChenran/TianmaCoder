@@ -77,6 +77,28 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.artifactName).toBe('tianmacoder-${version}-${os}-${arch}-unsigned.${ext}')
   })
 
+  it('ships every file the ARIA snapshot resolves from the pinned Playwright runtime', async () => {
+    const { ARIA_INJECTED_SCRIPT_FILES } = await import('../src/aria-injected-script.ts')
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.installer',
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_UNSIGNED: '1',
+    }, 'win32', 'x64')
+    const files: ReadonlyArray<string | { to: string; filter: readonly string[] }> = config.files
+    const playwright = files.find((entry): entry is { to: string; filter: readonly string[] } =>
+      typeof entry === 'object' && entry.to === 'node_modules/playwright-core')
+    expect(playwright).toBeDefined()
+    for (const file of ARIA_INJECTED_SCRIPT_FILES) {
+      const covered = playwright!.filter.some(pattern => pattern === file
+        || (pattern.endsWith('/**/*') && file.startsWith(pattern.slice(0, -'**/*'.length))))
+      expect(covered, `${file} is not covered by ${JSON.stringify(playwright!.filter)}`).toBe(true)
+    }
+  })
+
   it('packages every preload entry point the shell loads', async () => {
     const { readdirSync, readFileSync } = await import('node:fs')
     const sourceDirectory = new URL('../src/', import.meta.url)
