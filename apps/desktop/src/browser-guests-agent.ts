@@ -24,11 +24,7 @@ import { ShellBrowserControlError, type ShellBrowserCommandHandler } from './bro
 /** The slice of an Electron window the carrier needs to host one guest view. */
 export interface AgentGuestHostWindow {
   readonly contentView: {
-    /**
-     * @param view - child view to add.
-     * @param index - stacking position; `0` puts it under the application document.
-     */
-    addChildView(view: AgentGuestElectronView, index?: number): void
+    addChildView(view: AgentGuestElectronView): void
     removeChildView(view: AgentGuestElectronView): void
   }
   isDestroyed(): boolean
@@ -37,6 +33,7 @@ export interface AgentGuestHostWindow {
 /** The slice of a compositor-attachable view the carrier needs. */
 export interface AgentGuestElectronView {
   setBounds(bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void
+  setVisible(visible: boolean): void
 }
 
 /** One attached surface: the rectangle the view occupies and the page scale inside it. */
@@ -44,7 +41,7 @@ export interface AgentGuestSurface {
   readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
   /** Page scale; the layout viewport is the rectangle divided by this factor. */
   readonly zoom: number
-  /** True when no pane shows this surface, so it stays under the application document. */
+  /** True when no pane shows this surface, so the view stays hidden. */
   readonly parked: boolean
 }
 
@@ -73,10 +70,10 @@ export interface AgentGuestView {
    * Attach to the window at the requested rectangle.
    * @param window - window hosting the view.
    * @param bounds - rectangle the view occupies, in window coordinates.
-   * @param placement - `back` stacks the view under the application document, which is
-   *   how a page nothing shows keeps its own layout without appearing; `front` shows it.
+   * @param visible - `false` keeps a page nothing shows off the screen while it holds
+   *   that rectangle, so its layout and captures stay real without covering the app.
    */
-  attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds, placement?: 'front' | 'back'): void
+  attach(window: AgentGuestHostWindow, bounds: BrowserControlBounds, visible?: boolean): void
   /**
    * Scale the page, so the layout viewport becomes the attached rectangle divided by
    * the factor. Absent when the carrier cannot zoom, which leaves the page at 1:1.
@@ -521,7 +518,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     // A usable pane is the fact the reveal retry stops on: the human now owns the tab.
     if (this.presentingPane(lease) !== undefined) lease.presentedOnce = true
     lease.zoom = surface.zoom
-    active.view.attach(window, surface.bounds, surface.parked ? 'back' : 'front')
+    active.view.attach(window, surface.bounds, !surface.parked)
     active.view.setZoom?.(surface.zoom)
   }
 
@@ -884,7 +881,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
   ): void {
     const previous = lease.tabs.get(lease.activeTabId)
     if (window !== undefined && !window.isDestroyed() && previous !== undefined && lease.activeTabId !== tabId) {
-      previous.view.attach(window, parkedSurface(lease.viewport), 'back')
+      previous.view.attach(window, parkedSurface(lease.viewport), false)
     }
     lease.activeTabId = tabId
     const active = lease.tabs.get(tabId)
@@ -1781,11 +1778,11 @@ export function createWebContentsViewGuest(partition: string): AgentGuestView {
       evaluateInIsolatedWorld: (script: string) => web.executeJavaScriptInIsolatedWorld(AGENT_ISOLATED_WORLD_ID, [{ code: script }]),
       capturePage: () => web.capturePage(),
     },
-    attach(target, bounds, placement) {
+    attach(target, bounds, visible) {
       window = target
-      // A parked view is stacked under the application document; anything else is shown.
-      window.contentView.addChildView(view, placement === 'back' ? 0 : undefined)
+      window.contentView.addChildView(view)
       view.setBounds(bounds)
+      view.setVisible(visible ?? true)
     },
     setZoom(factor) {
       appliedZoom = factor
@@ -1926,14 +1923,16 @@ function readModifiers(value: unknown): Array<'control' | 'shift' | 'alt' | 'met
 const AGENT_FRAME_MAX_DEPTH = 4
 
 /**
- * Rectangle that parks a guest nothing is showing: its full layout viewport, stacked
- * under the application document so no human sees it.
+ * Rectangle that parks a guest nothing is showing: its full layout viewport, which the
+ * carrier keeps hidden instead of on screen.
  *
  * The older choice was a single pixel, which kept the renderer alive but laid the page
  * out in one pixel: a parked page measured a layout viewport of 1x1 and its controls at
  * x = -77, captures came back one pixel wide, and a click reported success at (1, 78)
  * while changing nothing. Detaching instead is not an option either: a view clipped out
  * of the window gets a zero-sized renderer viewport, so the page has no layout at all.
+ * Stacking the full-size rectangle under the application document is not one either: a
+ * window's page is not a sibling view, so the parked page covered the whole interface.
  * @param viewport - layout viewport the lease is using.
  * @returns The parked rectangle, in window coordinates.
  */

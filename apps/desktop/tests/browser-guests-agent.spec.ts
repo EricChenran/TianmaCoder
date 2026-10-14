@@ -172,8 +172,12 @@ const { FakeView, makeWrappedGuest, clipboardStore, lastDebugger } = vi.hoisted(
     }
 
     attach(window: AgentGuestHostWindow): void {
-      window.contentView.addChildView({ setBounds: this.setBounds })
+      window.contentView.addChildView({ setBounds: this.setBounds, setVisible: this.setVisible })
       this.setBounds({ x: 0, y: 0, width: 1, height: 1 })
+    }
+
+    setVisible = (visible: boolean): void => {
+      visibilityStates.push(visible)
     }
 
     destroy(): void {
@@ -394,7 +398,7 @@ function makeGuests(overrides?: {
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
-      addChildView: (_view, index) => { viewStack.push(index) },
+      addChildView: () => {},
       removeChildView: () => {},
     },
     isDestroyed: () => false,
@@ -428,12 +432,12 @@ function lastRecord(): FakeWrappedGuest {
   return record
 }
 
-/** Stacking index of each attach, in order: 0 parks a view under the application document. */
-const viewStack: Array<number | undefined> = []
+/** Visibility of every attach, in order: a parked page is attached hidden. */
+const visibilityStates: boolean[] = []
 
 beforeEach(() => {
   FakeView.instances.length = 0
-  viewStack.length = 0
+  visibilityStates.length = 0
 })
 afterEach(() => { FakeView.instances.length = 0 })
 
@@ -463,7 +467,7 @@ describe('AgentBrowserGuests', () => {
     // the application document so nobody sees it. Shrinking it to one pixel instead laid
     // the page out in one pixel; detaching it gives a zero-sized renderer viewport.
     expect(record.bounds).toEqual([{ x: 0, y: 0, width: 1280, height: 720 }])
-    expect(viewStack.at(-1)).toBe(0)
+    expect(visibilityStates.at(-1)).toBe(false)
   })
 
   it('creates the lease without attachment when no window is available', async () => {
@@ -706,8 +710,8 @@ describe('AgentBrowserGuests', () => {
       type: 'browser', requestId: 1, op: 'acquire', workspaceKey: 'ws', sessionKey: 's-1',
     }) as { leaseId: string }
     expect(guests.present('s-1', { x: 10, y: 20, width: 420, height: 900 })).toBe(true)
-    // A pane shows it, so the view is stacked in front again.
-    expect(viewStack.at(-1)).toBeUndefined()
+    // A pane shows it, so the view is visible again.
+    expect(visibilityStates.at(-1)).toBe(true)
     const sized = await guests.execute({
       type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'viewport', args: { width: 375, height: 667 },
     }) as { width: number; height: number; scale: number; follow: boolean; visible: boolean }
