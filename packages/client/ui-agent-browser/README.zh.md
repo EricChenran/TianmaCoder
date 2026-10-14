@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-从右侧 Sidebar guide 打开 **Agent 浏览器**。该 tab 附着到所属 Session 的 agent 浏览器租约，因此面板跟随自动化正在处理的页面，自身不再发起第二次导航。与相邻的浏览器 tab 一样，它支持多开。
+从右侧 Sidebar guide 打开 **Agent 浏览器**，或交给自动化打开：当 agent 为当前屏幕上的会话获取浏览器租约时，该 tab 会自动出现——窗格既是人观察 agent 操作的地方，也是 guest 量尺寸的表面。该 tab 附着到所属 Session 的 agent 浏览器租约，因此面板跟随自动化正在处理的页面，自身不再发起第二次导航。与相邻的浏览器 tab 一样，它支持多开。
 
 ### 何时选择
 

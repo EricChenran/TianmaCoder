@@ -294,6 +294,8 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     readonly deviceScaleFactor?: () => number
     /** Source of guest download facts; absent means downloads are neither tracked nor protected. */
     readonly downloads?: AgentDownloadWatcher
+    /** Asks the window to open this Session's pane; absent leaves the tab as the human left it. */
+    readonly revealPane?: (sessionKey: string) => void
   }) {}
 
   /** @returns The scale factor captured pixels are measured in; one when the shell does not report one. */
@@ -341,6 +343,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     this.attachActive(lease)
     this.publishState(leaseId, lease)
     this.watchDownloads(leaseId, lease)
+    // The human watches the pane the agent drives, and a guest nothing presents has no
+    // usable surface, so the Session's pane is asked to open once per acquisition.
+    if (request.sessionKey !== undefined) this.options.revealPane?.(request.sessionKey)
     return Promise.resolve({ leaseId, tabId })
   }
 

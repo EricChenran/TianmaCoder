@@ -382,6 +382,7 @@ function makeGuests(overrides?: {
   recordingsDir?: string
   deviceScaleFactor?: () => number
   downloads?: AgentDownloadWatcher
+  revealPane?: (sessionKey: string) => void
 }): Harness {
   const fakeWindow: AgentGuestHostWindow = {
     contentView: {
@@ -394,12 +395,14 @@ function makeGuests(overrides?: {
   const loadURL = overrides?.loadURL
   const navigateTimeoutMs = overrides?.navigateTimeoutMs
   const ariaMaxChars = overrides?.ariaMaxChars
+  const revealPane = overrides?.revealPane
   const guests = new AgentBrowserGuests({
     hostUrl: () => 'http://127.0.0.1:19387',
     getWindow: overrides?.getWindow ?? (() => fakeWindow),
     partitionFor: workspace => `partition-${workspace}`,
     ...(navigateTimeoutMs === undefined ? {} : { navigateTimeoutMs }),
     ...(ariaMaxChars === undefined ? {} : { ariaMaxChars }),
+    ...(revealPane === undefined ? {} : { revealPane }),
     ...(overrides?.emit === undefined ? {} : { emit: overrides.emit }),
     ...(overrides?.humanTabs === undefined ? {} : { humanTabs: overrides.humanTabs }),
     ...(overrides?.createRecorder === undefined ? {} : { createRecorder: overrides.createRecorder }),

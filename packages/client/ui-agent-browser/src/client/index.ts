@@ -35,6 +35,22 @@ export function apply(ctx: Context): void {
   }, 'ui-agent-browser.activity')
   ctx.effect(() => ctx.locale.register(AGENT_BROWSER_NAMESPACE, { zh, en }), 'ui-agent-browser.copy')
   ctx.effect(() => ctx.sidebarRightTabs.register(agentBrowserDefinition(t)), 'ui-agent-browser.type')
+  // The agent opens its own tab: the pane is where the human watches it work, and an
+  // unopened pane leaves the guest without a surface any command can use.
+  if (bridge !== undefined) {
+    ctx.effect(() => bridge.onReveal((sessionKey) => {
+      const mounted = ctx.sidebarRight.mounted.getSnapshot()
+      if (mounted === undefined || String(mounted) !== sessionKey) return
+      if (ctx.sidebarRightTabs.get(AGENT_BROWSER_ID) === undefined) return
+      try {
+        ctx.sidebarRight.openTab(AGENT_BROWSER_ID)
+      } catch (error) {
+        // The right Sidebar has no Session surface to open into yet; the pane reports
+        // itself when the column mounts, so nothing is lost.
+        console.warn('Agent browser tab could not open', error)
+      }
+    }), 'ui-agent-browser.reveal')
+  }
   // The Desktop shell places the guest over the pane the body measures; the Web profile has no carrier.
   const body = { name: 'sidebar.right.pane.tab', key: AGENT_BROWSER_ID, locale: AGENT_BROWSER_NAMESPACE, store } as const
   if (bridge === undefined) {

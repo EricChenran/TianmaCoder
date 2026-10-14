@@ -25,7 +25,7 @@ Report the embedded browser page an agent automation is currently driving, as a 
 <a id="use-this-package"></a>
 ## Use this package
 
-Open **Agent Browser** from the right-Sidebar guide. The tab attaches to the agent browser lease of its Session, so the pane follows the page the automation is working on without a second navigation of its own. The tab is multiple-capable, matching the Browser tab next to it.
+Open **Agent Browser** from the right-Sidebar guide, or let an automation open it: the tab appears by itself when the agent acquires its browser lease for the Session on screen, because the pane is both where the human watches the agent work and the surface the guest measures. The tab attaches to the agent browser lease of its Session, so the pane follows the page the automation is working on without a second navigation of its own. The tab is multiple-capable, matching the Browser tab next to it.
 
 ### When to choose it
 

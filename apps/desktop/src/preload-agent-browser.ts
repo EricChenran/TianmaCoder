@@ -10,6 +10,15 @@ import { DESKTOP_IPC } from './ipc.ts'
 /** @returns agent browser operations that expose neither IPC nor Electron objects. */
 export function createDesktopAgentBrowserBridge(): DesktopAgentBrowserBridge {
   const listeners = new Set<(activity: DesktopAgentBrowserActivity) => void>()
+  const revealListeners = new Set<(sessionKey: string) => void>()
+  ipcRenderer.on(DESKTOP_IPC.agentBrowserReveal, (_event, message: unknown) => {
+    const sessionKey = readSessionKey(message)
+    if (sessionKey === undefined) return
+    for (const listener of [...revealListeners]) {
+      try { listener(sessionKey) }
+      catch (error) { console.error('Desktop agent browser reveal handler failed', error) }
+    }
+  })
   ipcRenderer.on(DESKTOP_IPC.agentBrowserActivity, (_event, message: unknown) => {
     const activity = readActivity(message)
     if (activity === undefined) return
@@ -25,7 +34,20 @@ export function createDesktopAgentBrowserBridge(): DesktopAgentBrowserBridge {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
+    onReveal(listener) {
+      revealListeners.add(listener)
+      return () => { revealListeners.delete(listener) }
+    },
   }
+}
+
+/** @returns the Session key a reveal message carries, or `undefined` for anything malformed. */
+function readSessionKey(message: unknown): string | undefined {
+  if (typeof message !== 'object' || message === null) return undefined
+  const candidate = message as Record<string, unknown>
+  return typeof candidate.sessionKey === 'string' && candidate.sessionKey.length > 0
+    ? candidate.sessionKey
+    : undefined
 }
 
 /** @returns the activity a shell message carries, or `undefined` for anything malformed. */

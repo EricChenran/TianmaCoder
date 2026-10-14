@@ -474,6 +474,10 @@ async function main(): Promise<void> {
         guest: tabId => mainWindow === undefined || mainWindow.isDestroyed()
           ? undefined : browserGuests.ownedGuest(mainWindow.webContents, tabId),
       },
+      revealPane: (sessionKey: string) => {
+        if (mainWindow === undefined || mainWindow.isDestroyed()) return
+        mainWindow.webContents.send(DESKTOP_IPC.agentBrowserReveal, { sessionKey })
+      },
       deviceScaleFactor: () => screen.getPrimaryDisplay().scaleFactor,
       downloads: {
         watch: (partition, listener) => {

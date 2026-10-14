@@ -40,4 +40,12 @@ export interface DesktopAgentBrowserBridge {
    * @returns unsubscribe callback.
    */
   onActivity(listener: (activity: DesktopAgentBrowserActivity) => void): () => void
+  /**
+   * The shell asks the Session's pane to open when an automation acquires a lease:
+   * the tab is where the human watches the agent work, and an unopened tab leaves the
+   * guest with a one-pixel surface no command can use.
+   * @param listener - receives the Session key whose pane should open.
+   * @returns unsubscribe callback.
+   */
+  onReveal(listener: (sessionKey: string) => void): () => void
 }
