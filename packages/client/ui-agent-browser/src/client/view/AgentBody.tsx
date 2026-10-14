@@ -1,8 +1,10 @@
 /** Agent tab body: reports its surface rectangle and shows the agent's activity. */
 import { useEffect, useRef, type ReactElement } from 'react'
+import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DesktopAgentBrowserPane } from '../../types.ts'
 import type { AgentBrowserState, AgentBrowserStore } from '../store.ts'
+import { activityDot, activityWord } from './activity.ts'
 
 /** Data the pane injects: binds the Session's guest to this occurrence's surface. */
 export interface AgentBrowserInjected {
@@ -58,12 +60,12 @@ export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
       present(null)
     }
   }, [present])
-  const status = activity.busy
-    ? (activity.command === undefined ? t('activity.busy') : `${t('activity.busy')} · ${activity.command}`)
-    : activity.presented ? t('activity.idle') : t('activity.offscreen')
   return (
     <div style={{ display: 'flex', flex: '1 1 auto', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div role="status">{status}</div>
+      <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <StateDot state={activityDot(activity)} />
+        {activityWord(t, activity)}
+      </div>
       <div ref={surface} style={{ flex: 1, minHeight: 0 }} />
     </div>
   )

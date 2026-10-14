@@ -9,6 +9,7 @@ import { agentBrowserDefinition, AGENT_BROWSER_ID } from './definition.tsx'
 import { AGENT_BROWSER_NAMESPACE, en, zh } from './locales.ts'
 import { createAgentBrowserStore } from './store.ts'
 import { AgentBody } from './view/AgentBody.tsx'
+import { AgentBrowserTitle } from './view/AgentBrowserTitle.tsx'
 
 /** Required Agent Browser services. */
 export const inject = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs']
@@ -62,5 +63,5 @@ export function apply(ctx: Context): void {
   }
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
     name: 'sidebar.right.pane.tab.title', key: AGENT_BROWSER_ID, locale: AGENT_BROWSER_NAMESPACE, store,
-  }, () => t('type.label'))), 'ui-agent-browser.title')
+  }, AgentBrowserTitle)), 'ui-agent-browser.title')
 }

@@ -1171,9 +1171,15 @@ describe('AgentBrowserGuests', () => {
     // A collapsed measurement still reaches the shell; it must not become the surface.
     guests.present('session-watch', { x: 5, y: 6, width: 1, height: 1 })
     expect(lastRecord().bounds.at(-1)).toEqual({ x: 0, y: 0, width: 1280, height: 720 })
+    // A capture is measured against the surface the guest attached at, so the watch
+    // rectangle — not the collapsed report — is what an exact capture matches.
+    lastRecord().pngBytes = pngHeader(1280, 720)
+    const shot = await guests.execute({
+      type: 'browser', requestId: 2, op: 'execute', leaseId, command: 'screenshot', args: {},
+    }) as { width: number; sizeCorrected: boolean }
+    expect(shot).toMatchObject({ width: 1280, sizeCorrected: false })
     guests.present('session-watch', { x: 7, y: 8, width: 400, height: 300 })
     expect(lastRecord().bounds.at(-1)).toEqual({ x: 7, y: 8, width: 400, height: 300 })
-    expect(leaseId).toBeDefined()
   })
 
   it('attaches a lease at the pane its Session reported', async () => {

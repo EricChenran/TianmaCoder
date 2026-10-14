@@ -402,11 +402,20 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
 
   /** @returns The rectangle the active tab attaches at: the reported pane, the configured watch rect, or offscreen. */
   private attachTarget(lease: GuestLease): { x: number; y: number; width: number; height: number } {
-    // A pane that measured no area is not a surface; a configured watch rectangle
-    // still gives the page something to lay out in.
-    if (lease.pane !== undefined && lease.pane.width >= AGENT_PANE_MIN_SIDE
-      && lease.pane.height >= AGENT_PANE_MIN_SIDE) return lease.pane
-    return lease.visible ? lease.bounds : parkedSurface()
+    return this.presentingPane(lease) ?? (lease.visible ? lease.bounds : parkedSurface())
+  }
+
+  /**
+   * A pane that measured no area is not a surface: the shell clamps such a report to a
+   * single pixel, and a page laid out in one pixel answers no interaction. Every reader
+   * of the pane — attachment, capture comparison, and the on-screen facts the Host and
+   * the pane strip see — therefore agrees on the same test.
+   * @returns The pane rectangle when it measured area, or undefined when nothing usable was reported.
+   */
+  private presentingPane(lease: GuestLease): { x: number; y: number; width: number; height: number } | undefined {
+    const pane = lease.pane
+    if (pane === undefined || pane.width < AGENT_PANE_MIN_SIDE || pane.height < AGENT_PANE_MIN_SIDE) return undefined
+    return pane
   }
 
   /** Attach the active tab at its resolved rectangle when a window can host it. */
@@ -427,7 +436,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
         sessionKey: lease.sessionKey ?? null,
         closed: false,
         activeTabId: lease.activeTabId,
-        presented: lease.pane !== undefined,
+        presented: this.presentingPane(lease) !== undefined,
         tabs: [...lease.tabs.entries()].map(([tabId, tab]) => ({
           tabId,
           url: tab.view.webContents.isDestroyed() ? '' : tab.view.webContents.getURL(),
@@ -1282,9 +1291,9 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
           const png = image.toPNG()
           const size = pngSize(png)
           const scale = this.scaleFactor()
-          // A presented pane is the surface the page really lays out in, so a capture
-          // that matches it is exact even when the requested viewport differs.
-          const surface = lease.pane ?? lease.viewport
+          // The attached rectangle is the surface the page really lays out in, so a
+          // capture that matches it is exact even when the requested viewport differs.
+          const surface = this.attachTarget(lease)
           return {
             base64: png.toString('base64'),
             mimeType: 'image/png',
@@ -1436,7 +1445,7 @@ export class AgentBrowserGuests implements ShellBrowserCommandHandler {
     // not only the ones a human can see.
     if (lease.visible) lease.bounds = { ...lease.bounds, width, height }
     this.attachActive(lease)
-    return { width, height, visible: lease.visible }  }
+    return { width, height, visible: lease.visible || this.presentingPane(lease) !== undefined }  }
 
   /** Resolve a ref (from the last snapshot) or a CSS selector to viewport coordinates, then hover or click with trusted input. */
   private async click(
