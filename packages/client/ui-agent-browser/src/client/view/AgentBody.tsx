@@ -57,13 +57,13 @@ const selectActivity = (state: AgentBrowserState): AgentBrowserState => state
  * @param activity - activity facts of this Session's lease.
  * @returns The control value, with a label only for a size outside the presets.
  */
-function viewportChoice(activity: AgentBrowserState): { readonly value: string; readonly label?: string } {
+function viewportChoice(activity: AgentBrowserState): { readonly value: string; readonly label: string } {
   const viewport = activity.viewport
-  if (activity.follow === true || viewport === undefined) return { value: FOLLOW_PANE }
+  if (activity.follow === true || viewport === undefined) return { value: FOLLOW_PANE, label: '' }
   const preset = VIEWPORT_PRESETS.find(entry => entry.width === viewport.width && entry.height === viewport.height)
   return preset === undefined
     ? { value: CUSTOM, label: `${String(viewport.width)}×${String(viewport.height)}` }
-    : { value: preset.id }
+    : { value: preset.id, label: '' }
 }
 
 /**
@@ -182,7 +182,7 @@ export function AgentBody(props: AgentBrowserBodyProps): ReactElement {
             </option>
           ))}
           {choice.value === CUSTOM && (
-            <option value={CUSTOM}>{`${t('toolbar.viewportCustom')} ${choice.label ?? ''}`}</option>
+            <option value={CUSTOM}>{`${t('toolbar.viewportCustom')} ${choice.label}`}</option>
           )}
         </select>
       </form>

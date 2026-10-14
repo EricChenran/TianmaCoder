@@ -186,6 +186,10 @@ describe('AgentBody pane controls', () => {
     store.actions.set({ busy: false, presented: true, viewport: { width: 375, height: 667 }, follow: false })
     view.rerender(<AgentBody {...props} />)
     expect(select.value).toBe('mobile')
+    // A pane that follows its own size decides the viewport, whatever size is recorded.
+    store.actions.set({ busy: false, presented: true, viewport: { width: 375, height: 667 }, follow: true })
+    view.rerender(<AgentBody {...props} />)
+    expect(select.value).toBe('follow')
     fireEvent.change(select, { target: { value: 'tablet' } })
     expect(command).toHaveBeenCalledWith('viewport', { width: 768, height: 1024 })
     fireEvent.change(select, { target: { value: 'follow' } })

@@ -22,4 +22,18 @@ describe('createAgentBrowserStore', () => {
     store.actions.set({ busy: false, presented: false })
     expect(store.getSnapshot()).toEqual({ busy: false, presented: false })
   })
+
+  it('carries the address and viewport the pane\u2019s controls show, and drops them with the lease', () => {
+    const store = createAgentBrowserStore().create()
+    store.actions.set({
+      busy: false, presented: true,
+      url: 'https://example.com/', title: 'Example', viewport: { width: 375, height: 667 }, follow: false,
+    })
+    expect(store.getSnapshot()).toEqual({
+      busy: false, presented: true,
+      url: 'https://example.com/', title: 'Example', viewport: { width: 375, height: 667 }, follow: false,
+    })
+    store.actions.set({ busy: false, presented: false })
+    expect(store.getSnapshot()).toEqual({ busy: false, presented: false })
+  })
 })
