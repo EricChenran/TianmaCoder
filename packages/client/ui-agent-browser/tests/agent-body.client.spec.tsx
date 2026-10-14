@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentBrowserState } from '../src/client/store.ts'
 import { createAgentBrowserStore } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
-import { AgentBody } from '../src/client/view/AgentBody.tsx'
+import { SURFACE_SWEEP_MS, AgentBody } from '../src/client/view/AgentBody.tsx'
 import type { AgentBrowserBodyProps } from '../src/client/view/AgentBody.tsx'
 
 /** jsdom has no ResizeObserver; the body only needs observe/disconnect. */
@@ -15,7 +15,11 @@ class ObservedResize {
   disconnect(): void {}
 }
 
-beforeEach(() => { vi.stubGlobal('ResizeObserver', ObservedResize) })
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', ObservedResize)
+  // jsdom has no `checkVisibility`; the pane's own spec covers the browser-grade API.
+  ;(Element.prototype as { checkVisibility: (options?: object) => boolean }).checkVisibility = () => true
+})
 afterEach(cleanup)
 
 function translate(key: keyof typeof en): string { return en[key] }
@@ -59,6 +63,38 @@ describe('AgentBody', () => {
     render(<AgentBody {...props} />)
     expect(present).toHaveBeenCalledWith(null)
     expect(present).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports again when the pane moves without resizing', () => {
+    vi.useFakeTimers()
+    try {
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+        x: 1290, y: 40, width: 575, height: 721, top: 40, left: 1290, right: 1865, bottom: 761, toJSON: () => ({}),
+      })
+      const present = vi.fn()
+      render(<AgentBody {...bodyProps(present).props} />)
+      expect(present).toHaveBeenCalledTimes(1)
+      // The Sidebar takes the column fullscreen and then hides it: same size, new place,
+      // and no resize event, so only the sweep can notice.
+      spy.mockReturnValue({
+        x: 0, y: 40, width: 575, height: 721, top: 40, left: 0, right: 575, bottom: 761, toJSON: () => ({}),
+      })
+      vi.advanceTimersByTime(SURFACE_SWEEP_MS + 50)
+      expect(present).toHaveBeenLastCalledWith({ x: 0, y: 40, width: 575, height: 721 })
+      // An unchanged pane is measured again without sending anything.
+      const settled = present.mock.calls.length
+      vi.advanceTimersByTime(SURFACE_SWEEP_MS * 2)
+      expect(present).toHaveBeenCalledTimes(settled)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops presenting while the pane is hidden but keeps its box', () => {
+    ;(Element.prototype as { checkVisibility: (options?: object) => boolean }).checkVisibility = () => false
+    const present = vi.fn()
+    render(<AgentBody {...bodyProps(present).props} />)
+    expect(present).toHaveBeenCalledWith(null)
   })
 
   it('reports once the presenter arrives after the first render', () => {
