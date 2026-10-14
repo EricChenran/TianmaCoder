@@ -184,8 +184,8 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('询问用户由 Agent 执行端到端验证，还是由用户自行验证')
     expect(text).toContain('用户选择自行验证时，启动项目并提供可访问的入口')
     expect(text).toContain('前端改动的基础检查不要求默认截图')
-    expect(text).toContain('浏览器验证；按真实页面交互验证，截图用于视觉判读')
-    expect(text).toContain('验证关注项（只有用户选择 Agent 端到端验收时才逐档实测）')
+    expect(text).toContain('截图用于视觉判读，不做像素基线回归')
+    expect(text).toContain('验证关注项（只有用户选择 Agent 端到端验收时才用 Agent 浏览器逐档实测）')
     expect(text).not.toContain('验证方式（交付前逐页执行）')
     expect(text).not.toContain('端到端验证已由独立子 Agent 并行跑过')
     expect(text).not.toContain('前端初步验收已做过：无头浏览器按')
@@ -193,6 +193,18 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('交付前只完成少量、与当前改动直接相关的基础检查')
     expect(text).toContain('若用户选择自行验证：项目已启动并提供入口、必要操作前提及停止方式')
     expect(text).toContain('并行执行规则：多个 Agent 并行构建或操作同一 Chrome 实例')
+  })
+
+  it('drives Agent-led end-to-end verification through the Agent browser', () => {
+    const text = plugin.departmentPrompt('tech')
+    expect(text).toContain('Agent 浏览器（`browser_*` 工具族）')
+    expect(text).toContain('用户选择 Agent 验证后，用 Agent 浏览器驱动真实页面完成端到端测试与视觉验证')
+    expect(text).toContain('用 Agent 浏览器按任务需要进行真实页面交互与截图核对')
+    expect(text).toContain('用 Agent 浏览器核对真实页面交互')
+    // The department rows ship no browser tools of their own, so both mentions stay conditional.
+    expect(text).toContain('环境未提供该工具族时，改用真实入口的其他手段验证并在汇报中说明')
+    expect(text).toContain('环境未提供 Agent 浏览器时先说明')
+    expect(text).toContain('在询问验收方式前不启动应用、也不打开 Agent 浏览器')
   })
 
   it('publishes the bundled 公文 skill byte for byte where the interpreter reads it', () => {
