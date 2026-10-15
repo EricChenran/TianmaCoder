@@ -305,6 +305,7 @@ export const EXECUTOR_ENV = {
   secret: 'MPS_NODE_SECRET',
   dshBin: 'MPS_DSH_BIN',
   dshHome: 'MPS_DSH_HOME',
+  agentVersion: 'MPS_AGENT_VERSION',
 } as const
 
 /**
@@ -336,6 +337,8 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
   if (workspace !== undefined && workspace !== '') config.workspaceRoot = workspace
   const secretEnv = env[EXECUTOR_ENV.secret]
   if (secretEnv !== undefined && secretEnv !== '') config.secretEnv = secretEnv
+  const agentVersion = env[EXECUTOR_ENV.agentVersion]
+  if (agentVersion !== undefined && agentVersion !== '') config.agentVersion = agentVersion
   return config
 }
 

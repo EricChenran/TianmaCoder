@@ -8,6 +8,7 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { EXECUTOR_ENV } from '@tianma/dsh-mps-executor'
 
 /** The patch this bundle ships, as the profile loader receives it. */
 const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
@@ -98,6 +99,13 @@ describe('the profile bundle patch a deployment runs', () => {
     expect(patch).toContain("command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']")
     expect(patch).toContain("dshHome: process.env.MPS_DSH_HOME ?? ''")
     expect(patch).toContain('jsonEvents: true')
+  })
+
+  it('reads exactly the environment the executor names, so a readout cannot lie', () => {
+    // The row and `--show-config` both read these names; a name in one and not the other is
+    // how a readout came to report an image's version as unknown.
+    const inPatch = [...new Set([...patch.matchAll(/MPS_[A-Z_]+/gu)].map(match => match[0]))].sort()
+    expect(inPatch).toEqual([...Object.values(EXECUTOR_ENV)].sort())
   })
 
   it('writes scripted values the overlay parser accepts', () => {

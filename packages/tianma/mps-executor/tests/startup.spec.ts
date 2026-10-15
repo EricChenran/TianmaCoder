@@ -101,12 +101,14 @@ describe('answering what this machine will dial', () => {
       MPS_NODE_SLOTS: '4',
       MPS_NODE_WORKSPACE: '/srv/node',
       MPS_NODE_SECRET: 'MPS_NODE_SECRET',
+      MPS_AGENT_VERSION: 'node-build-7',
     })
 
     expect(lines).toContain('endpoint             https://10.11.12.13:9443/exec/v1/register')
     expect(lines).toContain('node id              node-demo')
     expect(lines).toContain('node name            demo')
     expect(lines).toContain('node host            demo-host')
+    expect(lines).toContain('agent version        node-build-7')
     expect(lines).toContain('slots                4')
     expect(lines).toContain('workspace root       /srv/node')
     expect(lines).toContain(`coding root          ${join('/srv/node', 'coding')}`)
