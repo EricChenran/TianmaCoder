@@ -1400,3 +1400,28 @@ describe('a heartbeat the platform keeps failing', () => {
     expect(reports.filter(report => report.message.includes('heartbeat failed'))).toHaveLength(1)
   }, 30_000)
 })
+
+describe('a registration the platform keeps failing', () => {
+  it('is reported once while its wording stays the same', async () => {
+    vi.useFakeTimers()
+    const reports: ExecutorReport[] = []
+    const auth = envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' })
+    // A handshake does not retry itself, so the repetition comes from asking it again, which is
+    // what the runtime does when a later recovery re-authenticates.
+    const queue = queueTransport([auth, rejection('DB_UNAVAIL'), auth, rejection('DB_UNAVAIL'), auth, rejection('DB_UNAVAIL')])
+    const instance = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await instance.bootstrap().catch(() => { /* the handshake reports its own failure */ })
+    }
+
+    // The case only means something if the registration really was attempted more than once.
+    expect(queue.calls.filter(call => call.request.url.endsWith('/register')).length).toBeGreaterThan(1)
+    expect(reports.filter(report => report.message.includes('failed to register'))).toHaveLength(1)
+  }, 30_000)
+})

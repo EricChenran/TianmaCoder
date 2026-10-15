@@ -137,8 +137,8 @@ export class MpsExecutorRuntime {
   #resources: ExecResources = { cpu_percent: 0, mem_percent: 0, disk_free_gb: 0 }
   /** Whether the last reading left room to start another attempt. */
   #hasRoom = true
-  /** The last heartbeat failure reported, so a repeat of it is not reported again. */
-  #heartbeatFailure: string | undefined
+  /** The last wording reported for each repeating failure, so a repeat is not reported. */
+  readonly #reportedFailures = new Map<string, string>()
 
   #lastError: Error | undefined
   #tasks: TaskOrchestrator | undefined
@@ -407,7 +407,7 @@ export class MpsExecutorRuntime {
     } catch (error: unknown) {
       this.#lastError = toError(error)
       if (error instanceof ExecResponseError && error.recovery === 'halt-node') this.#state = 'halted'
-      this.#report({ level: 'error', message: `node ${this.settings.nodeId} failed to register: ${this.#lastError.message}` })
+      this.#reportFailure('register', 'error', `node ${this.settings.nodeId} failed to register: ${this.#lastError.message}`)
       throw error
     }
   }
@@ -679,6 +679,21 @@ export class MpsExecutorRuntime {
     this.heartbeatOnce().catch((error: unknown) => { this.#recover(error) })
   }
 
+  /**
+   * Report one repeating failure once, and again only when its wording changes. A node that
+   * cannot register, or that keeps receiving an expired token, would otherwise write the same
+   * line every attempt or every interval.
+   * @param key - which failure this is, so kinds do not suppress each other.
+   * @param level - the level to report at.
+   * @param message - what to say.
+   * @returns nothing.
+   */
+  #reportFailure(key: string, level: ExecutorReport['level'], message: string): void {
+    if (this.#reportedFailures.get(key) === message) return
+    this.#reportedFailures.set(key, message)
+    this.#report({ level, message })
+  }
+
   /** Apply the recovery one failed heartbeat requires. */
   #recover(error: unknown): void {
     this.#lastError = toError(error)
@@ -691,17 +706,10 @@ export class MpsExecutorRuntime {
     }
     if (recovery === 'reauthenticate') {
       this.#token = undefined
-      this.#report({ level: 'warn', message: `node ${this.settings.nodeId} token expired; re-authenticating` })
+      this.#reportFailure('token', 'warn', `node ${this.settings.nodeId} token expired; re-authenticating`)
       this.bootstrap().catch(() => { /* bootstrap reports its own failure */ })
       return
     }
-    // The same failure is reported once and again only when it changes: a platform that
-    // keeps failing the heartbeat would otherwise write this line every interval, and the
-    // node's own file holds a ceiling for the day.
-    const failure = `node ${this.settings.nodeId} heartbeat failed: ${this.#lastError.message}`
-    if (failure !== this.#heartbeatFailure) {
-      this.#heartbeatFailure = failure
-      this.#report({ level: 'warn', message: failure })
-    }
+    this.#reportFailure('heartbeat', 'warn', `node ${this.settings.nodeId} heartbeat failed: ${this.#lastError.message}`)
   }
 }
