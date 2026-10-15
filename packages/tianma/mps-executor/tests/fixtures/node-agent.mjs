@@ -4,7 +4,7 @@
  * declares — and prints the event stream the headless profile prints under `--json`.
  */
 
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 
 const events = [
   { type: 'session', sessionId: 'dsh-session-e2e' },
@@ -19,6 +19,13 @@ for (const event of events) console.log(JSON.stringify(event))
 
 // A later task in the same workspace changes the same file again, which is what makes a
 // second attempt in one workspace a real change rather than a repeat of the first.
+// A change that leaves the workspace: a link the attempt added, pointing at a file the
+// attempt also wrote outside its own tree.
+if (process.argv[2] === 'escape') {
+  writeFileSync('../outside.txt', 'outside the workspace\n', 'utf8')
+  symlinkSync('../outside.txt', 'escape.txt')
+}
+
 const instruction = process.argv.at(-1) ?? ''
 // A task that takes its time and says so: one line a second, so an outage that lasts a few
 // seconds covers several of them.

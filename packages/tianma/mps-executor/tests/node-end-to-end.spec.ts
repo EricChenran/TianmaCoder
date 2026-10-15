@@ -376,6 +376,52 @@ describe('the node end to end', () => {
     expect(log).toContain('tool write')
   }, 120_000)
 
+  it('refuses a delivery whose change leaves the workspace', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_escape',
+      work_item_id: 'wi_escape',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '把改动指到工作区外面' },
+        workspace: {
+          workspace_id: 'ws_escape',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_escape' },
+        },
+        constraints: { must_stay_in_workspace: true },
+        deliverables: { push_required: true },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['escape'] })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_escape/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    // The attempt is reported as failed, and nothing reached the origin: the branch does
+    // not exist there, because the node refuses before it commits.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_escape/result')[0]?.body ?? '{}') as Record<string, unknown>
+    const evidence = result['evidence'] as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'failed' })
+    expect(String(result['summary'])).toContain('resolves outside the workspace')
+    expect(evidence['pushed']).toBe(false)
+    expect(evidence['head_commit']).toBe(evidence['base_commit'])
+    await expect(run('git', ['rev-parse', 'feature/tsk_escape'], { cwd: bare })).rejects.toThrow()
+  }, 120_000)
+
   it('brings a task material in before the attempt starts', async () => {
     const root = temporary('mps-e2e-')
     const workspaceRoot = join(root, 'node')
