@@ -66,12 +66,13 @@ export {
   RUNNER_STOP_GRACE_MS,
   stopPlan,
   exitCodeOf,
+  readRunEvent,
   runFailureSummary,
   shellFor,
   stopRun,
   tianmaCliRunner,
 } from './cli-runner.ts'
-export type { StoppableRun, StopPlan } from './cli-runner.ts'
+export type { RunEvent, StoppableRun, StopPlan } from './cli-runner.ts'
 export { DEFAULT_CLI_COMMAND } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export {
@@ -209,6 +210,7 @@ export function apply(ctx: Context, config: Config): void {
     command: settings.cliRunner.command,
     logsDirectory: settings.cliRunner.logsDirectory,
     env: settings.cliRunner.dshHome === undefined ? undefined : { DSH_HOME: settings.cliRunner.dshHome },
+    jsonEvents: settings.cliRunner.jsonEvents,
   })
   const runtime = new MpsExecutorRuntime({
     settings,

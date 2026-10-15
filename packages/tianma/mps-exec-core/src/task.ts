@@ -94,6 +94,18 @@ export function taskRuntimeLimitMs(payload: Record<string, unknown>): number | u
 }
 
 /**
+ * Read the session the platform asks the node to continue. The protocol sends the session
+ * a previous task in the same workspace used, so a node adopts it when the agent still
+ * knows it and starts a new one otherwise.
+ * @param payload - the payload a claim returned.
+ * @returns the session reference, or undefined when the payload states none.
+ */
+export function taskSessionHint(payload: Record<string, unknown>): string | undefined {
+  const hint = payloadField(payload, 'limits', 'session_hint')
+  return stringField(hint, 'previous_session_ref')
+}
+
+/**
  * Read the instruction a task carries, which is what a runner hands to the agent.
  * @param payload - the payload a claim returned.
  * @returns the instruction, or undefined when the payload states none.

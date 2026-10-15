@@ -14,7 +14,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
-import { taskInstruction } from '@tianma/dsh-mps-exec-core'
+import { taskInstruction, taskSessionHint } from '@tianma/dsh-mps-exec-core'
 import type { TaskEvidence } from './runner.ts'
 import { collectEvidence } from './evidence.ts'
 import type { CollectedEvidence, EvidenceCommandOutcome } from './evidence.ts'
@@ -48,6 +48,11 @@ export interface CliRunnerOptions {
   env?: Record<string, string> | undefined
   /** How long to wait after asking a run to stop; defaults to {@link RUNNER_STOP_GRACE_MS}. */
   stopGraceMs?: number | undefined
+  /**
+   * Whether the run is asked for its event stream (`--json`) instead of its final answer
+   * alone. It needs a CLI that has the flag, so a deployment states it.
+   */
+  jsonEvents?: boolean | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
 }
@@ -71,6 +76,7 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
   const prefix = options.command.slice(1)
   const stopGraceMs = options.stopGraceMs ?? RUNNER_STOP_GRACE_MS
   const now = options.now ?? (() => new Date())
+  const jsonEvents = options.jsonEvents === true
 
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
@@ -108,23 +114,56 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
           ? `task book: ${book}`
           : `task book: ${book}（材料 ${String(materials.length)} 份）`,
       }])
+      const hint = taskSessionHint(context.task.payload)
+      let session = hint
+      if (hint !== undefined) {
+        await context.reportSession(hint)
+        await context.reportLog('runner', [{
+          at: now().toISOString(),
+          level: 'info',
+          text: `continuing session ${hint}`,
+        }])
+      }
+      let answer: string | undefined
+      const args = [
+        ...prefix,
+        ...(jsonEvents ? ['--json'] : []),
+        ...(session === undefined ? [] : ['--session-id', session]),
+        `${instruction}\n\n${TASK_BOOK_POINTER}`,
+      ]
       const outcome = await runProcess({
         bin,
-        args: [...prefix, `${instruction}\n\n${TASK_BOOK_POINTER}`],
+        args,
         directory,
         env: options.env,
         signal: context.signal,
         stopGraceMs,
         now,
         onLines: async (stream, batch) => {
-          lines.push(...batch.map(line => ({ stream, line })))
-          await context.reportLog(stream, batch)
+          const reported: ExecLogLine[] = []
+          for (const line of batch) {
+            const event = jsonEvents && stream === 'stdout' ? readRunEvent(line.text) : undefined
+            if (event === undefined) {
+              reported.push(line)
+              continue
+            }
+            if (event.session !== undefined && event.session !== session) {
+              session = event.session
+              await context.reportSession(event.session)
+            }
+            if (event.answer !== undefined) answer = event.answer
+            reported.push({ ...line, text: event.text })
+          }
+          lines.push(...reported.map(line => ({ stream, line })))
+          await context.reportLog(stream, reported)
         },
       })
 
       const rawLog = join(options.logsDirectory, `${context.task.task_id}-${String(context.task.attempt)}.log`)
       writeRawLog(rawLog, lines, outcome)
-      const notes = `raw log: ${rawLog}`
+      const notes = answer === undefined
+        ? `raw log: ${rawLog}`
+        : `raw log: ${rawLog}\nanswer: ${answer}`
 
       assertStarted(outcome, bin)
       if (outcome.kind === 'stopped') {
@@ -356,6 +395,66 @@ function assertStarted(outcome: RunOutcome, bin: string): void {
   if (outcome.spawnError !== undefined) {
     throw new Error(`could not start ${bin}: ${outcome.spawnError.message}`)
   }
+}
+
+/** What one line of a `--json` run means to the node. */
+export interface RunEvent {
+  /** The line the platform reads, with the event rendered for a person. */
+  text: string
+  /** Session the run adopted, when the event opens one. */
+  session?: string | undefined
+  /** The run's answer, when the event closes it. */
+  answer?: string | undefined
+}
+
+/**
+ * Read one line the CLI printed in `--json` mode. A line that is not one of the events the
+ * CLI documents is not an event at all: the runner hands it on as it came.
+ * @param text - one line of the run's output.
+ * @returns what the line means, or undefined when it is not an event.
+ */
+export function readRunEvent(text: string): RunEvent | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    // A CLI without the flag prints its answer; a line that is not JSON is that answer.
+    return undefined
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+  const event = parsed as Record<string, unknown>
+  // Every field one event carries is a string or a number; anything else reads as absent.
+  const shown = (name: string): string => {
+    const value = event[name]
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
+  }
+  switch (shown('type')) {
+    case 'session':
+      return { text: `session ${shown('sessionId')}`, session: stringOf(event['sessionId']) }
+    case 'status':
+      return { text: `status ${shown('phase')} turn ${shown('turn')} step ${shown('step')}` }
+    case 'thinking':
+      return { text: `thinking: ${shown('text')}` }
+    case 'text':
+      return { text: shown('text') }
+    case 'tool_call':
+      return { text: `tool ${shown('tool')} ${JSON.stringify(event['input'] ?? {})}` }
+    case 'tool_result':
+      return { text: `tool ${shown('callId')} ${shown('status')}: ${shown('result')}` }
+    case 'final':
+      return { text: `final: ${shown('text')}`, answer: stringOf(event['text']) }
+    default:
+      return { text: `event ${shown('type')}` }
+  }
+}
+
+/**
+ * Read one value as a non-empty string.
+ * @param value - the value.
+ * @returns the string, or undefined.
+ */
+function stringOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined
 }
 
 /** What one run settled as. */

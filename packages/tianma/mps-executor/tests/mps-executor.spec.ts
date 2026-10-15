@@ -563,6 +563,7 @@ describe('plugin wiring', () => {
       command: ['dsh', '--profile', 'headless'],
       logsDirectory: join(defaults.workspaceRoot, 'logs'),
       dshHome: undefined,
+      jsonEvents: false,
     })
 
     const stated = settingsFor({
@@ -570,19 +571,21 @@ describe('plugin wiring', () => {
         command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
         logsDirectory: 'C:\\node-logs',
         dshHome: 'C:\\node-home',
+        jsonEvents: true,
       },
     })
     expect(stated.cliRunner).toEqual({
       command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
       logsDirectory: 'C:\\node-logs',
       dshHome: 'C:\\node-home',
+      jsonEvents: true,
     })
 
     // Blank strings mean "use the default", and a command with no executable is refused.
-    const blank = settingsFor({ cliRunner: { command: [], logsDirectory: '   ', dshHome: '  ' } })
+    const blank = settingsFor({ cliRunner: { command: [], logsDirectory: '   ', dshHome: '  ', jsonEvents: false } })
     expect(blank.cliRunner.logsDirectory).toBe(join(blank.workspaceRoot, 'logs'))
     expect(blank.cliRunner.dshHome).toBeUndefined()
-    expect(() => settingsFor({ cliRunner: { command: [''], logsDirectory: '', dshHome: '' } }))
+    expect(() => settingsFor({ cliRunner: { command: [''], logsDirectory: '', dshHome: '', jsonEvents: false } }))
       .toThrow(/needs the command it starts/)
   })
 
@@ -661,7 +664,12 @@ describe('the runner the node falls back to', () => {
       apply(ctx, {
         platformHost: '10.0.0.7',
         nodeId: 'node-31',
-        cliRunner: { command: ['dsh', '--profile', 'headless'], logsDirectory: '', dshHome: 'C:\\node-home' },
+        cliRunner: {
+          command: ['dsh', '--profile', 'headless'],
+          logsDirectory: '',
+          dshHome: 'C:\\node-home',
+          jsonEvents: true,
+        },
       })
 
       // Claiming only happens when the node resolved a runner to execute with.

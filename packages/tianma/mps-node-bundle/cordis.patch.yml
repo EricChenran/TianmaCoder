@@ -47,3 +47,8 @@
         cliRunner:
           command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
           dshHome: !!js process.env.MPS_DSH_HOME ?? ''
+          # The node runs the CLI it ships with, which has the event stream: the
+          # platform then sees each turn and tool call as it happens, and the node
+          # learns the session to report. A deployment with an older CLI sets this
+          # to false, because that CLI would refuse the flag.
+          jsonEvents: true

@@ -2,7 +2,8 @@
 // the way the spec asked, so the runner's process handling can be tested without a
 // model, a network, or the real command.
 const mode = process.argv[2]
-const instruction = process.argv[3]
+const instruction = process.argv.at(-1)
+const args = process.argv.slice(2).join(' ')
 
 if (mode === 'bare') {
   // The very first chunk, before any newline reaches the stream.
@@ -12,13 +13,29 @@ if (mode === 'bare') {
 console.log(`cwd=${process.cwd()}`)
 console.log(`instruction=${instruction ?? ''}`)
 console.log(`env=${process.env.MPS_TEST_MARK ?? ''}`)
+console.log(`args=${args}`)
 
 if (mode === 'fail') {
   console.error('build failed: 3 errors')
   process.exit(3)
 }
 
-if (mode === 'partial') {
+if (mode === 'json') {
+  // The event stream the headless profile writes under --json, as the CLI documents it.
+  const events = [
+    { type: 'session', sessionId: 'dsh-session-01H8Z', cwd: process.cwd() },
+    { type: 'status', phase: 'turn_start', turn: 1 },
+    { type: 'thinking', text: '先看需求' },
+    { type: 'text', text: '我来改这个文件' },
+    { type: 'tool_call', callId: 'call_1', tool: 'read', input: { path: 'readme.md' } },
+    { type: 'tool_result', callId: 'call_1', status: 'completed', result: 'ok' },
+    { type: 'status', phase: 'turn_end', turn: 1, reason: 'done' },
+    // A resumed run may restate the session; the node reports it once.
+    { type: 'session', sessionId: 'dsh-session-01H8Z' },
+    { type: 'final', text: '已增加批量下载' },
+  ]
+  for (const event of events) console.log(JSON.stringify(event))
+} else if (mode === 'partial') {
   process.stdout.write('a line with no newline yet')
   setInterval(() => {}, 1000)
 } else if (mode === 'pid') {

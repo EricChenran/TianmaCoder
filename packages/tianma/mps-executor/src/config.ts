@@ -63,6 +63,8 @@ export interface CliRunnerConfig {
   logsDirectory: string
   /** `DSH_HOME` the run uses, so a node's profile directory stays its own; blank inherits the environment. */
   dshHome: string
+  /** Whether the run is asked for its event stream instead of its final answer alone. */
+  jsonEvents: boolean
 }
 
 /** The executor node's plugin configuration. */
@@ -141,7 +143,8 @@ export const Config: z<Config> = z.object({
     command: z.array(z.string()).default([]),
     logsDirectory: z.string().default(''),
     dshHome: z.string().default(''),
-  }).default({ command: [], logsDirectory: '', dshHome: '' }),
+    jsonEvents: z.boolean().default(false),
+  }).default({ command: [], logsDirectory: '', dshHome: '', jsonEvents: false }),
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
@@ -163,6 +166,8 @@ export interface ResolvedCliRunner {
   logsDirectory: string
   /** `DSH_HOME` the run uses, or undefined to inherit the node's environment. */
   dshHome?: string | undefined
+  /** Whether the run is asked for its event stream instead of its final answer alone. */
+  jsonEvents: boolean
 }
 
 /** The configuration resolved into the values the node runtime runs with. */
@@ -228,6 +233,7 @@ function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: st
     command,
     logsDirectory: logs === '' ? join(workspaceRoot, 'logs') : logs,
     dshHome: home === '' ? undefined : home,
+    jsonEvents: stated?.jsonEvents === true,
   }
 }
 

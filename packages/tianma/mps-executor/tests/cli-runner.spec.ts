@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, afterEach } from 'vitest'
 import {
   exitCodeOf,
+  readRunEvent,
   runFailureSummary,
   shellFor,
   stopPlan,
@@ -60,6 +61,8 @@ class RecordingContext implements TaskRunContext {
   materialError: Error | undefined
   /** Artifacts this attempt uploaded, in order. */
   readonly uploads: { kind: string; path: string; meta?: Record<string, unknown> | undefined }[] = []
+  /** Sessions this attempt reported, in order. */
+  readonly sessions: string[] = []
 
   constructor(readonly workspaceDirectory: string | undefined, readonly task: ExecTaskAssignment) {}
 
@@ -87,8 +90,8 @@ class RecordingContext implements TaskRunContext {
     return { bytes, sha256: `sha-of-${artifactId}` }
   }
 
-  async reportSession(): Promise<void> {
-    throw new Error('this attempt reports no session')
+  async reportSession(sessionRef: string): Promise<void> {
+    this.sessions.push(sessionRef)
   }
 
   async publish(): Promise<PublishedChanges> {
@@ -306,6 +309,68 @@ describe('the CLI runner', () => {
     expect(result.outcome).toBe('failed')
     expect(result.summary).toBe('build evidence: the build failed with exit code 3')
     expect(context.uploads).toEqual([])
+  })
+
+  it('turns the event stream into the log the platform reads', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment())
+    const runner = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'json'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      jsonEvents: true,
+    })
+
+    const result = await runner.run(context)
+
+    expect(result.outcome).toBe('success')
+    // The run was asked for events, and each one reaches the platform as a line.
+    expect(reported(context)).toContain('stdout:args=json --json ' + INSTRUCTION)
+    expect(reported(context)).toContain('stdout:session dsh-session-01H8Z')
+    expect(reported(context)).toContain('stdout:status turn_start turn 1 step ')
+    expect(reported(context)).toContain('stdout:thinking: 先看需求')
+    expect(reported(context)).toContain('stdout:我来改这个文件')
+    expect(reported(context)).toContain('stdout:tool read {"path":"readme.md"}')
+    expect(reported(context)).toContain('stdout:tool call_1 completed: ok')
+    expect(reported(context)).toContain('stdout:final: 已增加批量下载')
+    // The node reports the session it worked in, and keeps the answer for the operator.
+    expect(context.sessions).toEqual(['dsh-session-01H8Z'])
+    expect(result.notes).toContain('answer: 已增加批量下载')
+  })
+
+  it('continues the session the platform names and reports it', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      limits: { session_hint: { previous_session_ref: 'dsh-session-previous' } },
+    }))
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('success')
+    expect(context.sessions).toEqual(['dsh-session-previous'])
+    expect(reported(context)).toContain('stdout:args=ok --session-id dsh-session-previous ' + INSTRUCTION)
+    expect(reported(context)).toContain('runner:continuing session dsh-session-previous')
+  })
+
+  it('reads one event line, and leaves anything else alone', () => {
+    expect(readRunEvent('{"type":"session","sessionId":"s_1"}')).toEqual({ text: 'session s_1', session: 's_1' })
+    expect(readRunEvent('{"type":"final","text":"答案"}')).toEqual({ text: 'final: 答案', answer: '答案' })
+    expect(readRunEvent('{"type":"unknown"}')).toEqual({ text: 'event unknown' })
+    expect(readRunEvent('{"type":"status","phase":"step_end","turn":2,"step":3}'))
+      .toEqual({ text: 'status step_end turn 2 step 3' })
+    // An event that states less than it should still reaches the platform.
+    expect(readRunEvent('{"type":"session"}')).toEqual({ text: 'session ', session: undefined })
+    expect(readRunEvent('{"type":"text"}')).toEqual({ text: '' })
+    expect(readRunEvent('{"type":"tool_call"}')).toEqual({ text: 'tool  {}' })
+    expect(readRunEvent('{"type":"tool_result"}')).toEqual({ text: 'tool  : ' })
+    expect(readRunEvent('{"type":"final"}')).toEqual({ text: 'final: ', answer: undefined })
+    expect(readRunEvent('{"type":"thinking"}')).toEqual({ text: 'thinking: ' })
+    // A line that is not an event is the answer of a CLI without the flag.
+    expect(readRunEvent('已增加批量下载')).toBeUndefined()
+    expect(readRunEvent('[1,2]')).toBeUndefined()
   })
 
   it('reports a run that exited non-zero with the line it failed on', async () => {
