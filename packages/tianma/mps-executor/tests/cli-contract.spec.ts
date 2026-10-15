@@ -89,6 +89,63 @@ function withoutProviderCredentials(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return cleaned
 }
 
+/**
+ * Run the node profile's own command line the way a deployment does.
+ * @param args - the arguments to pass after the profile.
+ * @param env - environment the node reads, beyond the fresh home.
+ * @returns its exit code and what it printed.
+ */
+async function askNode(args: string[], env: NodeJS.ProcessEnv): Promise<{ code: number; stdout: string; stderr: string }> {
+  const home = mkdtempSync(join(tmpdir(), 'mps-node-home-'))
+  const workspace = mkdtempSync(join(tmpdir(), 'mps-node-ws-'))
+  created.push(home, workspace)
+  const root = repositoryRoot()
+  try {
+    const result = await run(
+      process.execPath,
+      ['--import', 'tsx/esm', join(root, 'apps', 'cli', 'src', 'bin.ts'), '--profile', 'mps-node', ...args],
+      {
+        cwd: root,
+        // A fresh home and a stated workspace, so the run reports rather than registering
+        // and writes nothing into the repository.
+        env: withoutProviderCredentials({ ...process.env, DSH_HOME: home, MPS_NODE_WORKSPACE: workspace, ...env }),
+        windowsHide: true,
+        timeout: 120_000,
+      },
+    )
+    return { code: 0, stdout: result.stdout, stderr: result.stderr }
+  } catch (error) {
+    const failed = error as { code?: number; stdout?: string; stderr?: string }
+    return { code: failed.code ?? 1, stdout: failed.stdout ?? '', stderr: failed.stderr ?? '' }
+  }
+}
+
+describe('the node profile answering what it will use', () => {
+  it('prints the resolved address and exits without registering', async () => {
+    const result = await askNode(['--show-config'], {
+      MPS_PLATFORM_HOST: '10.11.12.13',
+      MPS_PLATFORM_PORT: '9443',
+      MPS_NODE_ID: 'node-contract',
+      MPS_NODE_SECRET: 'contract-secret-value',
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('http://10.11.12.13:9443/exec/v1/register')
+    expect(result.stdout).toContain('node id              node-contract')
+    expect(result.stdout).toContain('secret               from MPS_NODE_SECRET (value not printed)')
+    expect(result.stdout).not.toContain('contract-secret-value')
+  }, 120_000)
+
+  it('fails loudly instead of lingering when no address is stated', async () => {
+    // Found by running this by hand: a plain throw never reached the launcher's exit path,
+    // and the machine sat there with a misconfiguration rather than saying so.
+    const result = await askNode(['--show-config'], { MPS_NODE_ID: 'node-contract' })
+
+    expect(result.code).not.toBe(0)
+    expect(result.stderr).toContain('MPS_PLATFORM_HOST is required')
+  }, 120_000)
+})
+
 describe('the CLI the node starts', () => {
   it('accepts the profile the node runs by default, with the task as an argument', async () => {
     const profile = DEFAULT_CLI_COMMAND[1] === '--profile' ? DEFAULT_CLI_COMMAND[2] : undefined
