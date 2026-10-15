@@ -57,6 +57,63 @@ function sha256Of(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+/**
+ * Boot a node on one task of its own, run it, and wait for the result.
+ * @param options - the workspace root, the agent mode, and anything the payload adds.
+ * @returns the platform stub, for its recorded requests.
+ */
+async function runOneTask(options: {
+  workspaceRoot: string
+  logs: string
+  mode?: string
+  workspaceId: string
+  taskId: string
+  base: string
+  bare: string
+  extra?: Record<string, unknown>
+}): Promise<PlatformStub> {
+  const platform = new PlatformStub({
+    task_id: options.taskId,
+    work_item_id: `wi_${options.taskId}`,
+    attempt: 1,
+    max_attempts: 3,
+    kind: 'coding',
+    priority: 400,
+    lease_expire_at: '2030-01-01T00:00:00Z',
+    lease_renew_seconds: 30,
+    payload: {
+      limits: { max_runtime_seconds: 300 },
+      spec: { raw_instruction: '一项自带风险的任务' },
+      workspace: {
+        workspace_id: options.workspaceId,
+        access_mode: 'read_write',
+        repo: {
+          url: options.bare.replace(/\\/gu, '/'),
+          base_branch: 'main',
+          base_commit: options.base,
+          work_branch: `feature/${options.taskId}`,
+        },
+      },
+      constraints: { must_stay_in_workspace: false },
+      deliverables: { push_required: true },
+      ...options.extra,
+    },
+  })
+  const port = await platform.listen()
+  try {
+    context = await boot({
+      port,
+      workspaceRoot: options.workspaceRoot,
+      logs: options.logs,
+      agentArgs: options.mode === undefined ? [] : [options.mode],
+    })
+    await waitFor(() => platform.at(`/exec/v1/tasks/${options.taskId}/result`).length > 0)
+  } finally {
+    await platform.close()
+  }
+  return platform
+}
+
 /** One request the node made. */
 interface Recorded {
   path: string
@@ -374,6 +431,42 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('never tells the platform a credential the attempt printed', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({ workspaceRoot, logs, mode: 'secret', workspaceId: 'ws_secret', taskId: 'tsk_secret', base, bare })
+
+    const reported = platform.at('/exec/v1/tasks/tsk_secret/log').map(request => request.body).join('\n')
+    // The lines arrived, with the values the node refused to pass on taken out.
+    expect(reported).toContain('DEEPSEEK_API_KEY')
+    expect(reported).toContain('[REDACTED]')
+    expect(reported).not.toContain('sk-1234567890abcdef')
+    expect(reported).not.toContain('sk-live-abcdef123456')
+    // The attempt itself still succeeded: redaction is not a failure.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_secret/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+  }, 120_000)
+
+  it('refuses to deliver a tree that carries a credential', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({ workspaceRoot, logs, mode: 'credential', workspaceId: 'ws_credential', taskId: 'tsk_credential', base, bare })
+
+    // The delivery is refused and the credential stays on the node: nothing was pushed.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_credential/result')[0]?.body ?? '{}') as Record<string, unknown>
+    const evidence = result['evidence'] as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'failed' })
+    expect(String(result['summary'])).toContain('refusing to publish credentials in config.txt')
+    expect(evidence['pushed']).toBe(false)
+    await expect(run('git', ['rev-parse', 'feature/tsk_credential'], { cwd: bare })).rejects.toThrow()
   }, 120_000)
 
   it('refuses a delivery whose change leaves the workspace', async () => {

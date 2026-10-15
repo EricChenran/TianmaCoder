@@ -19,6 +19,17 @@ for (const event of events) console.log(JSON.stringify(event))
 
 // A later task in the same workspace changes the same file again, which is what makes a
 // second attempt in one workspace a real change rather than a repeat of the first.
+// An attempt that prints a credential, which the platform must never be told.
+if (process.argv[2] === 'secret') {
+  console.log(JSON.stringify({ type: 'text', text: 'DEEPSEEK_API_KEY=sk-1234567890abcdef' }))
+  console.log(JSON.stringify({ type: 'text', text: 'Authorization: Bearer sk-live-abcdef123456' }))
+}
+
+// An attempt that writes a credential into the tree, which must not be delivered.
+if (process.argv[2] === 'credential') {
+  writeFileSync('config.txt', 'password = hunter2hunter2\n', 'utf8')
+}
+
 // A change that leaves the workspace: a link the attempt added, pointing at a file the
 // attempt also wrote outside its own tree.
 if (process.argv[2] === 'escape') {
