@@ -1,0 +1,525 @@
+/**
+ * Executor node behavior: the plugin configuration carries the platform host and
+ * port a deployment points the node at, the node resolves them into the address
+ * it dials, and the runtime authenticates, registers, heartbeats on the period
+ * the platform assigns, and applies the recovery each failure requires.
+ */
+
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import {
+  Config,
+  DEFAULT_SECRET_ENV,
+  MpsExecutorRuntime,
+  UNKNOWN_AGENT_VERSION,
+  apply,
+  autoStartNode,
+  createReportSink,
+  readNodeSecret,
+  registerStopEffect,
+  resolveExecutorSettings,
+} from '@tianma/dsh-mps-executor'
+import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport, ExecutorReport } from '@tianma/dsh-mps-executor'
+import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
+
+/** One recorded call of the fake transport. */
+interface TransportCall {
+  request: ExecHttpRequest
+}
+
+/**
+ * Build a transport answering from a queue and recording every call.
+ * @param answers - one answer per call; the last answer repeats once the queue is spent.
+ * @returns the transport and its recorded calls.
+ */
+function queueTransport(answers: ExecHttpResponse[]): { transport: ExecHttpTransport; calls: TransportCall[] } {
+  const calls: TransportCall[] = []
+  const transport: ExecHttpTransport = async (request) => {
+    calls.push({ request })
+    const answer = answers[Math.min(calls.length - 1, answers.length - 1)]
+    if (answer === undefined) throw new Error('no scripted answer left')
+    return answer
+  }
+  return { transport, calls }
+}
+
+/**
+ * Build one OK envelope response.
+ * @param data - payload to carry.
+ * @returns the response.
+ */
+function envelope(data: unknown): ExecHttpResponse {
+  return { status: 200, headers: {}, text: JSON.stringify({ code: 'OK', msg: '', data, requestId: 'r', serverTime: 's' }) }
+}
+
+/**
+ * Build one error envelope response.
+ * @param code - envelope code.
+ * @returns the response.
+ */
+function rejection(code: string): ExecHttpResponse {
+  return { status: 409, headers: {}, text: JSON.stringify({ code, msg: 'no', data: null, requestId: 'r2' }) }
+}
+
+/** A register answer carrying the platform's assigned heartbeat period. */
+const REGISTERED = {
+  node_id: 'node-1',
+  status: 'online',
+  heartbeat_interval_seconds: 3,
+  claim_long_poll_seconds: 25,
+  lease_ttl_seconds: 900,
+  lease_renew_seconds: 30,
+  config_revision: 1,
+  server_time: 's',
+}
+
+/** A heartbeat answer carrying no commands. */
+const HEARTBEAT = { node_status: 'online', commands: [], lease_notices: [], config_revision: 1, server_time: 's' }
+
+/**
+ * Resolve settings for one node configuration.
+ * @param overrides - configuration fields to override.
+ * @returns the resolved settings.
+ */
+function settingsFor(overrides: Partial<Parameters<typeof resolveExecutorSettings>[0]> = {}) {
+  return resolveExecutorSettings(
+    { platformHost: '10.0.0.7', platformPort: 8791, nodeId: 'node-1', secretEnv: DEFAULT_SECRET_ENV, ...overrides },
+    'test-host',
+  )
+}
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllEnvs()
+})
+
+describe('node configuration', () => {
+  it('carries the platform communication address as its own fields', () => {
+    const config = Config({ platformHost: '192.168.1.10', nodeId: 'node-1' })
+    expect(config.platformHost).toBe('192.168.1.10')
+    expect(config.platformPort).toBe(8791)
+    expect(config.platformScheme).toBe('http')
+    expect(config.platformBasePath).toBe('/exec/v1')
+    expect(config.secretEnv).toBe(DEFAULT_SECRET_ENV)
+    expect(config.slotsTotal).toBe(1)
+    expect(config.heartbeatSeconds).toBe(10)
+    expect(config.claimLongPollSeconds).toBe(25)
+    expect(config.requestTimeoutMs).toBe(15_000)
+    expect(config.lanes).toEqual([])
+    expect(config.tools).toEqual([])
+    expect(config.agentVersion).toBe(UNKNOWN_AGENT_VERSION)
+    expect(config.labels).toEqual({})
+    expect(config.autoStart).toBe(true)
+  })
+
+  it('accepts an explicit port, scheme, and base path', () => {
+    const config = Config({
+      platformHost: '10.0.0.5',
+      platformPort: 9443,
+      platformScheme: 'https',
+      platformBasePath: '/mps',
+      nodeId: 'node-2',
+      autoStart: false,
+    })
+    expect(config.platformPort).toBe(9443)
+    expect(config.platformScheme).toBe('https')
+    expect(config.platformBasePath).toBe('/mps')
+    expect(config.autoStart).toBe(false)
+  })
+
+  it('resolves the address, identity, and capacity the node runs with', () => {
+    const settings = settingsFor({ lanes: ['frontend'], tools: ['node'], labels: { owner: 'ops' } })
+    expect(settings.endpoint.origin).toBe('http://10.0.0.7:8791')
+    expect(settings.endpoint.url('/register')).toBe('http://10.0.0.7:8791/exec/v1/register')
+    expect(settings.nodeId).toBe('node-1')
+    expect(settings.nodeName).toBe('node-1')
+    expect(settings.nodeHost).toBe('test-host')
+    expect(settings.workspaceRoot).toBe(process.cwd())
+    expect(settings.capabilities.lanes).toEqual(['frontend'])
+    expect(settings.capabilities.tools).toEqual(['node'])
+    expect(settings.capabilities.os).toBe(process.platform)
+    expect(settings.capabilities.access_modes).toEqual(['read_write'])
+    expect(settings.capabilities.supported_protocols).toEqual(['exec/v1'])
+    expect(settings.labels).toEqual({ owner: 'ops' })
+  })
+
+  it('keeps every value a deployment states', () => {
+    const settings = settingsFor({
+      nodeId: ' node-3 ',
+      nodeName: 'build box',
+      nodeHost: '10.0.0.9',
+      workspaceRoot: 'D:\\mps',
+      slotsTotal: 3,
+      heartbeatSeconds: 5,
+      claimLongPollSeconds: 20,
+      requestTimeoutMs: 9000,
+      agentVersion: '0.2.1-alpha.2',
+      autoStart: false,
+    })
+    expect(settings.nodeId).toBe('node-3')
+    expect(settings.nodeName).toBe('build box')
+    expect(settings.nodeHost).toBe('10.0.0.9')
+    expect(settings.workspaceRoot).toBe('D:\\mps')
+    expect(settings.slotsTotal).toBe(3)
+    expect(settings.heartbeatSeconds).toBe(5)
+    expect(settings.claimLongPollSeconds).toBe(20)
+    expect(settings.requestTimeoutMs).toBe(9000)
+    expect(settings.agentVersion).toBe('0.2.1-alpha.2')
+    expect(settings.autoStart).toBe(false)
+  })
+
+  it('rejects a blank node id', () => {
+    expect(() => settingsFor({ nodeId: '   ' })).toThrow(/must not be blank/)
+  })
+
+  it('reads the secret from the configured environment variable', () => {
+    expect(readNodeSecret({ platformHost: 'h', nodeId: 'n' }, { [DEFAULT_SECRET_ENV]: 's3cret' })).toBe('s3cret')
+    expect(readNodeSecret({ platformHost: 'h', nodeId: 'n' }, { MPS_NODE_SECRET: '  padded  ' })).toBe('padded')
+    expect(readNodeSecret({ platformHost: 'h', nodeId: 'n', secretEnv: 'OTHER' }, { OTHER: 'value' })).toBe('value')
+    expect(readNodeSecret({ platformHost: 'h', nodeId: 'n', secretEnv: '  ' }, { [DEFAULT_SECRET_ENV]: 'v' })).toBe('v')
+  })
+
+  it('reports the missing variable by name', () => {
+    expect(() => readNodeSecret({ platformHost: 'h', nodeId: 'n' }, {})).toThrow(/set the MPS_NODE_SECRET environment variable/)
+    expect(() => readNodeSecret({ platformHost: 'h', nodeId: 'n', secretEnv: 'OTHER' }, { OTHER: '   ' })).toThrow(/set the OTHER/)
+  })
+})
+
+describe('node runtime', () => {
+  /**
+   * Build a runtime over a queued transport.
+   * @param answers - the scripted answers.
+   * @param overrides - settings overrides.
+   * @returns the runtime, its transport calls, and the reports it made.
+   */
+  function runtime(answers: ExecHttpResponse[], overrides: Partial<Parameters<typeof resolveExecutorSettings>[0]> = {}) {
+    const queue = queueTransport(answers)
+    const reports: ExecutorReport[] = []
+    const instance = new MpsExecutorRuntime({
+      settings: settingsFor(overrides),
+      secret: 's',
+      transport: queue.transport,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      report: (report) => { reports.push(report) },
+    })
+    return { runtime: instance, calls: queue.calls, reports }
+  }
+
+  it('starts idle with its capacity free', () => {
+    const { runtime: node } = runtime([], { slotsTotal: 2 })
+    expect(node.state).toBe('idle')
+    expect(node.token).toBeUndefined()
+    expect(node.lastError).toBeUndefined()
+    expect(node.runningTasks).toEqual([])
+    expect(node.heartbeatSeconds).toBe(10)
+    expect(node.availableSlots()).toBe(2)
+    expect(node.slots()).toEqual({ total: 2, running: 0, available: 2 })
+    expect(node.client.nodeId).toBe('node-1')
+    expect(node.client.endpoint.origin).toBe('http://10.0.0.7:8791')
+  })
+
+  it('authenticates then registers, adopting the period the platform assigns', async () => {
+    const { runtime: node, calls, reports } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const registered = await node.bootstrap()
+    expect(registered.heartbeat_interval_seconds).toBe(3)
+    expect(node.state).toBe('online')
+    expect(node.token).toBe('tok')
+    expect(node.heartbeatSeconds).toBe(3)
+    expect(node.lastError).toBeUndefined()
+    expect(calls[0]?.request.url.endsWith('/auth/token')).toBe(true)
+    expect(calls[0]?.request.headers.authorization).toBeUndefined()
+    expect(calls[1]?.request.headers.authorization).toBe('Bearer tok')
+    expect(JSON.parse(calls[1]?.request.body ?? '{}')).toMatchObject({
+      node_id: 'node-1',
+      name: 'node-1',
+      host: 'test-host',
+      workspace_root: process.cwd(),
+      slots: { total: 1, running: 0, available: 1 },
+      node_time: formatRfc3339(new Date('2026-10-15T04:03:55.123Z')),
+      labels: {},
+    })
+    expect(reports).toHaveLength(1)
+    expect(reports[0]?.level).toBe('info')
+    expect(reports[0]?.message).toContain('registered at http://10.0.0.7:8791')
+  })
+
+  it('keeps the configured period when the platform states none', async () => {
+    const { runtime: node } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope({ ...REGISTERED, heartbeat_interval_seconds: 0 }),
+    ], { heartbeatSeconds: 7 })
+    await node.bootstrap()
+    expect(node.heartbeatSeconds).toBe(7)
+  })
+
+  it('halts on a failure only operators can clear', async () => {
+    const { runtime: node, reports } = runtime([rejection('NODE_DISABLED')])
+    await expect(node.bootstrap()).rejects.toThrow('NODE_DISABLED')
+    expect(node.state).toBe('halted')
+    expect(node.token).toBeUndefined()
+    expect(node.lastError?.message).toBe('NODE_DISABLED: no')
+    expect(reports[0]?.level).toBe('error')
+  })
+
+  it('stays idle on a retryable registration failure', async () => {
+    const { runtime: node } = runtime([envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }), rejection('DB_UNAVAILABLE')])
+    await expect(node.bootstrap()).rejects.toThrow('DB_UNAVAILABLE')
+    expect(node.state).toBe('authenticated')
+    expect(node.lastError?.message).toBe('DB_UNAVAILABLE: no')
+  })
+
+  it('refuses to heartbeat before it authenticated', async () => {
+    const { runtime: node } = runtime([])
+    await expect(node.heartbeatOnce()).rejects.toThrow(/must authenticate/)
+  })
+
+  it('reports running tasks, resources, and node time in its heartbeat', async () => {
+    const { runtime: node, calls } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+    ], { slotsTotal: 2, agentVersion: '1.2.3' })
+    await node.bootstrap()
+    node.setRunningTasks([{ task_id: 'tsk_1', attempt: 1, started_at: 's', progress: 40, stage: 'coding' }])
+    node.setResources({ cpu_percent: 62, mem_percent: 71, disk_free_gb: 118 })
+    const result = await node.heartbeatOnce()
+    expect(result.node_status).toBe('online')
+    expect(node.availableSlots()).toBe(1)
+    expect(JSON.parse(calls[2]?.request.body ?? '{}')).toMatchObject({
+      node_id: 'node-1',
+      agent_version: '1.2.3',
+      slots: { total: 2, running: 1, available: 1 },
+      resources: { cpu_percent: 62, mem_percent: 71, disk_free_gb: 118 },
+      running_tasks: [{ task_id: 'tsk_1', attempt: 1, progress: 40, stage: 'coding' }],
+    })
+  })
+
+  it('never reports a negative free-slot count', () => {
+    const { runtime: node } = runtime([], { slotsTotal: 1 })
+    node.setRunningTasks([
+      { task_id: 'a', attempt: 1, started_at: 's', progress: 0, stage: 'coding' },
+      { task_id: 'b', attempt: 1, started_at: 's', progress: 0, stage: 'coding' },
+    ])
+    expect(node.availableSlots()).toBe(0)
+  })
+
+  it('heartbeats on the assigned period and stops when asked', async () => {
+    vi.useFakeTimers()
+    const { runtime: node, calls } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+    ])
+    await node.bootstrap()
+    node.start()
+    node.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(calls).toHaveLength(3)
+    expect(node.state).toBe('online')
+    node.stop()
+    expect(node.state).toBe('authenticated')
+    node.stop()
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(calls).toHaveLength(3)
+  })
+
+  it('warns and keeps the period on a retryable heartbeat failure', async () => {
+    vi.useFakeTimers()
+    const { runtime: node, reports } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('DB_UNAVAILABLE'),
+    ])
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(node.state).toBe('online')
+    expect(reports.at(-1)?.level).toBe('warn')
+    expect(reports.at(-1)?.message).toContain('heartbeat failed')
+    node.stop()
+  })
+
+  it('re-authenticates when the token expired', async () => {
+    vi.useFakeTimers()
+    const { runtime: node, calls } = runtime([
+      envelope({ token: 'first', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('NODE_TOKEN_EXPIRED'),
+      envelope({ token: 'second', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(node.token).toBe('second')
+    expect(node.state).toBe('online')
+    expect(calls).toHaveLength(5)
+    node.stop()
+  })
+
+  it('halts and stops the timer on a halt-level heartbeat failure', async () => {
+    vi.useFakeTimers()
+    const { runtime: node, calls, reports } = runtime([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('NODE_SECRET_INVALID'),
+    ])
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(node.state).toBe('halted')
+    expect(reports.at(-1)?.level).toBe('error')
+    expect(reports.at(-1)?.message).toContain('halted')
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(calls).toHaveLength(3)
+  })
+
+  it('keeps a failed re-authentication from stopping the node timer', async () => {
+    vi.useFakeTimers()
+    const { runtime: node } = runtime([
+      envelope({ token: 'first', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('NODE_TOKEN_EXPIRED'),
+      rejection('NODE_SECRET_INVALID'),
+    ])
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(node.state).toBe('halted')
+    node.stop()
+  })
+
+  it('falls back to the wall clock and a silent sink when the caller states neither', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const bare = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    await bare.bootstrap()
+    expect(bare.state).toBe('online')
+    expect(bare.token).toBe('tok')
+  })
+
+  it('waits out the period when a heartbeat fails with a plain rejection', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    const flaky: ExecHttpTransport = async () => {
+      calls += 1
+      if (calls === 1) return envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' })
+      if (calls === 2) return envelope(REGISTERED)
+      throw 'boom'
+    }
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: 's',
+      transport: flaky,
+      now: () => new Date(0),
+      report: (report) => { reports.push(report) },
+    })
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(node.state).toBe('online')
+    expect(node.lastError?.message).toBe('boom')
+    expect(reports.at(-1)?.level).toBe('warn')
+    node.stop()
+  })
+})
+
+describe('plugin wiring', () => {
+  it('routes node events to the profile logger by level', () => {
+    const seen: string[] = []
+    const sink = createReportSink({
+      info: message => seen.push(`info:${message}`),
+      warn: message => seen.push(`warn:${message}`),
+      error: message => seen.push(`error:${message}`),
+    })
+    sink({ level: 'info', message: 'a' })
+    sink({ level: 'warn', message: 'b' })
+    sink({ level: 'error', message: 'c' })
+    expect(seen).toEqual(['info:a', 'warn:b', 'error:c'])
+  })
+
+  it('starts the heartbeat once the handshake succeeds', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    autoStartNode(node)
+    await vi.waitFor(() => { expect(node.state).toBe('online') })
+    expect(node.token).toBe('tok')
+    node.stop()
+  })
+
+  it('leaves the node unstarted when the handshake is refused', async () => {
+    const queue = queueTransport([rejection('NODE_DISABLED')])
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    autoStartNode(node)
+    await vi.waitFor(() => { expect(node.state).toBe('halted') })
+    expect(node.token).toBeUndefined()
+  })
+
+  it('stops the heartbeat when the mount is disposed', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    await node.bootstrap()
+    const ctx = new Context()
+    const stop = registerStopEffect(ctx, node)
+    node.start()
+    expect(node.state).toBe('online')
+    stop()
+    expect(node.state).toBe('authenticated')
+  })
+
+  it('mounts the node service with the configured platform address', () => {
+    vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
+    const ctx = new Context()
+    apply(ctx, {
+      platformHost: '192.168.1.31',
+      platformPort: 9443,
+      platformScheme: 'https',
+      platformBasePath: '/exec/v1',
+      nodeId: 'node-31',
+      autoStart: false,
+    })
+    const node = ctx.get('mpsExecutor')
+    if (node === undefined) throw new Error('the node service was not published')
+    expect(node.state).toBe('idle')
+    expect(node.settings.nodeId).toBe('node-31')
+    expect(node.client.endpoint.origin).toBe('https://192.168.1.31:9443')
+    expect(node.client.endpoint.url('/register')).toBe('https://192.168.1.31:9443/exec/v1/register')
+  })
+
+  it('starts the node on load when the configuration asks for it', async () => {
+    vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
+    const answers = [
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-31' }),
+      envelope(REGISTERED),
+    ]
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      const answer = answers[Math.min(calls, answers.length - 1)]
+      calls += 1
+      return new Response(answer?.text ?? '', { status: answer?.status ?? 200, headers: { 'content-type': 'application/json' } })
+    })
+    try {
+      const ctx = new Context()
+      apply(ctx, { platformHost: '10.0.0.7', nodeId: 'node-31' })
+      const node = ctx.get('mpsExecutor')
+      if (node === undefined) throw new Error('the node service was not published')
+      await vi.waitFor(() => { expect(node.state).toBe('online') })
+      expect(node.token).toBe('tok')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})

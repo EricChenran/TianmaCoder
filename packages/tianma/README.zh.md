@@ -34,6 +34,8 @@ kind: "package-group"
 | [`token-meter-calibration/`](token-meter-calibration/README.zh.md) | 中文感知密度估算与 usage 驱动的校准因子 |
 | [`compaction-file-rehydrator/`](compaction-file-rehydrator/README.zh.md) | 压缩后从 append-only 日志重建已读文件账本，注入为作用域提示节 |
 | [`hooks-trust/`](hooks-trust/README.zh.md) | 第三方 workspace hook 的内容哈希信任账本 |
+| [`mps-exec-core/`](mps-exec-core/README.zh.md) | MPS 执行节点的 exec/v1 线上协议层：由配置的通信 IP 与端口解析地址、外壳、错误恢复、退避、脱敏、标识与节点客户端 |
+| [`mps-executor/`](mps-executor/README.zh.md) | MPS 执行节点插件：由 profile 配置行驱动的平台握手与心跳 |
 
 <a id="composition"></a>
 ## 组合

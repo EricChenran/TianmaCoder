@@ -360,6 +360,8 @@
       "@tianma/dsh-oa-account-ui": ["./packages/tianma/oa-account-ui/src/index.ts"],
       "@tianma/dsh-oa-account-ui/client": ["./packages/tianma/oa-account-ui/src/client/index.ts"],
       "@tianma/dsh-token-meter-calibration": ["./packages/tianma/token-meter-calibration/src/index.ts"],
+      "@tianma/dsh-mps-exec-core": ["./packages/tianma/mps-exec-core/src/index.ts"],
+      "@tianma/dsh-mps-executor": ["./packages/tianma/mps-executor/src/index.ts"],
       "@deepseek-ai/dsh-api-account-controller": ["./packages/api/account-controller/src/index.ts"],
       "@deepseek-ai/dsh-api-account-controller/types": ["./packages/api/account-controller/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform": ["./packages/credentials/deepseek-account-platform/src/index.ts"],

@@ -34,6 +34,8 @@ The `tianma/` group carries the TianmaCoder secondary-development surface for De
 | [`token-meter-calibration/`](token-meter-calibration/README.md) | CJK-aware density estimation and usage-driven calibration factors |
 | [`compaction-file-rehydrator/`](compaction-file-rehydrator/README.md) | Post-compaction read-file ledger rebuilt from the append-only log, injected as a scoped prompt section |
 | [`hooks-trust/`](hooks-trust/README.md) | Content-hash trust ledger for third-party workspace hooks |
+| [`mps-exec-core/`](mps-exec-core/README.md) | exec/v1 wire layer for the MPS executor node: address resolution from the configured host and port, envelopes, error recovery, backoff, redaction, ids, and the node client |
+| [`mps-executor/`](mps-executor/README.md) | The MPS executor node plugin: the platform handshake and heartbeat a profile row configures |
 
 <a id="composition"></a>
 ## Composition

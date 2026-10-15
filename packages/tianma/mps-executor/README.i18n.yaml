@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/tianma/mps-executor/README.md
+/:
+  en: b1a636b88ae4edbd
+  zh: 919f584603a0c687
+/tianma-dsh-mps-executor:
+  en: 8f7003778c466d92
+  zh: 357123b48f681364
+/tianma-dsh-mps-executor/summary:
+  en: dff6d50b1f77e0c8
+  zh: 5c1dabc22a3e6457
+/tianma-dsh-mps-executor/table-of-contents:
+  en: b563e4ec4727d0de
+  zh: 35af86be4d28ec82
+/tianma-dsh-mps-executor/use-this-package:
+  en: 11347558148ee232
+  zh: e28298ed51d31555
+/tianma-dsh-mps-executor/understand-the-implementation:
+  en: 997412a79c36a36a
+  zh: 2108821e86cc89cd
+/tianma-dsh-mps-executor/understand-the-implementation/source-map:
+  en: 04ace4f94a5c692b
+  zh: a0d2d02ee275d93b
+/tianma-dsh-mps-executor/understand-the-implementation/invariant-ownership:
+  en: 39b4a0ffbd2e00e8
+  zh: f64f7ee9f53b18bf
+/tianma-dsh-mps-executor/further-exploration:
+  en: 3126bde976e1ce88
+  zh: 0ee1780700b0f384
+/tianma-dsh-mps-executor/model-experience:
+  en: 9327fd04f38ecf6b
+  zh: 9327fd04f38ecf6b
+/tianma-dsh-mps-executor/model-experience/kv-cache-effect:
+  en: 2960cb72641edfb5
+  zh: 2960cb72641edfb5
+/tianma-dsh-mps-executor/known-limitations-and-deferred-work:
+  en: 4dd174653449dfa6
+  zh: 342f69237729f38d
+/tianma-dsh-mps-executor/known-limitations-and-deferred-work/dev-note:
+  en: b51b09188262ca02
+  zh: 6c78a329bbc79c06

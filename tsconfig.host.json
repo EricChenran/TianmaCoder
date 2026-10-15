@@ -455,6 +455,8 @@
     { "path": "./packages/tianma/compaction-file-rehydrator" },
     { "path": "./packages/tianma/hooks-trust" },
     { "path": "./packages/tianma/oa-account" },
+    { "path": "./packages/tianma/mps-exec-core" },
+    { "path": "./packages/tianma/mps-executor" },
     { "path": "./packages/bundle/headless" },
     { "path": "./packages/bundle/sdk-app" },
     { "path": "./packages/bundle/sdk-minimal" },
