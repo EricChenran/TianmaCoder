@@ -85,12 +85,19 @@ class PlatformStub {
     this.#tasks.push(task)
   }
 
-  /** Start listening on this host. */
-  async listen(): Promise<number> {
+  /**
+   * Start listening on this host, or on the port it used before, which is the address the
+   * node was configured with and cannot change.
+   * @param port - the port to listen on; the one it last used by default.
+   * @returns the port it listens on.
+   */
+  async listen(port?: number): Promise<number> {
     this.#server = createServer((request, response) => {
       void this.#answer(request, response)
     })
-    await new Promise<void>((resolve) => { this.#server?.listen(0, '127.0.0.1', resolve) })
+    await new Promise<void>((resolve) => {
+      this.#server?.listen(port ?? this.#port, '127.0.0.1', resolve)
+    })
     const address = this.#server?.address()
     this.#port = typeof address === 'object' && address !== null ? address.port : 0
     return this.#port
@@ -319,6 +326,61 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('keeps working through an outage, and loses none of the log', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_outage',
+      work_item_id: 'wi_outage',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '边做边说，中途平台掉线' },
+        workspace: {
+          workspace_id: 'ws_outage',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_outage' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['chatty'] })
+      // The attempt is under way and the platform has taken its first lines.
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_outage/log').length > 0)
+
+      // The platform goes away for a few seconds: the agent keeps working, the node keeps
+      // its lines, and its heartbeat keeps failing until the platform is back.
+      await platform.close()
+      await new Promise(resolve => setTimeout(resolve, 4_000))
+      await platform.listen(port)
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_outage/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    // The task was not lost to the outage, and every line the agent printed arrived: the
+    // ones produced while the platform was unreachable were offered again afterwards.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_outage/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+    const reported = platform.at('/exec/v1/tasks/tsk_outage/log').map(request => request.body).join('\n')
+    for (const line of ['line-1', 'line-2', 'line-3', 'line-4', 'line-5', 'line-6']) {
+      expect(reported).toContain(line)
+    }
+    // The heartbeat resumed too, since the node was still online afterwards.
+    expect(platform.at('/exec/v1/heartbeat').length).toBeGreaterThan(0)
   }, 120_000)
 
   it('stops an attempt the platform aborts, and says it was cancelled', async () => {

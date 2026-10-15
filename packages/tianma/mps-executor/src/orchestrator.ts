@@ -486,6 +486,9 @@ export class TaskOrchestrator {
       if (running.aborted) outcome = strongerOutcome(outcome, 'cancelled')
       if (running.timedOut) outcome = strongerOutcome(outcome, 'failed')
       if (running.aborted) await this.#ackAbort(running)
+      // Offer the lines the platform could not take while the attempt ran, so the log a
+      // result refers to is whole by the time that result arrives.
+      await this.#spool.flush()
       await this.#submit(running, outcome, result, startedAt)
     } finally {
       this.#settle(running)
@@ -577,24 +580,42 @@ export class TaskOrchestrator {
     if (this.#sessions === undefined || workspace === undefined || checkout === undefined) {
       throw new Error('this attempt has no prepared workspace to report a session for')
     }
-    await this.#sessions.report({
-      assignment: running.assignment,
-      directory: workspace.directory,
-      sessionRef,
-      baseCommit: checkout.base_commit,
-      signal: running.controller.signal,
-    })
+    try {
+      await this.#sessions.report({
+        assignment: running.assignment,
+        directory: workspace.directory,
+        sessionRef,
+        baseCommit: checkout.base_commit,
+        signal: running.controller.signal,
+      })
+    } catch (error: unknown) {
+      // The node recorded the session beside its workspace before reporting it, so a
+      // platform that cannot take the report now still gets the next one.
+      this.#report({
+        level: 'warn',
+        message: `the session report for ${running.assignment.task_id} did not reach the platform: ${toError(error).message}`,
+      })
+    }
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {
     this.#hooks.taskProgress(running.assignment.task_id, progress.progress, progress.stage)
-    await this.#client.progress(running.assignment.task_id, {
-      attempt: running.assignment.attempt,
-      progress: progress.progress,
-      stage: progress.stage,
-      message: progress.message,
-      eta_seconds: progress.eta_seconds,
-    })
+    try {
+      await this.#client.progress(running.assignment.task_id, {
+        attempt: running.assignment.attempt,
+        progress: progress.progress,
+        stage: progress.stage,
+        message: progress.message,
+        eta_seconds: progress.eta_seconds,
+      })
+    } catch (error: unknown) {
+      // Progress is a report, not the work: a platform that cannot take one right now
+      // must not end an attempt, and the next report carries the newest state anyway.
+      this.#report({
+        level: 'warn',
+        message: `progress for ${running.assignment.task_id} did not reach the platform: ${toError(error).message}`,
+      })
+    }
   }
 
   /**

@@ -20,6 +20,16 @@ for (const event of events) console.log(JSON.stringify(event))
 // A later task in the same workspace changes the same file again, which is what makes a
 // second attempt in one workspace a real change rather than a repeat of the first.
 const instruction = process.argv.at(-1) ?? ''
+// A task that takes its time and says so: one line a second, so an outage that lasts a few
+// seconds covers several of them.
+if (process.argv[2] === 'chatty') {
+  const lines = ['line-1', 'line-2', 'line-3', 'line-4', 'line-5', 'line-6']
+  for (const line of lines) {
+    console.log(JSON.stringify({ type: 'text', text: line }))
+    await new Promise(resolve => setTimeout(resolve, 1_000))
+  }
+}
+
 // A task the platform may stop: the agent works on until something ends it. The pending
 // interval is what keeps the process alive while the await never settles.
 if (process.argv[2] === 'slow') {

@@ -28,6 +28,7 @@ import {
   resolveExecutorSettings,
 } from '@tianma/dsh-mps-executor'
 import type { ExecResource } from '@tianma/dsh-mps-exec-core'
+import type { TaskSessionReporter, TaskWorkspaceAllocator } from '@tianma/dsh-mps-executor'
 import type {
   ExecutorReport,
   ExecutorSettings,
@@ -181,6 +182,8 @@ function orchestratorWith(options: {
   reports?: ExecutorReport[]
   settings?: ExecutorSettings
   canClaim?: () => boolean
+  sessions?: TaskSessionReporter
+  workspaces?: TaskWorkspaceAllocator
 }): { orchestrator: TaskOrchestrator; hooks: FakeHooks; reports: ExecutorReport[] } {
   const hooks = options.hooks ?? new FakeHooks()
   const reports = options.reports ?? []
@@ -191,6 +194,8 @@ function orchestratorWith(options: {
     hooks,
     report: (report) => { reports.push(report) },
     canClaim: options.canClaim,
+    sessions: options.sessions,
+    workspaces: options.workspaces,
     now: () => new Date('2026-10-15T04:03:55.123Z'),
   })
   return { orchestrator, hooks, reports }
@@ -240,6 +245,58 @@ describe('task lifecycle', () => {
 
     expect(back.logs.some(entry => entry.lines.some(line => line.text.includes('崩前最后一行')))).toBe(true)
     expect(existsSync(join(codingRoot, '.buffers', 'tsk_1.jsonl'))).toBe(false)
+  })
+
+  it('carries on when a session report does not reach the platform', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      // A prepared workspace, so the report has everything it needs but the platform.
+      workspaces: {
+        async prepare() {
+          return { directory: join('coding', 'ws_1'), checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' } }
+        },
+      },
+      sessions: {
+        async report() { throw new Error('the platform is unreachable') },
+      },
+      runner: runnerOf(async (context) => {
+        await context.reportSession('dsh-session-test')
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    // The node recorded the session beside its workspace first, so the report can wait.
+    expect(reports.some(report => report.message.includes('the session report for tsk_1 did not reach the platform'))).toBe(true)
+    expect(platform.results[0]).toMatchObject({ outcome: 'success' })
+  })
+
+  it('carries on when a progress report does not reach the platform', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.progress = async () => { throw new Error('the platform is unreachable') }
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      runner: runnerOf(async (context) => {
+        await context.reportProgress({ progress: 30, stage: 'coding', message: '3/10' })
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    // Progress is a report, not the work: the attempt finished and was submitted.
+    expect(reports.some(report => report.message.includes('progress for tsk_1 did not reach the platform'))).toBe(true)
+    expect(platform.results[0]).toMatchObject({ outcome: 'success' })
   })
 
   it('keeps and resends a log batch the platform could not take', async () => {

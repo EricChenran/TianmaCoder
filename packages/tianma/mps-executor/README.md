@@ -116,7 +116,7 @@ The capabilities a node registers are probed, because the platform schedules on 
 
 Every heartbeat carries a reading of this machine — the free space on the disk the coding workspaces live on, the memory in use, and the CPU time spent between two readings — because the platform schedules on what a node has. When that free space falls below `diskMinGb` the node stops claiming work, says so once per state change, and names the workspaces it keeps; it never deletes one, because releasing a bound workspace is the platform's decision.
 
-A log batch the platform could not take waits on disk instead of disappearing: the lines describe work that already happened, so the node keeps them under the coding root and offers them again under the same batch id, which the platform deduplicates. A batch the platform answers on is dropped when it refuses that batch outright, and the node says so — a gap in the log reaches the operator rather than being retried forever.
+A log batch the platform could not take waits on disk instead of disappearing: the lines describe work that already happened, so the node keeps them under the coding root and offers them again under the same batch id, which the platform deduplicates. The spool is offered again before the result is submitted, so the log a result refers to is whole by the time it arrives. A batch the platform answers on is dropped when it refuses that batch outright, and the node says so — a gap in the log reaches the operator rather than being retried forever. A report the platform cannot take — progress, a session — is a warning rather than the end of the attempt: the work is not the report, and the next report carries the newest state.
 
 ### Source map
 
