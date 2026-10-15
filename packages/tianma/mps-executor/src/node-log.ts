@@ -39,6 +39,7 @@ export interface NodeLogRecord {
  * @param root - coding root the log lives under.
  * @param report - what the node reported.
  * @param at - the moment to record, for tests.
+ * @param maxLines - lines one day's file holds before it stops and says so.
  * @returns nothing.
  */
 export function appendNodeLog(root: string, report: ExecutorReport, at: Date = new Date(), maxLines: number = NODE_LOG_MAX_LINES): void {

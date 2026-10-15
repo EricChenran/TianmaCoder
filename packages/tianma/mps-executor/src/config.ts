@@ -70,6 +70,7 @@ export const DEFAULT_MAX_ARTIFACT_BYTES = 500 * 1024 * 1024
  */
 export const DEFAULT_CLI_COMMAND: readonly string[] = ['dsh', '--profile', 'headless']
 
+/** `user.name` a node commits under until a deployment names its robot. */
 export const DEFAULT_GIT_USER_NAME = 'tianma-mps-node'
 
 /** `user.email` a node commits under until a deployment names its robot. */
@@ -342,6 +343,14 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
   return config
 }
 
+/**
+ * Resolve a configuration into the settings the node runs with: the endpoint, identity, roots,
+ * limits, and the runner it falls back to. Absent values take this package's defaults, and the
+ * two a node cannot invent — its platform and its id — are refused at the schema.
+ * @param config - the configuration a profile row or an environment states.
+ * @param hostname - this machine's name, used when the configuration names no host.
+ * @returns the resolved settings.
+ */
 export function resolveExecutorSettings(config: Config, hostname: string = hostHostname()): ExecutorSettings {
   const endpoint = resolvePlatformEndpoint({
     host: config.platformHost,

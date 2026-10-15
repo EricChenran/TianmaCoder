@@ -61,8 +61,7 @@ export function probeTools(options: ProbeToolsOptions = {}): string[] {
 
 /**
  * Read the version one command reports for itself.
- * @param bin - the executable to ask.
- * @param args - the flag that asks for a version.
+ * @param output - what the command printed when asked for its version.
  * @returns the first line it printed, or undefined when it reported none.
  */
 export function versionFrom(output: string): string | undefined {

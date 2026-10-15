@@ -76,6 +76,7 @@ interface BookFacts {
 /**
  * Render the task book for one attempt.
  * @param assignment - the assignment a claim returned.
+ * @param materials - the materials the attempt brought into the workspace, if any.
  * @returns the book as markdown.
  */
 export function taskBook(assignment: ExecTaskAssignment, materials: MaterialFile[] = []): string {

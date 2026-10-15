@@ -41,6 +41,8 @@ const LOG_BATCH_LINES = 200
  * end, because the evidence and the delivery come after the agent is done.
  */
 export const TURN_PROGRESS_STEP = 5
+
+/** Highest progress a narrated turn can raise the estimate to before the run is delivered. */
 export const TURN_PROGRESS_CEILING = 70
 
 /** Options for {@link tianmaCliRunner}. */
