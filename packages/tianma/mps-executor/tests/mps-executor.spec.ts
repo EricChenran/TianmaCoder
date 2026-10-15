@@ -679,6 +679,160 @@ describe('the runner the node falls back to', () => {
     }
   })
 
+  it('fetches the platform configuration when its revision moves, and applies what it owns', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, config_revision: 2 }),
+      envelope({
+        config_revision: 2,
+        heartbeat_interval_seconds: 7,
+        claim_long_poll_seconds: 25,
+        max_artifact_bytes: 104857600,
+      }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.start()
+    await node.heartbeatOnce()
+    // The timer was re-armed at the platform's interval, so the next period follows it.
+    await vi.advanceTimersByTimeAsync(7_000)
+    node.stop()
+
+    const urls = queue.calls.map(call => call.request.url)
+    expect(urls.some(url => url.endsWith('/config'))).toBe(true)
+    // The node owns the heartbeat interval, so it follows the platform's value.
+    expect(node.heartbeatSeconds).toBe(7)
+    // The parameters it keeps at the values it declared are named, never dropped silently.
+    expect(reports.some(report => report.message.includes(
+      'this node keeps the values it declared for claim_long_poll_seconds, max_artifact_bytes',
+    ))).toBe(true)
+  })
+
+  it('keeps the configuration it holds while the revision stands still', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+
+    expect(queue.calls.map(call => call.request.url).some(url => url.endsWith('/config'))).toBe(false)
+    expect(reports.some(report => report.message.includes('platform configuration'))).toBe(false)
+  })
+
+  it('keeps what it holds when the platform states nothing usable', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, config_revision: 4 }),
+      envelope({ config_revision: 'nope', heartbeat_interval_seconds: Number.NaN }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+
+    // The registered interval stands, and the report says the configuration was applied.
+    expect(node.heartbeatSeconds).toBe(3)
+    expect(reports.some(report => report.message.includes('platform configuration 4 applied (heartbeat 3s)'))).toBe(true)
+  })
+
+  it('applies the platform interval even before the heartbeat timer runs', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, config_revision: 6 }),
+      envelope({ config_revision: 6, heartbeat_interval_seconds: 9 }),
+    ])
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: () => { /* this test reads the interval, not the reports */ },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+
+    // Nothing is armed yet, so the value is applied and the timer picks it up when it starts.
+    expect(node.heartbeatSeconds).toBe(9)
+  })
+
+  it('leaves the interval alone when the platform states the one it already uses', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, config_revision: 5 }),
+      envelope({ config_revision: 5, heartbeat_interval_seconds: 3, log_batch_max_lines: 200 }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.start()
+    await node.heartbeatOnce()
+    node.stop()
+
+    expect(node.heartbeatSeconds).toBe(3)
+    expect(reports.some(report => report.message.includes('keeps the values it declared for log_batch_max_lines'))).toBe(true)
+  })
+
+  it('warns instead of breaking the heartbeat when the configuration cannot be read', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, config_revision: 3 }),
+      rejection('INTERNAL'),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    // The heartbeat still settles: an unread configuration leaves the declared values in place.
+    await node.heartbeatOnce()
+
+    expect(reports.some(report => report.message.includes('could not read platform configuration 3'))).toBe(true)
+  })
+
   it('lets a composed runner take precedence over its own', async () => {
     vi.useFakeTimers()
     const queue = queueTransport([

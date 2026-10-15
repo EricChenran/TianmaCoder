@@ -38,6 +38,19 @@ import { WorkspaceStore } from './workspace.ts'
 
 export type { ExecutorReport } from './report.ts'
 
+/**
+ * Platform configuration this node does not act on: it keeps the values it declared and
+ * registered, and says so when the platform states different ones.
+ */
+const KEPT_CONFIGURATION = [
+  'claim_long_poll_seconds',
+  'log_batch_max_lines',
+  'log_batch_max_bytes',
+  'max_artifact_bytes',
+  'redaction_rule_version',
+  'code_access_mode',
+] as const
+
 /** Where this node stands in its relationship with the management platform. */
 export type NodeState =
   /** Not authenticated; no request may carry a token. */
@@ -92,6 +105,8 @@ export class MpsExecutorRuntime {
   #state: NodeState = 'idle'
   #token: string | undefined
   #heartbeatSeconds: number
+  /** Platform configuration revision this node has applied; undefined before registration. */
+  #configRevision: number | undefined
   #timer: ReturnType<typeof setInterval> | undefined
   #runningTasks: ExecRunningTask[] = []
   readonly #taskProgress = new Map<string, { progress: number; stage: string }>()
@@ -263,6 +278,8 @@ export class MpsExecutorRuntime {
       this.#state = 'online'
       this.#lastError = undefined
       await this.#reportRestoredSessions(signal)
+      const revision = registered.config_revision
+      this.#configRevision = typeof revision === 'number' && Number.isFinite(revision) ? revision : undefined
       if (Number.isFinite(registered.heartbeat_interval_seconds) && registered.heartbeat_interval_seconds > 0) {
         this.#heartbeatSeconds = registered.heartbeat_interval_seconds
       }
@@ -298,7 +315,58 @@ export class MpsExecutorRuntime {
       agent_version: this.settings.agentVersion,
     }, signal)
     await this.#applyCommands(heartbeat.commands)
+    if (heartbeat.config_revision !== this.#configRevision) {
+      await this.#applyConfiguration(heartbeat.config_revision, signal)
+    }
     return heartbeat
+  }
+
+  /**
+   * Fetch and apply the platform's configuration when its revision moves. The node acts on
+   * the parameters it owns — the heartbeat interval — and names the ones it keeps at the
+   * values it declared, so a platform instruction never disappears silently.
+   * @param revision - the revision this heartbeat stated.
+   * @param signal - caller cancellation.
+   */
+  async #applyConfiguration(revision: number, signal?: AbortSignal): Promise<void> {
+    let stated: Record<string, unknown>
+    try {
+      stated = await this.client.configuration(signal)
+    } catch (error: unknown) {
+      // A configuration this node cannot read is a warning: the values it already holds
+      // are the ones it declared, and the next heartbeat asks again.
+      this.#report({
+        level: 'warn',
+        message: `node ${this.settings.nodeId} could not read platform configuration ${String(revision)}: ${toError(error).message}`,
+      })
+      return
+    }
+    const applied = stated['config_revision']
+    // The heartbeat's revision is recorded either way: a platform that states an unusable
+    // one must not make this node ask again on every period.
+    this.#configRevision = typeof applied === 'number' && Number.isFinite(applied) ? applied : revision
+    const seconds = stated['heartbeat_interval_seconds']
+    if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 && seconds !== this.#heartbeatSeconds) {
+      this.#heartbeatSeconds = seconds
+      this.#arm()
+    }
+    const kept = KEPT_CONFIGURATION.filter(name => stated[name] !== undefined)
+    this.#report({
+      level: kept.length === 0 ? 'info' : 'warn',
+      message: kept.length === 0
+        ? `platform configuration ${String(this.#configRevision)} applied (heartbeat ${String(this.#heartbeatSeconds)}s)`
+        : `platform configuration ${String(this.#configRevision)} applied (heartbeat ${String(this.#heartbeatSeconds)}s); this node keeps the values it declared for ${kept.join(', ')}`,
+    })
+  }
+
+  /**
+   * Re-arm the heartbeat timer at the current interval, so a platform that changed the
+   * interval takes effect from the next period without dropping the work in flight.
+   */
+  #arm(): void {
+    if (this.#timer === undefined) return
+    clearInterval(this.#timer)
+    this.#timer = setInterval(() => { this.#tick() }, this.#heartbeatSeconds * 1000)
   }
 
   /**

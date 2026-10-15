@@ -109,6 +109,8 @@ A screenshot is the one piece of evidence the node cannot produce, because only 
 
 The node is also exercised end to end: a spec boots this plugin through the Loader from a `cordis.yml`, with its configuration validated, dials a platform on this host, and runs real tasks in a real clone — the agent is a stub, everything else is the node: the checkout, the commit, the push or the bundle, the evidence commands, the artifacts, the session report, the capability promise, and the result. Both access modes are covered: a `read_write` task is pushed to the origin and a `read_only` one goes back as a bundle with nothing pushed.
 
+The platform's configuration is fetched when the revision it states moves: the node follows the heartbeat interval the platform asks for — re-arming its timer without dropping the work in flight — and names the parameters it keeps at the values it declared, so an instruction never disappears silently.
+
 ### Source map
 
 | File | Role |
@@ -169,6 +171,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
 - **Screenshots are declared, not captured** — the node takes no screenshots: it reads what the attempt declared in `.evidence/screenshots.json`, checks that each file is there and at least as large as the platform accepts, and uploads them with the metadata the declaration states. The platform's own content checks are the platform's.
+- **Platform configuration is partly followed** — the node acts on the heartbeat interval; the claim long poll, the log batch caps, the artifact ceiling, and the redaction rules stay at the values this node declared in its capabilities, and the node says so in its report when the platform states different ones.
 - **Progress inside a run is estimated** — the event stream reports each turn and tool call, but the node states no percentage for them: only the stages it knows for certain (coding, collecting evidence, uploading) carry one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
