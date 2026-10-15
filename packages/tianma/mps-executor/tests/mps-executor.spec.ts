@@ -34,6 +34,7 @@ import type {
   TaskRunner,
 } from '@tianma/dsh-mps-executor'
 import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
+import type { ExecResources } from '@tianma/dsh-mps-exec-core'
 
 /** One recorded call of the fake transport. */
 interface TransportCall {
@@ -235,13 +236,18 @@ describe('node runtime', () => {
    * @param overrides - settings overrides.
    * @returns the runtime, its transport calls, and the reports it made.
    */
-  function runtime(answers: ExecHttpResponse[], overrides: Partial<Parameters<typeof resolveExecutorSettings>[0]> = {}) {
+  function runtime(
+    answers: ExecHttpResponse[],
+    overrides: Partial<Parameters<typeof resolveExecutorSettings>[0]> = {},
+    probeResources?: () => Promise<ExecResources>,
+  ) {
     const queue = queueTransport(answers)
     const reports: ExecutorReport[] = []
     const instance = new MpsExecutorRuntime({
       settings: settingsFor(overrides),
       secret: () => 's',
       transport: queue.transport,
+      probeResources,
       now: () => new Date('2026-10-15T04:03:55.123Z'),
       report: (report) => { reports.push(report) },
     })
@@ -324,10 +330,9 @@ describe('node runtime', () => {
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
       envelope(REGISTERED),
       envelope(HEARTBEAT),
-    ], { slotsTotal: 2, agentVersion: '1.2.3' })
+    ], { slotsTotal: 2, agentVersion: '1.2.3' }, async () => ({ cpu_percent: 62, mem_percent: 71, disk_free_gb: 118 }))
     await node.bootstrap()
     node.setRunningTasks([{ task_id: 'tsk_1', attempt: 1, started_at: 's', progress: 40, stage: 'coding' }])
-    node.setResources({ cpu_percent: 62, mem_percent: 71, disk_free_gb: 118 })
     const result = await node.heartbeatOnce()
     expect(result.node_status).toBe('online')
     expect(node.availableSlots()).toBe(1)
@@ -893,6 +898,94 @@ describe('the runner the node falls back to', () => {
     expect(low).toHaveLength(1)
     expect(low[0]?.message).toContain('claiming nothing until there is room')
     expect(reports.some(report => report.message.includes('has 40GB free again; claiming work'))).toBe(true)
+  })
+
+  it('tells the platform when a full disk stops it taking work, once per state', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    let free = 1
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5 }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 0, mem_percent: 0, disk_free_gb: free }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+    await node.heartbeatOnce()
+    free = 40
+    await node.heartbeatOnce()
+
+    const paths = queue.calls.map(call => call.request.url)
+    // Draining is how a node stops taking work; claiming nothing leaves the platform
+    // dispatching to a node that will not answer.
+    expect(paths.filter(path => path.endsWith('/drain'))).toHaveLength(1)
+    expect(paths.filter(path => path.endsWith('/resume'))).toHaveLength(1)
+    expect(reports.some(report => report.message.includes('is below 5GB free (1GB)'))).toBe(true)
+    expect(reports.some(report => report.message.includes('has 40GB free again'))).toBe(true)
+  })
+
+  it('carries on when the platform cannot be told about draining', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('DB_UNAVAILABLE'),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5 }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 0, mem_percent: 0, disk_free_gb: 1 }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    // The platform refusing the announcement does not undo the local pause, and the
+    // heartbeat that carried the reading still goes.
+    await expect(node.heartbeatOnce()).resolves.toMatchObject({ node_status: 'online' })
+
+    expect(reports.some(report => report.message.includes('could not tell the platform this node is draining'))).toBe(true)
+  })
+
+  it('carries on when the platform cannot be told the node is working again', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(null),
+      envelope(HEARTBEAT),
+      rejection('DB_UNAVAILABLE'),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    let free = 1
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5 }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 0, mem_percent: 0, disk_free_gb: free }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+    free = 40
+    await expect(node.heartbeatOnce()).resolves.toMatchObject({ node_status: 'online' })
+
+    expect(reports.some(report => report.message.includes('could not tell the platform this node is no longer draining'))).toBe(true)
   })
 
   it('keeps the last reading when the machine cannot be read, and reports why', async () => {

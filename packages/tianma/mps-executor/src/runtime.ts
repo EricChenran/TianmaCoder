@@ -268,10 +268,6 @@ export class MpsExecutorRuntime {
    * Replace the resource readings a heartbeat reports.
    * @param resources - the current readings.
    */
-  setResources(resources: ExecResources): void {
-    this.#applyResources(resources)
-  }
-
   /**
    * Take one reading of this machine. A reading that fails leaves the last one in place:
    * a node that cannot read its disk is not a node that has run out of it.
@@ -294,7 +290,7 @@ export class MpsExecutorRuntime {
    * Apply one reading, and stop claiming work while the disk cannot hold another attempt.
    * @param resources - the reading.
    */
-  #applyResources(resources: ExecResources): void {
+  async #applyResources(resources: ExecResources): Promise<void> {
     this.#resources = { ...resources }
     const room = resources.disk_free_gb >= this.settings.diskMinGb
     if (room === this.#hasRoom) return
@@ -304,12 +300,36 @@ export class MpsExecutorRuntime {
         level: 'info',
         message: `node ${this.settings.nodeId} has ${String(resources.disk_free_gb)}GB free again; claiming work`,
       })
+      // The platform stops holding tasks back, which is the half of this the node cannot
+      // do by claiming nothing.
+      await this.#announce('resume', 'the disk has room for another attempt again')
       return
     }
     this.#report({
       level: 'warn',
       message: `node ${this.settings.nodeId} is below ${String(this.settings.diskMinGb)}GB free (${String(resources.disk_free_gb)}GB); claiming nothing until there is room. Its workspaces are ${releasableWorkspaces(this.#workspaces.records)}`,
     })
+    // Claiming nothing leaves the platform dispatching to a node that will not answer;
+    // draining is how the protocol says a node stops taking work.
+    await this.#announce('drain', `this node is below its ${String(this.settings.diskMinGb)}GB disk floor`)
+  }
+
+  /**
+   * Tell the platform this node is or is no longer taking work. A platform that cannot
+   * hear it still gets the right behaviour locally: the node's own claiming is what it is.
+   * @param kind - the maintenance call to make.
+   * @param reason - operator-visible reason.
+   */
+  async #announce(kind: 'drain' | 'resume', reason: string): Promise<void> {
+    try {
+      if (kind === 'drain') await this.client.drain(reason)
+      else await this.client.resume(reason)
+    } catch (error: unknown) {
+      this.#report({
+        level: 'warn',
+        message: `could not tell the platform this node ${kind === 'drain' ? 'is' : 'is no longer'} draining: ${toError(error).message}`,
+      })
+    }
   }
 
   /**
@@ -374,7 +394,7 @@ export class MpsExecutorRuntime {
     // A reading for this period: the platform schedules on what this machine has now, and
     // the node stops claiming when the disk cannot hold another attempt.
     const reading = await this.#readResources()
-    if (reading !== undefined) this.#applyResources(reading)
+    if (reading !== undefined) await this.#applyResources(reading)
     const heartbeat = await this.client.heartbeat({
       running_tasks: [...this.#runningTasks],
       slots: this.slots(),
