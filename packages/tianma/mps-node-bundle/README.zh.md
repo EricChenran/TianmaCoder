@@ -51,7 +51,7 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
 
 启动前可以先确认这台机器会拨哪个地址：`dsh --profile mps-node --show-config` 会打印解析后的接入点、身份、工作区与编码根、agent CLI，以及它将遵守的各项上限（接活前要求的可用磁盘、心跳与认领间隔、续租周期、单次运行上限、单次上传的产物上限），读的就是本行所读的同一份环境；密钥只打印变量名，绝不打印值。
 
-环境变量间接寻址让同一份安装镜像可以服务每一台节点；若部署更希望固定 profile，把取值直接写进该行即可。两个占位值让 profile 始终可加载——在没有任何环境变量的机器上 `dsh mps-node --help` 也能用——而是否真的发起连接由 `autoStart` 决定：它只在设置了 `MPS_PLATFORM_HOST` 时为真，因此未配置的节点只挂载并保持空闲，而不会以占位身份去注册。密钥只会从 `secretEnv` 指定的环境变量读取。
+环境变量间接寻址让同一份安装镜像可以服务每一台节点；若部署更希望固定 profile，把取值直接写进该行即可。**注意：任何指名这一行的叠加层是"整体替换它的 `config`"，而不是合并**——只写想改的那个字段会让 `platformHost` 变成未设置，该行随即以 `$.platformHost missing required value` 激活失败；凡触及这一行的叠加层，都要把它其余取值一并写上。两个占位值让 profile 始终可加载——在没有任何环境变量的机器上 `dsh mps-node --help` 也能用——而是否真的发起连接由 `autoStart` 决定：它只在设置了 `MPS_PLATFORM_HOST` 时为真，因此未配置的节点只挂载并保持空闲，而不会以占位身份去注册。密钥只会从 `secretEnv` 指定的环境变量读取。
 
 本 profile 已用"从源码启动 + 一个监听在配置地址上的桩平台"实测：节点完成认证（`POST /exec/v1/auth/token`）、注册（`POST /exec/v1/register`），随后按平台给的时间间隔循环认领（队列空时 204）与心跳（`POST /exec/v1/heartbeat`）。这是本环境能给出的全部证据——profile 自身无需安装依赖，但要把任务跑到端到端，仍需真实平台与模型凭证。
 
