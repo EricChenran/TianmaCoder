@@ -24,6 +24,8 @@ import type {
   ExecRunningTask,
   ExecSlots,
 } from '@tianma/dsh-mps-exec-core'
+import { drainingMarker } from './draining.ts'
+import type { DrainingMarker } from './draining.ts'
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
 import { clientArtifactUploader } from './artifacts.ts'
@@ -121,6 +123,8 @@ export class MpsExecutorRuntime {
   #version: string | undefined
   /** How the agent's version is probed, when a deployment composed a CLI to ask. */
   #probeAgentVersion: (() => Promise<string | undefined>) | undefined
+  /** The mark this node leaves for the process that replaces it. */
+  readonly #draining: DrainingMarker
   /** How this node's resources are read, when a deployment composed a reader. */
   #probeResources: (() => Promise<ExecResources>) | undefined
   /** Platform configuration revision this node has applied; undefined before registration. */
@@ -147,6 +151,7 @@ export class MpsExecutorRuntime {
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
     this.#probeAgentVersion = options.probeAgentVersion
     this.#probeResources = options.probeResources
+    this.#draining = drainingMarker(options.settings.codingRoot)
     this.client = new ExecClient({
       endpoint: options.settings.endpoint,
       nodeId: options.settings.nodeId,
@@ -322,8 +327,15 @@ export class MpsExecutorRuntime {
    */
   async #announce(kind: 'drain' | 'resume', reason: string): Promise<void> {
     try {
-      if (kind === 'drain') await this.client.drain(reason)
-      else await this.client.resume(reason)
+      if (kind === 'drain') {
+        // The mark first: a node that dies between the call and the mark could never be
+        // resumed, where a mark the platform never heard about is cleared on the next start.
+        this.#draining.keep()
+        await this.client.drain(reason)
+      } else {
+        await this.client.resume(reason)
+        this.#draining.clear()
+      }
     } catch (error: unknown) {
       this.#report({
         level: 'warn',
@@ -361,6 +373,9 @@ export class MpsExecutorRuntime {
       }, signal)
       this.#state = 'online'
       this.#lastError = undefined
+      // A node coming up after an upgrade takes work again: the mark its previous process
+      // left is what this clears, which is the last step of the upgrade sequence.
+      if (this.#draining.kept()) await this.#announce('resume', 'this node has started after draining')
       await this.#reportRestoredSessions(signal)
       const revision = registered.config_revision
       this.#configRevision = typeof revision === 'number' && Number.isFinite(revision) ? revision : undefined
