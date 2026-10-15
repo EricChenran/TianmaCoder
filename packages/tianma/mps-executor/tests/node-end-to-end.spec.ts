@@ -234,7 +234,13 @@ async function repository(root: string): Promise<{ bare: string; base: string }>
  * @param options - the platform address, the workspace root, and the agent command.
  * @returns the composed context.
  */
-async function boot(options: { port: number; workspaceRoot: string; logs: string; agentArgs?: string[] }): Promise<Context> {
+async function boot(options: {
+  port: number
+  workspaceRoot: string
+  logs: string
+  agentArgs?: string[]
+  command?: string[]
+}): Promise<Context> {
   const root = temporary('mps-e2e-config-')
   const configPath = join(root, 'cordis.yml')
   writeFileSync(configPath, [
@@ -248,9 +254,11 @@ async function boot(options: { port: number; workspaceRoot: string; logs: string
     '    autoStart: true',
     '    cliRunner:',
     '      command:',
-    `        - '${process.execPath.replace(/\\/gu, '/')}'`,
-    `        - '${join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'node-agent.mjs').replace(/\\/gu, '/')}'`,
-    ...(options.agentArgs ?? []).map(argument => `        - '${argument}'`),
+    ...(options.command ?? [
+      process.execPath,
+      join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'node-agent.mjs'),
+      ...options.agentArgs ?? [],
+    ]).map(argument => `        - '${argument.replace(/\\/gu, '/')}'`),
     `      logsDirectory: '${options.logs.replace(/\\/gu, '/')}'`,
     '      jsonEvents: true',
     '',
