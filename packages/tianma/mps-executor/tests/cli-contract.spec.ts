@@ -6,7 +6,9 @@
  * repository pins that this profile exists or that the instruction is positional, so an
  * upstream rename would break every node's first attempt instead of a test. This spec
  * starts the real CLI from source — the same entry the `dsh` script runs — and reads its
- * own usage, which needs no model credentials.
+ * own usage, which needs no model credentials. The same spec pins the two other contracts
+ * the runner reads off the CLI: the event stream a `--json` run prints, and the wording it
+ * uses for a session it does not hold.
  */
 
 import { execFile } from 'node:child_process'
@@ -109,5 +111,38 @@ describe('the CLI the node starts', () => {
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('MISSING_CREDENTIAL')
     expect(result.stdout.trim()).toBe('')
+  })
+
+  it('prints the event stream the runner reads when it is asked for one', async () => {
+    const result = await askCli(['--json', '做一件小事'])
+
+    // The run fails without a model before it does any work, which is enough: the stream
+    // opens, states each step, and closes, and every line of it is one event.
+    expect(result.code).not.toBe(0)
+    const lines = result.stdout.split(/\r?\n/u).filter(line => line.trim() !== '')
+    expect(lines.length).toBeGreaterThan(0)
+    const events = lines.map(line => JSON.parse(line) as Record<string, unknown>)
+
+    // The runner reads the session it reports from the opening event.
+    const session = events.find(event => event['type'] === 'session')
+    expect(typeof session?.['sessionId']).toBe('string')
+    // Every line is an event the runner renders: it hands anything else on as it came, so
+    // a CLI that started printing prose here would show up as prose in the platform's log.
+    for (const event of events) {
+      expect(['session', 'status', 'thinking', 'text', 'tool_call', 'tool_result', 'final'])
+        .toContain(event['type'])
+    }
+    const statuses = events.filter(event => event['type'] === 'status')
+    expect(statuses.every(event => typeof event['phase'] === 'string')).toBe(true)
+  })
+
+  it('names the session it does not hold the way the retry matches it', async () => {
+    // The runner retries a run whose exit says the platform's session is gone, and it
+    // recognises that answer by this wording: a rename here has to fail this test rather
+    // than leave every node failing a task the platform merely outlived.
+    const result = await askCli(['--session-id', 'session-00000000-0000-4000-8000-000000000000', '做一件小事'])
+
+    expect(result.code).not.toBe(0)
+    expect(result.stderr).toContain('does not exist; omit --session-id')
   })
 })
