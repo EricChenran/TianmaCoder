@@ -17,6 +17,7 @@ import type { Readable } from 'node:stream'
 import { taskInstruction } from '@tianma/dsh-mps-exec-core'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
 import type { TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
+import { TASK_BOOK_POINTER, writeTaskBook } from './task-book.ts'
 
 /** How long a run is given to stop before the node kills it. */
 export const RUNNER_STOP_GRACE_MS = 3000
@@ -72,11 +73,19 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       const instruction = taskInstruction(context.task.payload)
       if (instruction === undefined) throw new Error('this task carries no instruction to run')
 
+      // The instruction is the prompt; everything else the attempt needs — constraints,
+      // delivery requirements, materials, the chat it came from — is the task book.
+      const book = writeTaskBook({ directory, assignment: context.task })
       const lines: RunLine[] = []
       await context.reportProgress({ progress: 10, stage: 'coding', message: 'the agent is working' })
+      await context.reportLog('runner', [{
+        at: now().toISOString(),
+        level: 'info',
+        text: `task book: ${book}`,
+      }])
       const outcome = await runProcess({
         bin,
-        args: [...prefix, instruction],
+        args: [...prefix, `${instruction}\n\n${TASK_BOOK_POINTER}`],
         directory,
         env: options.env,
         signal: context.signal,

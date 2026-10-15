@@ -96,6 +96,8 @@ The other direction is `resource()` on the runner's context: the node downloads 
 
 `tianmaCliRunner` is the runner the node ships: it runs the tianmacoder CLI on one attempt and turns what that process did into a result. The node owns everything around the process — the working directory is the attempt's workspace, the command and instruction travel as an argument array rather than a shell line (an instruction is external input), what the run prints is streamed into the attempt's log as it arrives, cancellation asks the run to end and kills it after a grace period, and the raw log is written outside the workspace because everything inside the workspace is what the node commits. A run that exits non-zero, is stopped, or changes nothing is reported as failed rather than as a delivery; a run that changed files goes through `publish()`, which is where the commit, the push, and the pre-commit checks live. The node falls back to this runner when nothing composes one under `mpsTaskRunner`, so a node that installs the CLI works out of the box; a deployment that wants a different execution strategy composes its own provider and the fallback is never reached.
 
+`writeTaskBook` gives the attempt everything the payload carries that the agent needs and the prompt cannot hold: the constraints, the delivery requirements, the materials the task references, the chat it came from, the workspace's recent tasks, and the rules — written as `PROMPT.md` in the workspace. The prompt stays the instruction plus a pointer, so a long transcript or rule set never has to fit in one argument. The book is the node's own input, so the node adds it to the repository's local excludes as it writes it: everything else in the workspace is what the commit hands back, and the node's own file is not part of the delivered change.
+
 ### Source map
 
 | File | Role |
@@ -111,6 +113,7 @@ The other direction is `resource()` on the runner's context: the node downloads 
 | [`src/artifacts.ts`](src/artifacts.ts) | Uploading what an attempt produced: reads, the digest, and the size the node will transfer |
 | [`src/paths.ts`](src/paths.ts) | The one confinement rule for paths inside a coding workspace |
 | [`src/cli-runner.ts`](src/cli-runner.ts) | The runner: one CLI process per attempt, its logs, its stop, and its result |
+| [`src/task-book.ts`](src/task-book.ts) | The task book: what the payload states, rendered for the agent |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -150,7 +153,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented.
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
-- **The task book is not written yet** — the instruction travels as one argument, so a long transcript or rule set needs the task book the plan describes; Windows' command-line limit is why that matters.
+- **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **Materials are not placed in the workspace** — a runner can read them through `resource()`, but the node does not fetch them into the workspace before a run.
 - **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.

@@ -168,6 +168,8 @@ export interface TaskPolicy {
   push_required?: boolean | undefined
   /** The task's own summary, which names the commit. */
   summary?: string | undefined
+  /** Deadline the platform set, as an RFC 3339 string. */
+  deadline?: string | undefined
 }
 
 /**
@@ -188,6 +190,7 @@ export function taskPolicy(payload: Record<string, unknown>): TaskPolicy {
     branch_pattern: stringField(constraints, 'branch_pattern'),
     push_required: isRecord(deliverables) ? deliverables['push_required'] === true : undefined,
     summary: stringField(payload, 'summary'),
+    deadline: stringField(constraints, 'deadline'),
   }
 }
 

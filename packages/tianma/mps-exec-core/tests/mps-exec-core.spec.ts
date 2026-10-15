@@ -840,7 +840,10 @@ describe('task vocabulary', () => {
       branch_pattern: '^feature/.+',
       push_required: true,
       summary: '增加批量下载',
+      deadline: undefined,
     })
+    expect(taskPolicy({ constraints: { deadline: '2026-10-16T18:00:00+08:00' } }).deadline)
+      .toBe('2026-10-16T18:00:00+08:00')
   })
 
   it('states nothing a payload does not state', () => {

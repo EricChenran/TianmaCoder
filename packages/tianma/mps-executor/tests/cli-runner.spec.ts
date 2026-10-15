@@ -146,6 +146,27 @@ describe('the CLI runner', () => {
     expect(written).toContain('[stdout] done')
   })
 
+  it('writes the task book and points the prompt at it', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      constraints: { must_stay_in_workspace: true },
+    }))
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('success')
+    const book = readFileSync(join(workspace, 'PROMPT.md'), 'utf8')
+    expect(book).toContain('## 需求')
+    expect(book).toContain(INSTRUCTION)
+    expect(book).toContain('## 约束')
+    // The instruction stays the prompt, and the prompt says where the rest is.
+    expect(reported(context)).toContain(`stdout:instruction=${INSTRUCTION}`)
+    expect(reported(context).some(line => line.includes('PROMPT.md'))).toBe(true)
+    expect(reported(context)).toContain(`runner:task book: ${join(workspace, 'PROMPT.md')}`)
+  })
+
   it('reports a run that exited non-zero with the line it failed on', async () => {
     const workspace = temporary('mps-run-')
     const logs = temporary('mps-logs-')

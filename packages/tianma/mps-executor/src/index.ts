@@ -62,6 +62,7 @@ export {
   publishChanges,
 } from './publish.ts'
 export { RUNNER_STOP_GRACE_MS, runFailureSummary, stopRun, tianmaCliRunner } from './cli-runner.ts'
+export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export type { CliRunnerOptions } from './cli-runner.ts'
 export type {
   CheckoutPublisherOptions,
