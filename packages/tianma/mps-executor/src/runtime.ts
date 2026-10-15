@@ -137,6 +137,9 @@ export class MpsExecutorRuntime {
   #resources: ExecResources = { cpu_percent: 0, mem_percent: 0, disk_free_gb: 0 }
   /** Whether the last reading left room to start another attempt. */
   #hasRoom = true
+  /** The last heartbeat failure reported, so a repeat of it is not reported again. */
+  #heartbeatFailure: string | undefined
+
   #lastError: Error | undefined
   #tasks: TaskOrchestrator | undefined
   #runnerSource: TaskRunnerSource | undefined
@@ -692,6 +695,13 @@ export class MpsExecutorRuntime {
       this.bootstrap().catch(() => { /* bootstrap reports its own failure */ })
       return
     }
-    this.#report({ level: 'warn', message: `node ${this.settings.nodeId} heartbeat failed: ${this.#lastError.message}` })
+    // The same failure is reported once and again only when it changes: a platform that
+    // keeps failing the heartbeat would otherwise write this line every interval, and the
+    // node's own file holds a ceiling for the day.
+    const failure = `node ${this.settings.nodeId} heartbeat failed: ${this.#lastError.message}`
+    if (failure !== this.#heartbeatFailure) {
+      this.#heartbeatFailure = failure
+      this.#report({ level: 'warn', message: failure })
+    }
   }
 }
