@@ -1359,6 +1359,23 @@ describe('task claiming through the runtime', () => {
   })
 })
 
+describe('a capacity the node cannot work with', () => {
+  it('is refused rather than leaving a node that takes nothing', () => {
+    const env = { MPS_PLATFORM_HOST: '10.0.0.7', MPS_NODE_ID: 'node-1', MPS_NODE_WORKSPACE: codingRoot() }
+
+    // The environment boundary names the text it was handed.
+    expect(() => executorConfigFromEnv({ ...env, MPS_NODE_SLOTS: 'abc' })).toThrow(/a whole number of 1 or more, got "abc"/u)
+    expect(() => executorConfigFromEnv({ ...env, MPS_NODE_SLOTS: '0' })).toThrow(/got "0"/u)
+    expect(executorConfigFromEnv({ ...env, MPS_NODE_SLOTS: '3' }).slotsTotal).toBe(3)
+
+    // And the resolution point holds the invariant for a capacity that arrived another way,
+    // which is how the machine showed it: a patch row reaches the settings unvalidated.
+    const assigned = executorConfigFromEnv(env)
+    assigned.slotsTotal = 0
+    expect(() => resolveExecutorSettings(assigned)).toThrow(/capacity must be a whole number of 1 or more, got 0/u)
+  })
+})
+
 describe('a scheme the node does not connect with', () => {
   it('is refused however it was stated, rather than exchanged for the default', () => {
     const env = {

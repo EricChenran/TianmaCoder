@@ -341,7 +341,13 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
   const nodeHost = env[EXECUTOR_ENV.nodeHost]
   if (nodeHost !== undefined && nodeHost !== '') config.nodeHost = nodeHost
   const slots = env[EXECUTOR_ENV.nodeSlots]
-  if (slots !== undefined && slots !== '') config.slotsTotal = Number(slots)
+  if (slots !== undefined && slots !== '') {
+    const count = Number(slots)
+    if (!Number.isInteger(count) || count < 1) {
+      throw new TypeError(`${EXECUTOR_ENV.nodeSlots} must be a whole number of 1 or more, got ${JSON.stringify(slots)}`)
+    }
+    config.slotsTotal = count
+  }
   const workspace = env[EXECUTOR_ENV.workspaceRoot]
   if (workspace !== undefined && workspace !== '') config.workspaceRoot = workspace
   const secretEnv = env[EXECUTOR_ENV.secret]
@@ -360,6 +366,12 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
  * @returns the resolved settings.
  */
 export function resolveExecutorSettings(config: Config, hostname: string = hostHostname()): ExecutorSettings {
+  // A capacity that is not a whole number of one or more leaves a node that looks online and
+  // takes nothing, or reports garbage; the schema's own bound does not reach a row a patch
+  // inserts, which is where the machine's evidence came from.
+  if (config.slotsTotal !== undefined && (!Number.isInteger(config.slotsTotal) || config.slotsTotal < 1)) {
+    throw new TypeError(`the node's capacity must be a whole number of 1 or more, got ${String(config.slotsTotal)}`)
+  }
   const endpoint = resolvePlatformEndpoint({
     host: config.platformHost,
     port: config.platformPort,
