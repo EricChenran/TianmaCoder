@@ -1370,3 +1370,33 @@ describe('task claiming through the runtime', () => {
     node.stop()
   })
 })
+
+describe('a heartbeat the platform keeps failing', () => {
+  it('is reported once, not once per interval', async () => {
+    vi.useFakeTimers()
+    const reports: ExecutorReport[] = []
+    // The handshake's two answers come first — authentication, then registration — and only
+    // then the heartbeats this case is about. Answering the register with the malformed
+    // heartbeat answer is what made an earlier attempt look like a heartbeat defect.
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(null),
+      envelope(null),
+      envelope(null),
+    ])
+    const instance = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+    await instance.bootstrap()
+    instance.start()
+    await vi.advanceTimersByTimeAsync(10_000)
+    instance.stop()
+
+    // Three heartbeats inside that window at the three-second interval the platform assigned.
+    expect(reports.filter(report => report.message.includes('heartbeat failed'))).toHaveLength(1)
+  }, 30_000)
+})
