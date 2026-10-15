@@ -277,6 +277,28 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
   })
 
+  it('leaves a result the platform already holds as it stands', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    // The platform says it already has this task's result, which is what a duplicate
+    // submission earns. Asking again would only earn the same answer, and the operator
+    // must not be told the platform refused something it is holding.
+    platform.resultAnswers.push(new ExecResponseError('already final', { code: 'ALREADY_FINAL', httpStatus: 409 }))
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(1)
+    expect(reports.some(report => report.message.includes("already holds this task's result"))).toBe(true)
+    expect(reports.some(report => report.message.includes('refused the success result'))).toBe(false)
+  })
+
   it('carries on when a progress report does not reach the platform', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment())

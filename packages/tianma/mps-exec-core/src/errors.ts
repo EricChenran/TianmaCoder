@@ -28,6 +28,10 @@ const RECOVERY_BY_CODE: Readonly<Record<string, ExecRecovery>> = {
   NODE_TOKEN_EXPIRED: 'reauthenticate',
   NODE_NOT_REGISTERED: 'reregister',
   TASK_NOT_FOUND: 'abandon-task',
+  // The platform already holds this result, which is what a duplicate submission means:
+  // retrying it would be asking the same question again and reporting a refusal that
+  // never happened.
+  ALREADY_FINAL: 'discard-result',
   TASK_NOT_LEASED_BY_YOU: 'discard-result',
   LEASE_EXPIRED: 'discard-result',
   ARTIFACT_TOO_LARGE: 'abandon-task',

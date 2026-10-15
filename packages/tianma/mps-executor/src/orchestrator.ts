@@ -688,9 +688,12 @@ export class TaskOrchestrator {
       } catch (error) {
         const recovery = error instanceof ExecResponseError ? error.recovery : 'retry'
         if (recovery !== 'retry' && recovery !== 'reauthenticate') {
+          const already = error instanceof ExecResponseError && error.code === 'ALREADY_FINAL'
           this.#report({
-            level: 'error',
-            message: `the platform refused the ${outcome} result for ${taskId}: ${toError(error).message}`,
+            level: already ? 'warn' : 'error',
+            message: already
+              ? `the platform already holds this task's result, so the ${outcome} report for ${taskId} was left as it stands`
+              : `the platform refused the ${outcome} result for ${taskId}: ${toError(error).message}`,
           })
           return
         }
