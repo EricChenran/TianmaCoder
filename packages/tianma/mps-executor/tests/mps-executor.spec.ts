@@ -560,6 +560,7 @@ describe('plugin wiring', () => {
     vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
     const ctx = new Context()
     apply(ctx, {
+      workspaceRoot: codingRoot(),
       platformHost: '192.168.1.31',
       platformPort: 9443,
       platformScheme: 'https',
@@ -626,6 +627,7 @@ describe('plugin wiring', () => {
     try {
       const ctx = new Context()
       apply(ctx, {
+        workspaceRoot: codingRoot(),
         platformHost: '10.0.0.7',
         platformPort: 9443,
         platformScheme: 'https',
@@ -682,6 +684,7 @@ describe('the runner the node falls back to', () => {
       const ctx = new Context()
       // A node with its own DSH_HOME still resolves the runner it falls back to.
       apply(ctx, {
+        workspaceRoot: codingRoot(),
         platformHost: '10.0.0.7',
         nodeId: 'node-31',
         cliRunner: {
