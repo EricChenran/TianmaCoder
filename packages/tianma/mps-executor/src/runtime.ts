@@ -24,6 +24,8 @@ import type {
   ExecSlots,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecutorSettings } from './config.ts'
+import { checkoutAllocator } from './checkout.ts'
+import { cliGit } from './git.ts'
 import { TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
@@ -130,7 +132,7 @@ export class MpsExecutorRuntime {
       client: this.client,
       settings: this.settings,
       runner,
-      workspaces: this.#workspaces,
+      workspaces: checkoutAllocator({ store: this.#workspaces, git: cliGit() }),
       report: this.#report,
       now: this.#now,
       hooks: {

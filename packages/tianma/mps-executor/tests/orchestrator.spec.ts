@@ -28,6 +28,7 @@ import {
 import type {
   ExecutorReport,
   ExecutorSettings,
+  TaskCheckout,
   TaskOrchestratorHooks,
   TaskPlatformClient,
   TaskRunContext,
@@ -660,24 +661,27 @@ describe('task lifecycle', () => {
     expect(platform.claims).toHaveLength(settled)
   })
 
-  it('gives the attempt the directory its workspace lives in', async () => {
+  it('gives the attempt the directory and checkout its workspace has', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment({
       payload: { limits: { max_runtime_seconds: 60 }, workspace: { workspace_id: 'ws_1' } },
     }))
-    const ensured: [string, string][] = []
-    const seen: (string | undefined)[] = []
+    const prepared: string[] = []
+    const seen: { directory: string | undefined; checkout: TaskCheckout | undefined }[] = []
     const orchestrator = new TaskOrchestrator({
       client: platform,
       settings: settings(),
       runner: runnerOf(async (context) => {
-        seen.push(context.workspaceDirectory)
+        seen.push({ directory: context.workspaceDirectory, checkout: context.checkout })
         return { outcome: 'success', summary: 'done' }
       }),
       workspaces: {
-        ensure: async (workspaceId, taskId) => {
-          ensured.push([workspaceId, taskId])
-          return join('coding', 'ws_1')
+        prepare: async (task) => {
+          prepared.push(task.task_id)
+          return {
+            directory: join('coding', 'ws_1'),
+            checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+          }
         },
       },
       hooks: new FakeHooks(),
@@ -686,8 +690,11 @@ describe('task lifecycle', () => {
     await orchestrator.claimOnce()
     await orchestrator.drain()
 
-    expect(ensured).toEqual([['ws_1', 'tsk_1']])
-    expect(seen).toEqual([join('coding', 'ws_1')])
+    expect(prepared).toEqual(['tsk_1'])
+    expect(seen).toEqual([{
+      directory: join('coding', 'ws_1'),
+      checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+    }])
   })
 
   it('fails the attempt when its workspace cannot be prepared', async () => {
@@ -697,7 +704,7 @@ describe('task lifecycle', () => {
       client: platform,
       settings: settings(),
       runner: runnerOf(async () => ({ outcome: 'success', summary: 'never runs' })),
-      workspaces: { ensure: async () => { throw new Error('the disk is full') } },
+      workspaces: { prepare: async () => { throw new Error('the disk is full') } },
       hooks: new FakeHooks(),
     })
 
@@ -705,6 +712,92 @@ describe('task lifecycle', () => {
     await orchestrator.drain()
 
     expect(platform.results[0]).toMatchObject({ outcome: 'failed', summary: 'the attempt threw: the disk is full' })
+  })
+
+  it('never starts work for an attempt cancelled while its workspace was prepared', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ payload: { workspace: { workspace_id: 'ws_1' } } }))
+    let releasePrepare: (() => void) | undefined
+    const ran: string[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async () => {
+        ran.push('ran')
+        return { outcome: 'success', summary: 'done' }
+      }),
+      workspaces: {
+        prepare: async () => {
+          await new Promise<void>((resolve) => { releasePrepare = resolve })
+          return { directory: join('coding', 'ws_1') }
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    expect(orchestrator.abort('tsk_1', '管理员中止')).toBe(true)
+    releasePrepare?.()
+    await orchestrator.drain()
+
+    expect(ran).toEqual([])
+    expect(platform.results[0]).toMatchObject({ outcome: 'cancelled', summary: 'the attempt was stopped before its work started' })
+    expect(platform.abortAcks).toHaveLength(1)
+  })
+
+  it('discards an attempt whose lease was withdrawn while its workspace was prepared', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ lease_renew_seconds: 10, payload: { workspace: { workspace_id: 'ws_1' } } }))
+    platform.leaseAnswers.push({ lease_expire_at: '2026-10-15T04:16:00.123+08:00', should_continue: false })
+    let releasePrepare: (() => void) | undefined
+    const ran: string[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async () => {
+        ran.push('ran')
+        return { outcome: 'success', summary: 'done' }
+      }),
+      workspaces: {
+        prepare: async () => {
+          await new Promise<void>((resolve) => { releasePrepare = resolve })
+          return { directory: join('coding', 'ws_1') }
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(10_000)
+    releasePrepare?.()
+    await orchestrator.drain()
+
+    expect(ran).toEqual([])
+    expect(platform.results).toEqual([])
+    expect(platform.logs).toHaveLength(1)
+  })
+
+  it('leaves the workspace unnamed when the payload names none', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ payload: {} }))
+    const seen: (TaskCheckout | undefined)[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        seen.push(context.checkout)
+        return { outcome: 'success', summary: 'done' }
+      }),
+      workspaces: { prepare: async () => undefined },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(seen).toEqual([undefined])
+    expect(platform.results[0]?.evidence?.branch).toBe('')
   })
 
   it('keeps two attempts running at once within the slot budget', async () => {

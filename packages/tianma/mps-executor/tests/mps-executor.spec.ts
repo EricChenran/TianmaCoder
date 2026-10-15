@@ -726,6 +726,52 @@ describe('task claiming through the runtime', () => {
     expect(reports.some(report => report.level === 'error' && report.message.includes('could not release workspace'))).toBe(true)
   })
 
+  it('reports an attempt whose checkout cannot be prepared', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({
+        task: {
+          ...CLAIMED.task,
+          payload: {
+            limits: { max_runtime_seconds: 60 },
+            workspace: {
+              workspace_id: 'ws_1',
+              repo: {
+                url: join(tmpdir(), 'mps-missing-repository'),
+                base_branch: 'main',
+                base_commit: 'a1b2c3d',
+                work_branch: 'feature/tsk_1',
+              },
+            },
+          },
+        },
+      }),
+      envelope({ task_id: 'tsk_1', accepted: true, already_final: false, work_item_state: 'failed', next: 'retry' }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      runner: () => ({ async run() { return { outcome: 'success', summary: 'never runs' } } }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(0)
+    await node.tasks?.drain()
+
+    const results = queue.calls.map(call => call.request.body ?? '').filter(body => body.includes('"outcome"'))
+    expect(results).toHaveLength(1)
+    expect(results[0]).toContain('"outcome":"failed"')
+    expect(results[0]).toContain('failed')
+    expect(reports.some(report => report.level === 'error')).toBe(false)
+    node.stop()
+  })
+
   it('holds its session when no runner is composed', () => {
     const queue = queueTransport([])
     const reports: ExecutorReport[] = []

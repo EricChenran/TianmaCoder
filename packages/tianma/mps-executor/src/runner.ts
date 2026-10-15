@@ -27,6 +27,36 @@ export interface TaskRunResult {
   notes?: string | undefined
 }
 
+/** What an attempt starts from inside its workspace. */
+export interface TaskCheckout {
+  /** Commit the attempt starts from, as the platform dispatched it. */
+  base_commit: string
+  /** Branch the attempt works and pushes on. */
+  work_branch: string
+}
+
+/** Where an attempt works and what it starts from. */
+export interface TaskWorkspace {
+  /** Directory the attempt works in. */
+  directory: string
+  /** The checkout the node prepared, when the payload names a repository. */
+  checkout?: TaskCheckout | undefined
+}
+
+/**
+ * Prepares where an attempt works and what it starts from. The node keeps one
+ * directory per platform workspace and reuses it across tasks, so a runner never
+ * decides where a workspace lives, how the code arrives, or when one is removed.
+ */
+export interface TaskWorkspaceAllocator {
+  /**
+   * Prepare the workspace for one attempt.
+   * @param assignment - the claimed task.
+   * @returns the workspace, or undefined when the payload names none.
+   */
+  prepare(assignment: ExecTaskAssignment): Promise<TaskWorkspace | undefined>
+}
+
 /** What a runner is given for one attempt. */
 export interface TaskRunContext {
   /** The attempt's assignment, including the payload the platform sent. */
@@ -36,6 +66,11 @@ export interface TaskRunContext {
    * workspace; `undefined` when the payload names no workspace.
    */
   workspaceDirectory: string | undefined
+  /**
+   * The checkout the node prepared and verified; `undefined` when the payload names
+   * no repository. The runner works on this branch and pushes it.
+   */
+  checkout: TaskCheckout | undefined
   /**
    * Cancellation for this attempt. It is aborted when the platform withdraws the
    * task, when an abort command arrives, when the runtime ceiling passes, or when
@@ -53,21 +88,6 @@ export interface TaskRunContext {
    * @param lines - already-redacted lines, in order.
    */
   reportLog(stream: string, lines: ExecLogLine[]): Promise<void>
-}
-
-/**
- * Resolves the directory an attempt works in. The node keeps one directory per
- * platform workspace and reuses it across tasks, so a runner never decides where a
- * workspace lives or removes one itself.
- */
-export interface TaskWorkspaceAllocator {
-  /**
-   * Resolve the directory for one workspace, creating it the first time.
-   * @param workspaceId - the platform's workspace id.
-   * @param taskId - the task being served.
-   * @returns the directory.
-   */
-  ensure(workspaceId: string, taskId: string): Promise<string>
 }
 
 /** Executes one claimed attempt of a task. */

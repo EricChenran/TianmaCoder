@@ -17,7 +17,6 @@ import {
   strongerOutcome,
   taskRepository,
   taskRuntimeLimitMs,
-  taskWorkspaceId,
 } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
@@ -387,14 +386,24 @@ export class TaskOrchestrator {
     try {
       let result: TaskRunResult
       try {
-        const workspaceDirectory = await this.#workspaceDirectory(running)
-        result = await this.#runner.run({
-          task: running.assignment,
-          workspaceDirectory,
-          signal: running.controller.signal,
-          reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
-          reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
-        })
+        // Nothing to prepare without an allocator, so the attempt starts without
+        // yielding; otherwise the runner waits for its workspace.
+        const workspace = this.#workspaces === undefined
+          ? undefined
+          : await this.#workspaces.prepare(running.assignment)
+        if (running.superseded) return
+        // An attempt stopped while its workspace was prepared must not start work
+        // the platform no longer wants.
+        result = running.aborted || running.timedOut
+          ? { outcome: 'blocked', summary: 'the attempt was stopped before its work started' }
+          : await this.#runner.run({
+            task: running.assignment,
+            workspaceDirectory: workspace?.directory,
+            checkout: workspace?.checkout,
+            signal: running.controller.signal,
+            reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
+            reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
+          })
       } catch (error) {
         result = { outcome: 'failed', summary: `the attempt threw: ${toError(error).message}` }
       }
@@ -408,17 +417,6 @@ export class TaskOrchestrator {
     } finally {
       this.#settle(running)
     }
-  }
-
-  /**
-   * Resolve the directory this attempt works in.
-   * @param running - the attempt.
-   * @returns the directory, or undefined when the payload names no workspace or the node keeps none.
-   */
-  async #workspaceDirectory(running: RunningAttempt): Promise<string | undefined> {
-    const workspaceId = taskWorkspaceId(running.assignment.payload)
-    if (workspaceId === undefined || this.#workspaces === undefined) return undefined
-    return await this.#workspaces.ensure(workspaceId, running.assignment.task_id)
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {

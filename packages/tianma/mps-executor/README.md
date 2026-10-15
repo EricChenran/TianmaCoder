@@ -78,6 +78,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `WorkspaceStore` keeps the coding workspaces: one directory per platform workspace under the coding root, reused across that workspace's tasks because it carries what the workspace learned, plus a sidecar state file that survives a restart. A task ending never removes a directory; only the platform's `release_workspace` command does, and a removal is refused unless the directory really resolves inside the coding root, so a mistaken record or a junction cannot make the node delete something else. The store hands the directory an attempt works in to the runner, which is why a runner never decides where a workspace lives.
 
+`prepareCheckout` brings the workspace's repository cache to the commit the platform dispatched: it initializes and fetches that cache instead of cloning a fresh tree, checks the dispatched `base_commit` against what `origin/<base_branch>` really holds and refuses to work when the two differ, then creates the work branch at that commit, resets the tree to it, and clears untracked files, so a retry in the same workspace starts from the dispatched base rather than from the last attempt's leftovers. Every git command runs through `cliGit`, which spawns git with an argument list — a task's own text never becomes shell syntax — and keeps git's diagnostics, redacted, for the attempt's summary.
+
 ### Source map
 
 | File | Role |
@@ -86,6 +88,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | [`src/runtime.ts`](src/runtime.ts) | The platform session: handshake, heartbeat, commands, timer, failure recovery |
 | [`src/orchestrator.ts`](src/orchestrator.ts) | The task lifecycle: claim, lease, runtime ceiling, abort, logs, and result submission |
 | [`src/workspace.ts`](src/workspace.ts) | The coding workspaces: one directory per workspace, the sidecar state, and release-driven removal |
+| [`src/checkout.ts`](src/checkout.ts) | The code flow: fetch the cache, verify the dispatched base, reset the work branch |
+| [`src/git.ts`](src/git.ts) | The git boundary: argument-list spawning and redacted failures |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -95,7 +99,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 ### Invariant ownership
 
-The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it.
+The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it. A task's code only ever reaches its workspace through `prepareCheckout`, so a stale base is refused in one place and no runner can start work from a tree the platform did not dispatch.
 
 </details>
 
@@ -122,7 +126,8 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
-- **No checkout in the workspace yet** — the node creates and keeps one directory per workspace and removes it only on release, but it does not clone or fetch the task's repository, check out the work branch, or report the workspace's session yet.
+- **Committing, pushing, and evidence are the runner's** — the node prepares the checkout; committing under the robot identity, pushing the work branch, collecting the changed files and evidence, and uploading artifacts belong to the runner and are not implemented here.
+- **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
 <a id="dev-note"></a>
