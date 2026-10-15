@@ -22,6 +22,13 @@ import { probeTools } from './capabilities.ts'
 /** Environment variable holding the pre-shared node secret when configuration names none. */
 export const DEFAULT_SECRET_ENV = 'MPS_NODE_SECRET'
 
+/**
+ * Free disk space below which this node stops claiming work, in gigabytes. Five gigabytes
+ * is roughly one dependency install plus one workspace build: below it an attempt is
+ * likely to fail halfway and leave the disk full.
+ */
+export const DEFAULT_DISK_MIN_GB = 5
+
 /** Heartbeat period the node starts with before the platform overrides it. */
 export const DEFAULT_HEARTBEAT_SECONDS = 10
 
@@ -103,6 +110,7 @@ export interface Config {
   cliRunner?: CliRunnerConfig
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
+  diskMinGb?: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds?: number
   /** Claim long-poll budget in seconds. */
@@ -147,6 +155,7 @@ export const Config: z<Config> = z.object({
     jsonEvents: z.boolean().default(false),
   }).default({ command: [], logsDirectory: '', dshHome: '', jsonEvents: false }),
   slotsTotal: z.number().step(1).min(1).default(1),
+  diskMinGb: z.number().min(0).default(DEFAULT_DISK_MIN_GB),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
   leaseRenewSeconds: z.number().step(1).min(1).max(3600).default(DEFAULT_LEASE_RENEW_SECONDS),
@@ -197,6 +206,8 @@ export interface ExecutorSettings {
   cliRunner: ResolvedCliRunner
   /** Concurrent task capacity. */
   slotsTotal: number
+  /** Free disk space below which the node stops claiming work; see {@link DEFAULT_DISK_MIN_GB}. */
+  diskMinGb: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds: number
   /** Claim long-poll budget in seconds. */
@@ -278,6 +289,7 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     maxArtifactBytes: config.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES,
     cliRunner: resolveCliRunner(config.cliRunner, workspaceRoot),
     slotsTotal: config.slotsTotal ?? 1,
+    diskMinGb: config.diskMinGb ?? DEFAULT_DISK_MIN_GB,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,
     leaseRenewSeconds: config.leaseRenewSeconds ?? DEFAULT_LEASE_RENEW_SECONDS,

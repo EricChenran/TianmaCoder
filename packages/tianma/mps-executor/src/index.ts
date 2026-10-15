@@ -11,6 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { tianmaCliRunner } from './cli-runner.ts'
 import { probeAgentVersion } from './capabilities.ts'
+import { resourceReader } from './resources.ts'
 import { readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
@@ -34,6 +35,9 @@ export {
 } from './config.ts'
 export { PROBED_TOOLS, probeAgentVersion, probeTools, versionFrom } from './capabilities.ts'
 export type { ProbeAgentVersionOptions, ProbeToolsOptions } from './capabilities.ts'
+export { cpuCounters, cpuPercent, resourceReader } from './resources.ts'
+export type { CpuCounters, ResourceReader, ResourceReaderOptions } from './resources.ts'
+export { releasableWorkspaces } from './workspace.ts'
 export { MpsExecutorRuntime } from './runtime.ts'
 export type { ExecutorReport, NodeState } from './runtime.ts'
 export type { ExecutorRuntimeOptions } from './runtime.ts'
@@ -227,6 +231,7 @@ export function apply(ctx: Context, config: Config): void {
     // The version is probed from the CLI this node runs, so the platform schedules on
     // the build that is really here rather than a value someone wrote down.
     probeAgentVersion: async () => await probeAgentVersion({ bin: settings.cliRunner.bin }),
+    probeResources: resourceReader({ root: settings.codingRoot }).read,
     report: createReportSink(ctx.logger('mps-executor')),
   })
   ctx.provide('mpsExecutor', runtime)

@@ -8,7 +8,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
-import { WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, WorkspaceStore } from '@tianma/dsh-mps-executor'
+import {
+  WORKSPACE_STATE_FILE,
+  WORKSPACE_STATE_VERSION,
+  WorkspaceStore,
+  releasableWorkspaces,
+} from '@tianma/dsh-mps-executor'
 import type { ExecutorReport } from '@tianma/dsh-mps-executor'
 
 /** Directories one test created, removed after it. */
@@ -44,6 +49,13 @@ function storeWith(options: { root?: string; reports?: ExecutorReport[] } = {}):
   })
   return { store, root, reports }
 }
+
+describe('naming the workspaces a node could release', () => {
+  it('lists the ids it keeps, and says so plainly when it keeps none', () => {
+    expect(releasableWorkspaces([])).toBe('none')
+    expect(releasableWorkspaces([{ workspace_id: 'ws_1' }, { workspace_id: 'ws_2' }])).toBe('ws_1, ws_2')
+  })
+})
 
 describe('coding workspaces', () => {
   it('creates one directory per workspace and records the use', async () => {

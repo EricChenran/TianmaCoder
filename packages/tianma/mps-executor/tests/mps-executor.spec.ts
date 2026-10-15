@@ -835,6 +835,92 @@ describe('the runner the node falls back to', () => {
     expect(reports.some(report => report.message.includes('could not read platform configuration 3'))).toBe(true)
   })
 
+  it('heartbeats what the machine has, and stops claiming when the disk is nearly full', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5 }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 41, mem_percent: 63, disk_free_gb: 1.2 }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+
+    const heartbeat = queue.calls.find(call => call.request.url.endsWith('/heartbeat'))
+    expect(JSON.parse(jsonBody(heartbeat?.request))).toMatchObject({
+      resources: { cpu_percent: 41, mem_percent: 63, disk_free_gb: 1.2 },
+    })
+    // Below the stated floor the node says so, and names what a human could release.
+    expect(reports.some(report => report.message.includes('is below 5GB free (1.2GB)'))).toBe(true)
+    expect(reports.some(report => report.message.includes('claiming nothing until there is room'))).toBe(true)
+  })
+
+  it('reports the disk once per state change, not once per heartbeat', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    let free = 1.2
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5 }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 0, mem_percent: 0, disk_free_gb: free }),
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+    // The same reading again says nothing new: whoever reads the report is not spammed.
+    await node.heartbeatOnce()
+    free = 40
+    await node.heartbeatOnce()
+
+    const low = reports.filter(report => report.message.includes('is below 5GB free (1.2GB)'))
+    expect(low).toHaveLength(1)
+    expect(low[0]?.message).toContain('claiming nothing until there is room')
+    expect(reports.some(report => report.message.includes('has 40GB free again; claiming work'))).toBe(true)
+  })
+
+  it('keeps the last reading when the machine cannot be read, and reports why', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => { throw new Error('no statfs here') },
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.heartbeatOnce()
+
+    const heartbeat = queue.calls.find(call => call.request.url.endsWith('/heartbeat'))
+    expect(JSON.parse(jsonBody(heartbeat?.request))).toMatchObject({
+      resources: { cpu_percent: 0, mem_percent: 0, disk_free_gb: 0 },
+    })
+    expect(reports.some(report => report.message.includes('could not read its resources: no statfs here'))).toBe(true)
+  })
+
   it('registers the agent version it probed from its own CLI', async () => {
     vi.useFakeTimers()
     let probes = 0

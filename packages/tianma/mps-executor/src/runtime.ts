@@ -34,7 +34,7 @@ import { TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunner, TaskRunnerSource } from './runner.ts'
-import { WorkspaceStore } from './workspace.ts'
+import { WorkspaceStore, releasableWorkspaces } from './workspace.ts'
 
 export type { ExecutorReport } from './report.ts'
 
@@ -93,6 +93,12 @@ export interface ExecutorRuntimeOptions {
    * @returns the version, or undefined when the CLI could not say.
    */
   probeAgentVersion?: (() => Promise<string | undefined>) | undefined
+  /**
+   * How this node reads its own resources. The plugin composes it from the machine, so
+   * the platform schedules on what this node has rather than on a value it stated.
+   * @returns the reading, or a rejection when the machine could not be read.
+   */
+  probeResources?: (() => Promise<ExecResources>) | undefined
 }
 
 /**
@@ -115,12 +121,16 @@ export class MpsExecutorRuntime {
   #version: string | undefined
   /** How the agent's version is probed, when a deployment composed a CLI to ask. */
   #probeAgentVersion: (() => Promise<string | undefined>) | undefined
+  /** How this node's resources are read, when a deployment composed a reader. */
+  #probeResources: (() => Promise<ExecResources>) | undefined
   /** Platform configuration revision this node has applied; undefined before registration. */
   #configRevision: number | undefined
   #timer: ReturnType<typeof setInterval> | undefined
   #runningTasks: ExecRunningTask[] = []
   readonly #taskProgress = new Map<string, { progress: number; stage: string }>()
   #resources: ExecResources = { cpu_percent: 0, mem_percent: 0, disk_free_gb: 0 }
+  /** Whether the last reading left room to start another attempt. */
+  #hasRoom = true
   #lastError: Error | undefined
   #tasks: TaskOrchestrator | undefined
   #runnerSource: TaskRunnerSource | undefined
@@ -136,6 +146,7 @@ export class MpsExecutorRuntime {
     this.#report = options.report ?? (() => {})
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
     this.#probeAgentVersion = options.probeAgentVersion
+    this.#probeResources = options.probeResources
     this.client = new ExecClient({
       endpoint: options.settings.endpoint,
       nodeId: options.settings.nodeId,
@@ -173,6 +184,8 @@ export class MpsExecutorRuntime {
       }),
       sessions: checkoutSessionReporter({ store: this.#workspaces, client: this.client }),
       artifacts: clientArtifactUploader({ client: this.client, maxBytes: this.settings.maxArtifactBytes }),
+      // Claiming stops while the disk is too full to hold another attempt.
+      canClaim: () => this.#hasRoom,
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -256,7 +269,47 @@ export class MpsExecutorRuntime {
    * @param resources - the current readings.
    */
   setResources(resources: ExecResources): void {
+    this.#applyResources(resources)
+  }
+
+  /**
+   * Take one reading of this machine. A reading that fails leaves the last one in place:
+   * a node that cannot read its disk is not a node that has run out of it.
+   * @returns the reading, or undefined when it could not be made.
+   */
+  async #readResources(): Promise<ExecResources | undefined> {
+    if (this.#probeResources === undefined) return undefined
+    try {
+      return await this.#probeResources()
+    } catch (error: unknown) {
+      this.#report({
+        level: 'warn',
+        message: `node ${this.settings.nodeId} could not read its resources: ${toError(error).message}`,
+      })
+      return undefined
+    }
+  }
+
+  /**
+   * Apply one reading, and stop claiming work while the disk cannot hold another attempt.
+   * @param resources - the reading.
+   */
+  #applyResources(resources: ExecResources): void {
     this.#resources = { ...resources }
+    const room = resources.disk_free_gb >= this.settings.diskMinGb
+    if (room === this.#hasRoom) return
+    this.#hasRoom = room
+    if (room) {
+      this.#report({
+        level: 'info',
+        message: `node ${this.settings.nodeId} has ${String(resources.disk_free_gb)}GB free again; claiming work`,
+      })
+      return
+    }
+    this.#report({
+      level: 'warn',
+      message: `node ${this.settings.nodeId} is below ${String(this.settings.diskMinGb)}GB free (${String(resources.disk_free_gb)}GB); claiming nothing until there is room. Its workspaces are ${releasableWorkspaces(this.#workspaces.records)}`,
+    })
   }
 
   /**
@@ -318,6 +371,10 @@ export class MpsExecutorRuntime {
     if (this.#token === undefined) {
       throw new Error('executor runtime must authenticate before it can heartbeat')
     }
+    // A reading for this period: the platform schedules on what this machine has now, and
+    // the node stops claiming when the disk cannot hold another attempt.
+    const reading = await this.#readResources()
+    if (reading !== undefined) this.#applyResources(reading)
     const heartbeat = await this.client.heartbeat({
       running_tasks: [...this.#runningTasks],
       slots: this.slots(),

@@ -51,6 +51,17 @@ interface WorkspaceStateFile {
   workspaces: WorkspaceRecord[]
 }
 
+/**
+ * Name the coding workspaces a node holds, so a report about a full disk tells an operator
+ * what could be released. The platform decides which to release; a node never deletes a
+ * workspace the platform still binds.
+ * @param records - the workspaces the node keeps.
+ * @returns their ids, comma separated, or `none` when it keeps none.
+ */
+export function releasableWorkspaces(records: readonly { workspace_id: string }[]): string {
+  return records.map(record => record.workspace_id).join(', ') || 'none'
+}
+
 /** Options for {@link WorkspaceStore}. */
 export interface WorkspaceStoreOptions {
   /** Directory every coding workspace lives under. */

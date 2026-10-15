@@ -60,6 +60,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `cliRunner.logsDirectory` | `logs` inside the workspace root | Directory the runner keeps one raw log per attempt under |
 | `cliRunner.dshHome` | inherited | `DSH_HOME` the run uses, so a node's profile directory stays its own |
 | `cliRunner.jsonEvents` | `false` | Ask the run for its event stream, so each turn and tool call reaches the platform and the node learns the session to report |
+| `diskMinGb` | `5` | Free disk space below which the node claims nothing until there is room |
 | `slotsTotal` | `1` | Concurrent tasks the node accepts |
 | `heartbeatSeconds` | `10` | Heartbeat period, until the platform assigns another |
 | `claimLongPollSeconds` | `25` | Claim long-poll budget |
@@ -112,6 +113,8 @@ The node is also exercised end to end: a spec boots this plugin through the Load
 The platform's configuration is fetched when the revision it states moves: the node follows the heartbeat interval the platform asks for — re-arming its timer without dropping the work in flight — and names the parameters it keeps at the values it declared, so an instruction never disappears silently.
 
 The capabilities a node registers are probed, because the platform schedules on them: the tools come from the machine's `PATH` and the agent version from the CLI the node runs. A deployment that wants to be scheduled for a stated set of tools, or to report a stated version, still can — the probe is what happens when it states none.
+
+Every heartbeat carries a reading of this machine — the free space on the disk the coding workspaces live on, the memory in use, and the CPU time spent between two readings — because the platform schedules on what a node has. When that free space falls below `diskMinGb` the node stops claiming work, says so once per state change, and names the workspaces it keeps; it never deletes one, because releasing a bound workspace is the platform's decision.
 
 ### Source map
 
@@ -173,6 +176,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
 - **Screenshots are declared, not captured** — the node takes no screenshots: it reads what the attempt declared in `.evidence/screenshots.json`, checks that each file is there and at least as large as the platform accepts, and uploads them with the metadata the declaration states. The platform's own content checks are the platform's.
+- **The releasable list has nowhere to go** — the protocol's heartbeat carries the resource readings but no field for the workspaces a full node could release, so that list reaches the operator through the node's own report and the platform sees only the reading.
 - **Platform configuration is partly followed** — the node acts on the heartbeat interval; the claim long poll, the log batch caps, the artifact ceiling, and the redaction rules stay at the values this node declared in its capabilities, and the node says so in its report when the platform states different ones.
 - **Progress inside a run is estimated** — the event stream reports each turn and tool call, but the node states no percentage for them: only the stages it knows for certain (coding, collecting evidence, uploading) carry one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.

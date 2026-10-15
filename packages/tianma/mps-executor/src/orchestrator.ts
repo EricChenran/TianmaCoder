@@ -163,6 +163,12 @@ export interface TaskOrchestratorOptions {
    */
   publisher?: TaskPublisher | undefined
   /**
+   * Whether the node has room for another attempt. Read before every claim; without one
+   * the node claims whenever it has a free slot.
+   * @returns true when the node may take on work.
+   */
+  canClaim?: (() => boolean) | undefined
+  /**
    * Reports the session serving an attempt's workspace. Without one, a runner's
    * `reportSession()` reports that the attempt has no workspace to report.
    */
@@ -221,6 +227,8 @@ export class TaskOrchestrator {
   readonly #sessions: TaskSessionReporter | undefined
   readonly #artifacts: TaskArtifactUploader | undefined
   readonly #hooks: TaskOrchestratorHooks
+  /** Whether the node has room for another attempt, when a deployment composes one. */
+  readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
   readonly #now: () => Date
   readonly #attempts = new Map<string, RunningAttempt>()
@@ -242,6 +250,7 @@ export class TaskOrchestrator {
     this.#artifacts = options.artifacts
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
+    this.#canClaim = options.canClaim
     this.#now = options.now ?? (() => new Date())
   }
 
@@ -290,6 +299,9 @@ export class TaskOrchestrator {
    * @returns whether a task was taken.
    */
   async claimOnce(): Promise<boolean> {
+    // The precondition belongs to the claim itself: a caller that reaches it directly
+    // must not take on work the node has no room for.
+    if (this.#canClaim?.() === false) return false
     if (this.#hooks.availableSlots() <= 0) return false
     const assignment = await this.#client.claim({
       available_slots: this.#hooks.availableSlots(),
@@ -323,6 +335,11 @@ export class TaskOrchestrator {
   async #claimLoop(): Promise<void> {
     while (this.#claiming) {
       if (this.#hooks.availableSlots() <= 0) {
+        await this.#pause(SLOT_WAIT_MS)
+        continue
+      }
+      if (this.#canClaim?.() === false) {
+        // A node without room claims nothing; whoever knows why has already reported it.
         await this.#pause(SLOT_WAIT_MS)
         continue
       }

@@ -178,6 +178,7 @@ function orchestratorWith(options: {
   hooks?: FakeHooks
   reports?: ExecutorReport[]
   settings?: ExecutorSettings
+  canClaim?: () => boolean
 }): { orchestrator: TaskOrchestrator; hooks: FakeHooks; reports: ExecutorReport[] } {
   const hooks = options.hooks ?? new FakeHooks()
   const reports = options.reports ?? []
@@ -187,12 +188,53 @@ function orchestratorWith(options: {
     runner: options.runner,
     hooks,
     report: (report) => { reports.push(report) },
+    canClaim: options.canClaim,
     now: () => new Date('2026-10-15T04:03:55.123Z'),
   })
   return { orchestrator, hooks, reports }
 }
 
 describe('task lifecycle', () => {
+  it('keeps the claim loop paused until the node says it has room', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    let room = false
+    const { orchestrator } = orchestratorWith({
+      platform,
+      canClaim: () => room,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    orchestrator.start()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(platform.claims).toEqual([])
+
+    room = true
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(platform.claims.length).toBeGreaterThan(0)
+    orchestrator.stop()
+  })
+
+  it('claims nothing while the node says it has no room', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    let room = false
+    const { orchestrator } = orchestratorWith({
+      platform,
+      canClaim: () => room,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(false)
+    expect(platform.claims).toEqual([])
+
+    // Room comes back, and so does the work.
+    room = true
+    expect(await orchestrator.claimOnce()).toBe(true)
+    expect(platform.claims).toHaveLength(1)
+  })
+
   it('runs a claimed task and submits the outcome it reached', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment())
