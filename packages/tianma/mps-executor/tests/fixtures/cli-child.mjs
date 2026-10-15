@@ -2,6 +2,15 @@
 // the way the spec asked, so the runner's process handling can be tested without a
 // model, a network, or the real command.
 const mode = process.argv[2]
+
+// A run that narrates its turns: the node turns those into the progress a platform watches.
+if (process.argv[2] === 'turns') {
+  for (const turn of [1, 2, 3, 20]) {
+    console.log(JSON.stringify({ type: 'status', phase: 'turn_start', turn }))
+  }
+  console.log(JSON.stringify({ type: 'final', text: 'done' }))
+  process.exit(0)
+}
 const instruction = process.argv.at(-1)
 const args = process.argv.slice(2).join(' ')
 

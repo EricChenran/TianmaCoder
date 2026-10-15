@@ -32,6 +32,15 @@ export const RUNNER_STOP_GRACE_MS = 3000
 /** Most log lines one reported batch carries. */
 const LOG_BATCH_LINES = 200
 
+/**
+ * How much of the run's own range one turn of an agent's work is worth, and the ceiling it
+ * counts up to. A run's progress cannot be known from outside it, so this is the honest form
+ * of an estimate: it moves with the turns the agent reports, and it stops well short of the
+ * end, because the evidence and the delivery come after the agent is done.
+ */
+export const TURN_PROGRESS_STEP = 5
+export const TURN_PROGRESS_CEILING = 70
+
 /** Options for {@link tianmaCliRunner}. */
 export interface CliRunnerOptions {
   /**
@@ -155,6 +164,15 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
               await context.reportSession(event.session)
             }
             if (event.answer !== undefined) answer = event.answer
+            if (event.turn !== undefined) {
+              // The platform watches this number: a run that reports one turn and then
+              // nothing looks stalled for as long as the agent keeps working.
+              await context.reportProgress({
+                progress: Math.min(TURN_PROGRESS_CEILING, 10 + TURN_PROGRESS_STEP * event.turn),
+                stage: 'coding',
+                message: `the agent is on turn ${String(event.turn)}`,
+              })
+            }
             reported.push({ ...line, text: event.text })
           }
           lines.push(...reported.map(line => ({ stream, line })))
@@ -420,6 +438,8 @@ export interface RunEvent {
   session?: string | undefined
   /** The run's answer, when the event closes it. */
   answer?: string | undefined
+  /** Turn the event opens, when the event starts one; the run's own measure of progress. */
+  turn?: number | undefined
 }
 
 /**
@@ -446,8 +466,15 @@ export function readRunEvent(text: string): RunEvent | undefined {
   switch (shown('type')) {
     case 'session':
       return { text: `session ${shown('sessionId')}`, session: stringOf(event['sessionId']) }
-    case 'status':
-      return { text: `status ${shown('phase')} turn ${shown('turn')} step ${shown('step')}` }
+    case 'status': {
+      const phase = shown('phase')
+      const turn = Number.parseInt(shown('turn'), 10)
+      return {
+        text: `status ${phase} turn ${shown('turn')} step ${shown('step')}`,
+        // A turn starting is the one moment in the stream that says the run advanced.
+        ...(phase === 'turn_start' && Number.isFinite(turn) ? { turn } : {}),
+      }
+    }
     case 'thinking':
       return { text: `thinking: ${shown('text')}` }
     case 'text':

@@ -18,6 +18,7 @@ import {
   stopPlan,
   stopRun,
   tianmaCliRunner,
+  TURN_PROGRESS_CEILING,
 } from '@tianma/dsh-mps-executor'
 import type { PublishedChanges, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
 import type { ExecLogLine, ExecResource, ExecTaskAssignment, TaskProgress } from '@tianma/dsh-mps-exec-core'
@@ -146,6 +147,34 @@ function reported(context: RecordingContext): string[] {
 }
 
 describe('the CLI runner', () => {
+  it('moves a run\'s progress with the turns it narrates, and stops short of the end', async () => {
+    const logs = temporary('mps-logs-')
+    const workspace = temporary('mps-workspace-')
+    const context = new RecordingContext(workspace, assignment())
+    // The runner the platform talks to reads the CLI's event stream, which is what carries
+    // the turns.
+    const run = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'turns'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      jsonEvents: true,
+    })
+
+    const result = await run.run(context)
+
+    // The platform watches this number: a run that reports one turn and then nothing looks
+    // stalled for as long as the agent keeps working, and a run that counts to a hundred
+    // before it has delivered anything is claiming something it cannot know.
+    expect(context.progresses.filter(progress => progress.stage === 'coding')).toEqual([
+      { progress: 10, stage: 'coding', message: 'the agent is working' },
+      { progress: 15, stage: 'coding', message: 'the agent is on turn 1' },
+      { progress: 20, stage: 'coding', message: 'the agent is on turn 2' },
+      { progress: 25, stage: 'coding', message: 'the agent is on turn 3' },
+      { progress: TURN_PROGRESS_CEILING, stage: 'coding', message: 'the agent is on turn 20' },
+    ])
+    expect(result.outcome).toBe('success')
+  })
+
   it('runs the command in the attempt workspace and streams what it prints', async () => {
     const workspace = temporary('mps-run-')
     const logs = temporary('mps-logs-')

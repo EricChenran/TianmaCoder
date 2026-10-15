@@ -190,7 +190,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **A release deletes rather than archives** — the platform's `release_workspace` removes the coding tree and the record, keeping no copy for a later look: the protocol calls archiving optional, and this node does not do it.
 - **The releasable list has nowhere to go** — the protocol's heartbeat carries the resource readings but no field for the workspaces a full node could release, so that list reaches the operator through the node's own report and the platform sees only the reading.
 - **Platform configuration is partly followed** — the node acts on the heartbeat interval; the claim long poll, the log batch caps, the artifact ceiling, and the redaction rules stay at the values this node declared in its capabilities, and the node says so in its report when the platform states different ones.
-- **Progress inside a run is estimated** — the event stream reports each turn and tool call, but the node states no percentage for them: only the stages it knows for certain (coding, collecting evidence, uploading) carry one.
+- **Progress inside a run is estimated** — the event stream reports each turn and tool call, and the node reports the start of each turn the agent narrates, counting up to a ceiling it never crosses before the work is delivered; it cannot know how far into a turn the agent really is, so the number is a direction rather than a measurement. The stages it knows for certain (coding, collecting evidence, uploading) have their own.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
 <a id="dev-note"></a>
