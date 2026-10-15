@@ -16,12 +16,13 @@ import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { taskInstruction, taskSessionHint } from '@tianma/dsh-mps-exec-core'
 import type { TaskEvidence } from './runner.ts'
-import { collectEvidence } from './evidence.ts'
+import { EVIDENCE_DIRECTORY, collectEvidence } from './evidence.ts'
 import type { CollectedEvidence, EvidenceCommandOutcome } from './evidence.ts'
 import { toError } from './report.ts'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
 import type { PublishedChanges, TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
 import { fetchMaterials } from './materials.ts'
+import { excludeFromRepository } from './paths.ts'
 import type { MaterialFile } from './materials.ts'
 import { TASK_BOOK_POINTER, writeTaskBook } from './task-book.ts'
 
@@ -105,6 +106,9 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       // The instruction is the prompt; everything else the attempt needs — constraints,
       // delivery requirements, the chat it came from, the rules — is the task book.
       const book = writeTaskBook({ directory, assignment: context.task, materials })
+      // The attempt writes its evidence here while it works, so the directory is kept out
+      // of the repository before it does: everything else in the workspace is delivered.
+      excludeFromRepository(directory, `${EVIDENCE_DIRECTORY}/`)
       const lines: RunLine[] = []
       await context.reportProgress({ progress: 10, stage: 'coding', message: 'the agent is working' })
       await context.reportLog('runner', [{

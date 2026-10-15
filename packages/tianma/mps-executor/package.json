@@ -40,6 +40,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/cordis-plugin-include": "workspace:~",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:~",
     "@tianma/dsh-mps-exec-core": "workspace:*"
   }
 }
