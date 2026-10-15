@@ -540,6 +540,41 @@ describe('the node end to end', () => {
     }
   }, 120_000)
 
+  it('uploads the screenshots an attempt declared, and reports them as evidence', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({
+      workspaceRoot,
+      logs,
+      workspaceId: 'ws_shot',
+      taskId: 'tsk_shot',
+      base,
+      bare,
+      extra: { deliverables: { push_required: true, require_screenshots: true } },
+    })
+
+    // The declaration the attempt left in .evidence is what the node uploads, with the
+    // viewport and route the node itself cannot know.
+    const upload = platform.at('/exec/v1/tasks/tsk_shot/artifacts')
+    expect(upload).toHaveLength(1)
+    // The upload is a multipart form: the kind and the meta are fields, the file a part.
+    const body = String(upload[0]?.body)
+    expect(body).toContain('name="kind"')
+    expect(body).toMatch(/name="kind"\r\n\r\nscreenshot/u)
+    expect(body).toContain('name="meta"')
+    expect(body).toContain('"width":1440')
+    expect(body).toContain('"route":"/orders"')
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_shot/result')[0]?.body ?? '{}') as Record<string, unknown>
+    const evidence = result['evidence'] as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+    expect(evidence['screenshots']).toEqual([
+      { artifact_id: expect.stringMatching(/^art-/u) as unknown as string, route: '/orders', caption: '/orders' },
+    ])
+  }, 120_000)
+
   it('takes work again when it starts after draining', async () => {
     const root = temporary('mps-e2e-')
     const workspaceRoot = join(root, 'node')
