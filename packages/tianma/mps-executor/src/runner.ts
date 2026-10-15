@@ -32,6 +32,11 @@ export interface TaskRunContext {
   /** The attempt's assignment, including the payload the platform sent. */
   task: ExecTaskAssignment
   /**
+   * Directory this attempt works in, kept across the tasks of one platform
+   * workspace; `undefined` when the payload names no workspace.
+   */
+  workspaceDirectory: string | undefined
+  /**
    * Cancellation for this attempt. It is aborted when the platform withdraws the
    * task, when an abort command arrives, when the runtime ceiling passes, or when
    * the node stops; the runner must stop its work and settle promptly.
@@ -48,6 +53,21 @@ export interface TaskRunContext {
    * @param lines - already-redacted lines, in order.
    */
   reportLog(stream: string, lines: ExecLogLine[]): Promise<void>
+}
+
+/**
+ * Resolves the directory an attempt works in. The node keeps one directory per
+ * platform workspace and reuses it across tasks, so a runner never decides where a
+ * workspace lives or removes one itself.
+ */
+export interface TaskWorkspaceAllocator {
+  /**
+   * Resolve the directory for one workspace, creating it the first time.
+   * @param workspaceId - the platform's workspace id.
+   * @param taskId - the task being served.
+   * @returns the directory.
+   */
+  ensure(workspaceId: string, taskId: string): Promise<string>
 }
 
 /** Executes one claimed attempt of a task. */

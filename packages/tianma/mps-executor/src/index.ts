@@ -35,7 +35,9 @@ export type { ExecutorSettings } from './config.ts'
 export { LOG_BATCH_MAX_LINES, LOG_LINE_MAX_BYTES, TaskOrchestrator, boundLogLine } from './orchestrator.ts'
 export type { TaskOrchestratorHooks, TaskOrchestratorOptions, TaskPlatformClient } from './orchestrator.ts'
 export { toError } from './report.ts'
-export type { TaskRunContext, TaskRunResult, TaskRunner, TaskRunnerSource } from './runner.ts'
+export type { TaskRunContext, TaskRunResult, TaskRunner, TaskRunnerSource, TaskWorkspaceAllocator } from './runner.ts'
+export { WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, WorkspaceStore } from './workspace.ts'
+export type { WorkspaceRecord, WorkspaceStoreOptions } from './workspace.ts'
 // The runtime's transport option is an exec-core type, so a caller that injects a
 // transport needs it reachable without depending on the wire package directly.
 export type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'
@@ -79,16 +81,19 @@ export function createReportSink(logger: ExecutorLogger): (report: ExecutorRepor
 }
 
 /**
- * Start the node's handshake and, once the node is registered, its heartbeat.
- * A handshake that fails leaves the node unregistered; the report sink already
- * carried the reason, so nothing further is retried here.
+ * Restore the coding workspaces this node kept, then start its handshake and, once
+ * the node is registered, its heartbeat. A handshake that fails leaves the node
+ * unregistered; the report sink already carried the reason, so nothing further is
+ * retried here.
  * @param runtime - the node runtime to start.
  */
 export function autoStartNode(runtime: MpsExecutorRuntime): void {
-  runtime.bootstrap().then(
-    () => { runtime.start() },
-    () => { /* bootstrap reported the failure that ended the handshake */ },
-  )
+  runtime.restore()
+    .then(() => runtime.bootstrap())
+    .then(
+      () => { runtime.start() },
+      () => { /* restore or bootstrap reported the failure that ended the handshake */ },
+    )
 }
 
 /**

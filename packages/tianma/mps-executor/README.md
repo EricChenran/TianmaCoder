@@ -52,6 +52,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `nodeHost` | this machine's host name | Address reported to the platform |
 | `secretEnv` | `MPS_NODE_SECRET` | Environment variable holding the pre-shared secret; the secret is never read from configuration |
 | `workspaceRoot` | the process working directory | Directory the node reports as its workspace root |
+| `codingRoot` | `coding` inside the workspace root | Directory the node keeps its coding workspaces under |
 | `slotsTotal` | `1` | Concurrent tasks the node accepts |
 | `heartbeatSeconds` | `10` | Heartbeat period, until the platform assigns another |
 | `claimLongPollSeconds` | `25` | Claim long-poll budget |
@@ -75,6 +76,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `TaskOrchestrator` owns the task lifecycle. It claims while a slot is free, reports each claimed task to the platform's running-task list, hands the attempt to the runner, and submits the outcome the attempt reached. The rules the platform cannot apply for the node live here: the renewal period and runtime ceiling a claim or payload states, the stop when a renewal answers `should_continue: false` (the attempt is discarded and no result is submitted, because that result would describe work the platform already reassigned), the `cancelled` outcome an abort forces, redaction and byte-bounding of submitted log lines, and result submission that retries while the platform's answer allows it. A node without a composed runner holds its session and claims nothing; the runner is looked up as `ctx.mpsTaskRunner` when claiming starts, so a runner mounted by any other row is found. The `TaskRunner` seam is the only way work runs: a runner receives the assignment, a cancellation signal, and reporting channels, and never talks to the platform or decides its own slots.
 
+`WorkspaceStore` keeps the coding workspaces: one directory per platform workspace under the coding root, reused across that workspace's tasks because it carries what the workspace learned, plus a sidecar state file that survives a restart. A task ending never removes a directory; only the platform's `release_workspace` command does, and a removal is refused unless the directory really resolves inside the coding root, so a mistaken record or a junction cannot make the node delete something else. The store hands the directory an attempt works in to the runner, which is why a runner never decides where a workspace lives.
+
 ### Source map
 
 | File | Role |
@@ -82,6 +85,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | [`src/config.ts`](src/config.ts) | The configuration schema, the resolved settings, and the secret read |
 | [`src/runtime.ts`](src/runtime.ts) | The platform session: handshake, heartbeat, commands, timer, failure recovery |
 | [`src/orchestrator.ts`](src/orchestrator.ts) | The task lifecycle: claim, lease, runtime ceiling, abort, logs, and result submission |
+| [`src/workspace.ts`](src/workspace.ts) | The coding workspaces: one directory per workspace, the sidecar state, and release-driven removal |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -118,7 +122,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
-- **No coding workspace yet** — an attempt runs wherever its runner puts it; preparing and keeping a persistent per-workspace checkout, and reporting that workspace's session, are not implemented.
+- **No checkout in the workspace yet** — the node creates and keeps one directory per workspace and removes it only on release, but it does not clone or fetch the task's repository, check out the work branch, or report the workspace's session yet.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
 <a id="dev-note"></a>

@@ -17,6 +17,7 @@ import {
   strongerOutcome,
   taskRepository,
   taskRuntimeLimitMs,
+  taskWorkspaceId,
 } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
@@ -36,7 +37,7 @@ import type {
 import type { ExecutorSettings } from './config.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
-import type { TaskRunResult, TaskRunner } from './runner.ts'
+import type { TaskRunResult, TaskRunner, TaskWorkspaceAllocator } from './runner.ts'
 
 /** The protocol calls the task lifecycle makes. */
 export interface TaskPlatformClient {
@@ -138,6 +139,11 @@ export interface TaskOrchestratorOptions {
   settings: ExecutorSettings
   /** Executes one attempt. */
   runner: TaskRunner
+  /**
+   * Resolves the directory an attempt works in. Without one, an attempt runs where
+   * its runner decides and the context names no directory.
+   */
+  workspaces?: TaskWorkspaceAllocator | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -178,6 +184,7 @@ export class TaskOrchestrator {
   readonly #client: TaskPlatformClient
   readonly #settings: ExecutorSettings
   readonly #runner: TaskRunner
+  readonly #workspaces: TaskWorkspaceAllocator | undefined
   readonly #hooks: TaskOrchestratorHooks
   readonly #report: (report: ExecutorReport) => void
   readonly #now: () => Date
@@ -194,6 +201,7 @@ export class TaskOrchestrator {
     this.#client = options.client
     this.#settings = options.settings
     this.#runner = options.runner
+    this.#workspaces = options.workspaces
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
     this.#now = options.now ?? (() => new Date())
@@ -379,8 +387,10 @@ export class TaskOrchestrator {
     try {
       let result: TaskRunResult
       try {
+        const workspaceDirectory = await this.#workspaceDirectory(running)
         result = await this.#runner.run({
           task: running.assignment,
+          workspaceDirectory,
           signal: running.controller.signal,
           reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
           reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
@@ -398,6 +408,17 @@ export class TaskOrchestrator {
     } finally {
       this.#settle(running)
     }
+  }
+
+  /**
+   * Resolve the directory this attempt works in.
+   * @param running - the attempt.
+   * @returns the directory, or undefined when the payload names no workspace or the node keeps none.
+   */
+  async #workspaceDirectory(running: RunningAttempt): Promise<string | undefined> {
+    const workspaceId = taskWorkspaceId(running.assignment.payload)
+    if (workspaceId === undefined || this.#workspaces === undefined) return undefined
+    return await this.#workspaces.ensure(workspaceId, running.assignment.task_id)
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {

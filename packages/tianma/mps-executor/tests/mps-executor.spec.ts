@@ -6,6 +6,9 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
   Config,
@@ -83,14 +86,35 @@ const HEARTBEAT = { node_status: 'online', commands: [], lease_notices: [], conf
  */
 function settingsFor(overrides: Partial<Parameters<typeof resolveExecutorSettings>[0]> = {}) {
   return resolveExecutorSettings(
-    { platformHost: '10.0.0.7', platformPort: 8791, nodeId: 'node-1', secretEnv: DEFAULT_SECRET_ENV, ...overrides },
+    {
+      platformHost: '10.0.0.7',
+      platformPort: 8791,
+      nodeId: 'node-1',
+      secretEnv: DEFAULT_SECRET_ENV,
+      codingRoot: codingRoot(),
+      ...overrides,
+    },
     'test-host',
   )
+}
+
+/** Coding roots one test created, removed after it. */
+const codingRoots: string[] = []
+
+/**
+ * A coding root of its own, so a spec never writes into the checkout.
+ * @returns the directory.
+ */
+function codingRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'mps-coding-'))
+  codingRoots.push(root)
+  return root
 }
 
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllEnvs()
+  for (const root of codingRoots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 describe('node configuration', () => {
@@ -624,7 +648,10 @@ describe('task claiming through the runtime', () => {
         commands: [
           { command: 'abort', task_id: 'tsk_1', reason: '需求撤销' },
           { command: 'abort', task_id: 'tsk_other' },
-          { command: 'release_workspace', workspace_id: 'ws_1' },
+          { command: 'abort' },
+          { command: 'release_workspace' },
+          { command: 'release_workspace', workspace_id: 'ws_unheld' },
+          { command: 'collect_diagnostics' },
         ],
       }),
       envelope(null),
@@ -652,12 +679,51 @@ describe('task claiming through the runtime', () => {
 
     await node.heartbeatOnce()
     expect(reports.some(report => report.message.includes('aborted by the platform'))).toBe(true)
-    expect(reports.some(report => report.message.includes('is not running here'))).toBe(true)
+    expect(reports.some(report => report.message.includes('aborted without naming a task'))).toBe(true)
+    expect(reports.some(report => report.message.includes('released no workspace'))).toBe(true)
+    expect(reports.some(report => report.message.includes('does not hold'))).toBe(true)
     expect(reports.some(report => report.message.includes('does not implement it yet'))).toBe(true)
 
     await node.tasks?.drain()
     expect(node.runningTasks).toEqual([])
     node.stop()
+  })
+
+  it('removes a workspace the platform released', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, commands: [{ command: 'release_workspace', workspace_id: 'ws_1' }] }),
+    ])
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: () => 's', transport: queue.transport })
+    await node.bootstrap()
+    const directory = await node.workspaces.ensure('ws_1', 'tsk_1')
+    expect(existsSync(directory)).toBe(true)
+
+    await node.heartbeatOnce()
+
+    expect(existsSync(directory)).toBe(false)
+    expect(node.workspaces.records).toEqual([])
+  })
+
+  it('reports a release it cannot carry out', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, commands: [{ command: 'release_workspace', workspace_id: 'ws/escape' }] }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+    await node.bootstrap()
+
+    await node.heartbeatOnce()
+
+    expect(reports.some(report => report.level === 'error' && report.message.includes('could not release workspace'))).toBe(true)
   })
 
   it('holds its session when no runner is composed', () => {

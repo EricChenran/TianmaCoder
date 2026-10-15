@@ -8,6 +8,7 @@
  */
 
 import { hostname as hostHostname, platform } from 'node:os'
+import { join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import {
   DEFAULT_PLATFORM_BASE_PATH,
@@ -61,6 +62,8 @@ export interface Config {
   secretEnv?: string
   /** Directory the node works under and reports as its workspace root. */
   workspaceRoot?: string
+  /** Directory the node keeps its coding workspaces under; defaults to `coding` inside the workspace root. */
+  codingRoot?: string
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   /** Heartbeat period in seconds. */
@@ -96,6 +99,7 @@ export const Config: z<Config> = z.object({
   nodeHost: z.string().default(''),
   secretEnv: z.string().default(DEFAULT_SECRET_ENV),
   workspaceRoot: z.string().default(''),
+  codingRoot: z.string().default(''),
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
@@ -121,6 +125,8 @@ export interface ExecutorSettings {
   nodeHost: string
   /** Workspace root the node reports. */
   workspaceRoot: string
+  /** Directory the node keeps its coding workspaces under. */
+  codingRoot: string
   /** Concurrent task capacity. */
   slotsTotal: number
   /** Heartbeat period in seconds. */
@@ -169,6 +175,9 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     nodeName: config.nodeName === undefined || config.nodeName.trim() === '' ? nodeId : config.nodeName.trim(),
     nodeHost,
     workspaceRoot,
+    codingRoot: config.codingRoot === undefined || config.codingRoot.trim() === ''
+      ? join(workspaceRoot, 'coding')
+      : config.codingRoot.trim(),
     slotsTotal: config.slotsTotal ?? 1,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,

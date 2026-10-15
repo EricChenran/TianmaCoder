@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import { join } from 'node:path'
 import { ExecResponseError, recoveryForCode } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
@@ -657,6 +658,53 @@ describe('task lifecycle', () => {
     const settled = platform.claims.length
     await vi.advanceTimersByTimeAsync(10_000)
     expect(platform.claims).toHaveLength(settled)
+  })
+
+  it('gives the attempt the directory its workspace lives in', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: { limits: { max_runtime_seconds: 60 }, workspace: { workspace_id: 'ws_1' } },
+    }))
+    const ensured: [string, string][] = []
+    const seen: (string | undefined)[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        seen.push(context.workspaceDirectory)
+        return { outcome: 'success', summary: 'done' }
+      }),
+      workspaces: {
+        ensure: async (workspaceId, taskId) => {
+          ensured.push([workspaceId, taskId])
+          return join('coding', 'ws_1')
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(ensured).toEqual([['ws_1', 'tsk_1']])
+    expect(seen).toEqual([join('coding', 'ws_1')])
+  })
+
+  it('fails the attempt when its workspace cannot be prepared', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ payload: { workspace: { workspace_id: 'ws_1' } } }))
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'never runs' })),
+      workspaces: { ensure: async () => { throw new Error('the disk is full') } },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({ outcome: 'failed', summary: 'the attempt threw: the disk is full' })
   })
 
   it('keeps two attempts running at once within the slot budget', async () => {

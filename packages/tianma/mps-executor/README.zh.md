@@ -52,6 +52,7 @@ kind: "package-reference"
 | `nodeHost` | 本机主机名 | 上报给平台的地址 |
 | `secretEnv` | `MPS_NODE_SECRET` | 存放预共享密钥的环境变量名；密钥从不从配置读取 |
 | `workspaceRoot` | 进程工作目录 | 节点上报的工作区根目录 |
+| `codingRoot` | 工作区根目录下的 `coding` | 节点存放编码工作区的目录 |
 | `slotsTotal` | `1` | 节点接受的并发任务数 |
 | `heartbeatSeconds` | `10` | 心跳周期，直到平台另行指定 |
 | `claimLongPollSeconds` | `25` | 认领长轮询预算 |
@@ -75,6 +76,8 @@ kind: "package-reference"
 
 `TaskOrchestrator` 持有任务生命周期：在有空闲槽位时认领，把每个已认领任务上报进平台的运行中任务列表，把尝试交给运行器，并提交该尝试达成的结果。平台无法替节点施加的规则都在这里：认领或载荷给出的续期周期与运行时限、某次续期返回 `should_continue: false` 时的停止（该尝试被丢弃且不提交结果，因为那份结果描述的是平台已重新派发的活）、中止强制产生的 `cancelled` 结果、提交日志行的脱敏与按字节限长，以及在平台应答允许时持续重试的结果提交。没有组合运行器的节点只保持会话、不认领任何任务；运行器在开始认领时按 `ctx.mpsTaskRunner` 查找，因此由其他行挂载的运行器同样能被找到。`TaskRunner` 是任务得以执行的唯一入口：运行器收到任务、取消信号与上报通道，从不直接与平台通信，也不自行决定槽位。
 
+`WorkspaceStore` 保管编码工作区：在编码根目录下为每个平台工作区建一个目录，并在该工作区的多个任务之间复用——它承载着这个工作区学到的东西；另有一份重启后仍在的旁挂状态文件。任务结束绝不删除目录，只有平台的 `release_workspace` 指令会；而且删除前会校验该目录确实解析在编码根目录之内，因此记错的记录或一个 junction 都无法让节点删掉别的东西。该存储把本次尝试要工作的目录交给运行器，这也是运行器从不自行决定工作区位置的原因。
+
 ### 源文件地图
 
 | 文件 | 职责 |
@@ -82,6 +85,7 @@ kind: "package-reference"
 | [`src/config.ts`](src/config.ts) | 配置 schema、已解析设置与密钥读取 |
 | [`src/runtime.ts`](src/runtime.ts) | 平台会话：握手、心跳、指令、定时器、失败恢复 |
 | [`src/orchestrator.ts`](src/orchestrator.ts) | 任务生命周期：认领、租约、运行时限、中止、日志与结果提交 |
+| [`src/workspace.ts`](src/workspace.ts) | 编码工作区：每个工作区一个目录、旁挂状态与释放驱动的删除 |
 | [`src/runner.ts`](src/runner.ts) | `TaskRunner` 接缝，以及一次尝试交换的上下文与结果 |
 | [`src/report.ts`](src/report.ts) | 运维事件与所有失败路径共用的错误归一化 |
 | [`src/index.ts`](src/index.ts) | Cordis 插件：报告出口、自动启动、服务发布、运行器查找、停止副作用 |
@@ -118,7 +122,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 以下限制界定了本包当前的边界，是当前约束而非任务清单。
 
 - **未随包交付运行器** —— 只有在组合了运行器时节点才会认领并执行任务；没有运行器时它只保持会话、上报这一事实并且什么都不认领，因为没有执行任务的途径。
-- **尚无编码工作区** —— 一次尝试在运行器安置它的地方执行；准备并保活按工作区持久化的检出、以及上报该工作区的会话，都尚未实现。
+- **工作区里还没有检出** —— 节点会为每个工作区创建并保活一个目录，且只在释放时删除，但它尚不 clone 或 fetch 任务的仓库、不切出工作分支、也不上报该工作区的会话。
 - **资源读数由外部提供** —— 由部署通过 `setResources` 上报；节点自身完全不探测 CPU、内存与磁盘。
 
 <a id="dev-note"></a>

@@ -28,6 +28,7 @@ import { TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunner, TaskRunnerSource } from './runner.ts'
+import { WorkspaceStore } from './workspace.ts'
 
 export type { ExecutorReport } from './report.ts'
 
@@ -90,6 +91,7 @@ export class MpsExecutorRuntime {
   #lastError: Error | undefined
   #tasks: TaskOrchestrator | undefined
   #runnerSource: TaskRunnerSource | undefined
+  readonly #workspaces: WorkspaceStore
 
   /**
    * @param options - the resolved settings, the secret, and the optional runner, transport, clock, and report sink.
@@ -110,6 +112,11 @@ export class MpsExecutorRuntime {
     if (options.runner !== undefined) {
       this.#runnerSource = options.runner
     }
+    this.#workspaces = new WorkspaceStore({
+      root: options.settings.codingRoot,
+      now: this.#now,
+      report: this.#report,
+    })
   }
 
   /**
@@ -123,6 +130,7 @@ export class MpsExecutorRuntime {
       client: this.client,
       settings: this.settings,
       runner,
+      workspaces: this.#workspaces,
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -165,6 +173,11 @@ export class MpsExecutorRuntime {
   /** The task orchestrator, present only when a runner is composed. */
   get tasks(): TaskOrchestrator | undefined {
     return this.#tasks
+  }
+
+  /** The coding workspaces this node keeps across tasks. */
+  get workspaces(): WorkspaceStore {
+    return this.#workspaces
   }
 
   /**
@@ -267,7 +280,7 @@ export class MpsExecutorRuntime {
       node_time: formatRfc3339(this.#now()),
       agent_version: this.settings.agentVersion,
     }, signal)
-    this.#applyCommands(heartbeat.commands)
+    await this.#applyCommands(heartbeat.commands)
     return heartbeat
   }
 
@@ -276,14 +289,24 @@ export class MpsExecutorRuntime {
    * on; the rest are reported, so a platform instruction never disappears silently.
    * @param commands - the commands the heartbeat brought down.
    */
-  #applyCommands(commands: readonly ExecCommand[]): void {
+  async #applyCommands(commands: readonly ExecCommand[]): Promise<void> {
     for (const command of commands) {
-      if (command.command === 'abort' && command.task_id !== undefined) {
-        if (this.#tasks?.abort(command.task_id, command.reason) !== true) {
+      if (command.command === 'abort') {
+        if (command.task_id === undefined) {
+          this.#report({ level: 'warn', message: 'the platform aborted without naming a task' })
+        } else if (this.#tasks?.abort(command.task_id, command.reason) !== true) {
           this.#report({
             level: 'warn',
             message: `the platform aborted task ${command.task_id}, which is not running here`,
           })
+        }
+        continue
+      }
+      if (command.command === 'release_workspace') {
+        if (command.workspace_id === undefined) {
+          this.#report({ level: 'warn', message: 'the platform released no workspace: the command names none' })
+        } else {
+          await this.#releaseWorkspace(command.workspace_id)
         }
         continue
       }
@@ -292,6 +315,38 @@ export class MpsExecutorRuntime {
         message: `ignoring the ${command.command} command: this node does not implement it yet`,
       })
     }
+  }
+
+  /**
+   * Remove one workflow because the platform released it. A release this node
+   * cannot carry out is reported against that workspace, never against the
+   * heartbeat that carried it.
+   * @param workspaceId - the workspace the platform released.
+   */
+  async #releaseWorkspace(workspaceId: string): Promise<void> {
+    try {
+      const released = await this.#workspaces.release(workspaceId)
+      if (!released) {
+        this.#report({
+          level: 'warn',
+          message: `the platform released workspace ${workspaceId}, which this node does not hold`,
+        })
+      }
+    } catch (error) {
+      this.#report({
+        level: 'error',
+        message: `could not release workspace ${workspaceId}: ${toError(error).message}`,
+      })
+    }
+  }
+
+  /**
+   * Read the coding workspaces this node kept, so a restarted node reuses the
+   * directories and sessions the platform still associates with it. Call it before
+   * the handshake; {@link WorkspaceStore} reads its state lazily anyway.
+   */
+  async restore(): Promise<void> {
+    await this.#workspaces.load()
   }
 
   /**
