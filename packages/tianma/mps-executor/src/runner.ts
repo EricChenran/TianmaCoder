@@ -82,6 +82,13 @@ export interface TaskRunContext {
    */
   checkout: TaskCheckout | undefined
   /**
+   * Report the session serving this attempt's workspace. The node records it beside
+   * the workspace and tells the platform, which needs the reference to show and
+   * troubleshoot the workspace; call it whenever the session is created or replaced.
+   * @param sessionRef - the session reference.
+   */
+  reportSession(sessionRef: string): Promise<void>
+  /**
    * Hand this attempt's work back: the node commits the changes under its robot
    * identity and pushes the work branch, after checking that every change stays
    * inside the workspace and carries no credential.

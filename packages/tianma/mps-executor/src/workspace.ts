@@ -21,14 +21,24 @@ export const WORKSPACE_STATE_FILE = '.state.json'
 /** Format version of that sidecar file. */
 export const WORKSPACE_STATE_VERSION = 1
 
+/** The dsh session serving one coding workspace. */
+export interface WorkspaceSession {
+  /** Session reference the node reported for this workspace. */
+  ref: string
+  /** Baseline commit the directory held when the session was reported. */
+  base_commit: string
+  /** Task the session was reported for. */
+  last_task_id: string
+}
+
 /** One coding workspace the node keeps for a bound platform workspace. */
 export interface WorkspaceRecord {
   /** Platform workspace id. */
   workspace_id: string
   /** Directory under the coding root. */
   directory: string
-  /** Session reference serving this workspace, once one was reported. */
-  session_ref?: string | undefined
+  /** Session serving this workspace, once one was reported. */
+  session?: WorkspaceSession | undefined
   /** Task this workspace served most recently. */
   last_task_id?: string | undefined
   /** When the workspace was last used, as an RFC 3339 string. */
@@ -176,24 +186,24 @@ export class WorkspaceStore {
       directory,
       last_used_at: formatRfc3339(this.#now()),
       last_task_id: taskId,
-      session_ref: previous?.session_ref,
+      session: previous?.session,
     })
     await this.save()
     return directory
   }
 
   /**
-   * Record the session reference serving one workspace, which the platform is told
-   * about separately and reads back when a node restarts.
+   * Record the session serving one workspace, which the platform is told about
+   * separately and reads back when a node restarts.
    * @param workspaceId - the platform's workspace id.
-   * @param sessionRef - the session reference.
+   * @param session - the session reference and what it saw.
    */
-  async setSession(workspaceId: string, sessionRef: string): Promise<void> {
+  async setSession(workspaceId: string, session: WorkspaceSession): Promise<void> {
     const record = this.#records.get(checkedWorkspaceId(workspaceId))
     if (record === undefined) {
       throw new Error(`coding workspace ${workspaceId} is not held by this node`)
     }
-    this.#records.set(record.workspace_id, { ...record, session_ref: sessionRef })
+    this.#records.set(record.workspace_id, { ...record, session })
     await this.save()
   }
 
@@ -255,10 +265,24 @@ function stateRecords(parsed: unknown): WorkspaceRecord[] {
   return file.workspaces.filter(isRecord).map(record => ({
     workspace_id: String(record['workspace_id']),
     directory: String(record['directory']),
-    session_ref: typeof record['session_ref'] === 'string' ? record['session_ref'] : undefined,
+    session: sessionOf(record['session']),
     last_task_id: typeof record['last_task_id'] === 'string' ? record['last_task_id'] : undefined,
     last_used_at: String(record['last_used_at']),
   }))
+}
+
+/**
+ * Read the session a record states.
+ * @param value - the field's value.
+ * @returns the session, or undefined when the record states none.
+ */
+function sessionOf(value: unknown): WorkspaceSession | undefined {
+  if (!isRecord(value)) return undefined
+  return {
+    ref: String(value['ref']),
+    base_commit: String(value['base_commit']),
+    last_task_id: String(value['last_task_id']),
+  }
 }
 
 /**

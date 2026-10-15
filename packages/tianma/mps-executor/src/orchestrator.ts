@@ -39,6 +39,7 @@ import type { ExecutorReport } from './report.ts'
 import type { TaskRunResult, TaskRunner, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
 import type { PublishedChanges } from './runner.ts'
 import type { TaskPublisher } from './publish.ts'
+import type { TaskSessionReporter } from './session.ts'
 
 /** The protocol calls the task lifecycle makes. */
 export interface TaskPlatformClient {
@@ -150,6 +151,11 @@ export interface TaskOrchestratorOptions {
    * the attempt has nothing to publish.
    */
   publisher?: TaskPublisher | undefined
+  /**
+   * Reports the session serving an attempt's workspace. Without one, a runner's
+   * `reportSession()` reports that the attempt has no workspace to report.
+   */
+  sessions?: TaskSessionReporter | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -194,6 +200,7 @@ export class TaskOrchestrator {
   readonly #runner: TaskRunner
   readonly #workspaces: TaskWorkspaceAllocator | undefined
   readonly #publisher: TaskPublisher | undefined
+  readonly #sessions: TaskSessionReporter | undefined
   readonly #hooks: TaskOrchestratorHooks
   readonly #report: (report: ExecutorReport) => void
   readonly #now: () => Date
@@ -212,6 +219,7 @@ export class TaskOrchestrator {
     this.#runner = options.runner
     this.#workspaces = options.workspaces
     this.#publisher = options.publisher
+    this.#sessions = options.sessions
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
     this.#now = options.now ?? (() => new Date())
@@ -412,6 +420,7 @@ export class TaskOrchestrator {
             workspaceDirectory: workspace?.directory,
             checkout: workspace?.checkout,
             publish: async () => await this.#publish(running, workspace),
+            reportSession: async (sessionRef: string) => { await this.#reportSession(running, workspace, sessionRef) },
             signal: running.controller.signal,
             reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
             reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
@@ -451,6 +460,30 @@ export class TaskOrchestrator {
     })
     running.published = published
     return published
+  }
+
+  /**
+   * Report the session serving this attempt's workspace.
+   * @param running - the attempt.
+   * @param workspace - the workspace the attempt was prepared with.
+   * @param sessionRef - the session reference.
+   */
+  async #reportSession(
+    running: RunningAttempt,
+    workspace: TaskWorkspace | undefined,
+    sessionRef: string,
+  ): Promise<void> {
+    const checkout = workspace?.checkout
+    if (this.#sessions === undefined || workspace === undefined || checkout === undefined) {
+      throw new Error('this attempt has no prepared workspace to report a session for')
+    }
+    await this.#sessions.report({
+      assignment: running.assignment,
+      directory: workspace.directory,
+      sessionRef,
+      baseCommit: checkout.base_commit,
+      signal: running.controller.signal,
+    })
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {

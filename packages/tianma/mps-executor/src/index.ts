@@ -68,7 +68,15 @@ export type {
   TaskPublishRequest,
 } from './publish.ts'
 export { WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, WorkspaceStore } from './workspace.ts'
-export type { WorkspaceRecord, WorkspaceStoreOptions } from './workspace.ts'
+export type { WorkspaceRecord, WorkspaceSession, WorkspaceStoreOptions } from './workspace.ts'
+export { checkoutSessionReporter, restoredSessionReports } from './session.ts'
+export type {
+  CheckoutSessionReporterOptions,
+  RestoredSessionReport,
+  SessionPlatformClient,
+  TaskSessionReporter,
+  TaskSessionRequest,
+} from './session.ts'
 // The runtime's transport option is an exec-core type, so a caller that injects a
 // transport needs it reachable without depending on the wire package directly.
 export type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'

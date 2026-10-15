@@ -59,7 +59,7 @@ describe('coding workspaces', () => {
       directory,
       last_used_at: '2026-10-15T12:03:55.123+08:00',
       last_task_id: 'tsk_1',
-      session_ref: undefined,
+      session: undefined,
     }])
     const state = JSON.parse(readFileSync(store.statePath, 'utf8')) as { version: number; workspaces: unknown[] }
     expect(state.version).toBe(WORKSPACE_STATE_VERSION)
@@ -69,24 +69,24 @@ describe('coding workspaces', () => {
   it('reuses the directory across tasks and keeps its session reference', async () => {
     const { store } = storeWith()
     await store.ensure('ws_1', 'tsk_1')
-    await store.setSession('ws_1', 'dsh-session-1')
+    await store.setSession('ws_1', { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
 
     const again = await store.ensure('ws_1', 'tsk_2')
 
     expect(again).toBe(store.directoryOf('ws_1'))
     expect(store.records).toHaveLength(1)
-    expect(store.records[0]).toMatchObject({ last_task_id: 'tsk_2', session_ref: 'dsh-session-1' })
+    expect(store.records[0]).toMatchObject({ last_task_id: 'tsk_2', session: { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' } })
   })
 
   it('refuses a session for a workspace it does not hold', async () => {
     const { store } = storeWith()
-    await expect(store.setSession('ws_missing', 'dsh-session-1')).rejects.toThrow(/is not held by this node/)
+    await expect(store.setSession('ws_missing', { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })).rejects.toThrow(/is not held by this node/)
   })
 
   it('restores what it kept across a restart', async () => {
     const { store, root } = storeWith()
     await store.ensure('ws_1', 'tsk_1')
-    await store.setSession('ws_1', 'dsh-session-1')
+    await store.setSession('ws_1', { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
 
     const restarted = new WorkspaceStore({ root })
     expect(restarted.loaded).toBe(false)
@@ -172,7 +172,7 @@ describe('coding workspaces', () => {
     expect(store.records).toEqual([{
       workspace_id: 'ws_x',
       directory: 'undefined',
-      session_ref: undefined,
+      session: undefined,
       last_task_id: undefined,
       last_used_at: 'undefined',
     }])

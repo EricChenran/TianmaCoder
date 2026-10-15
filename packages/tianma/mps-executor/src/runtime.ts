@@ -27,6 +27,7 @@ import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
 import { cliGit } from './git.ts'
 import { checkoutPublisher } from './publish.ts'
+import { checkoutSessionReporter, restoredSessionReports } from './session.ts'
 import { TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
@@ -139,6 +140,7 @@ export class MpsExecutorRuntime {
         git,
         identity: { name: this.settings.gitUserName, email: this.settings.gitUserEmail },
       }),
+      sessions: checkoutSessionReporter({ store: this.#workspaces, client: this.client }),
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -254,6 +256,7 @@ export class MpsExecutorRuntime {
       }, signal)
       this.#state = 'online'
       this.#lastError = undefined
+      await this.#reportRestoredSessions(signal)
       if (Number.isFinite(registered.heartbeat_interval_seconds) && registered.heartbeat_interval_seconds > 0) {
         this.#heartbeatSeconds = registered.heartbeat_interval_seconds
       }
@@ -345,6 +348,26 @@ export class MpsExecutorRuntime {
         level: 'error',
         message: `could not release workspace ${workspaceId}: ${toError(error).message}`,
       })
+    }
+  }
+
+  /**
+   * Tell the platform which sessions and coding paths this node already holds, so a
+   * restart keeps showing them. The reference is for display and troubleshooting
+   * only, so a report the platform refuses is a warning rather than a failed
+   * handshake.
+   * @param signal - caller cancellation.
+   */
+  async #reportRestoredSessions(signal?: AbortSignal): Promise<void> {
+    for (const report of restoredSessionReports(this.#workspaces)) {
+      try {
+        await this.client.reportSession(report.workspace_id, report.body, signal)
+      } catch (error) {
+        this.#report({
+          level: 'warn',
+          message: `could not re-report the session of workspace ${report.workspace_id}: ${toError(error).message}`,
+        })
+      }
     }
   }
 

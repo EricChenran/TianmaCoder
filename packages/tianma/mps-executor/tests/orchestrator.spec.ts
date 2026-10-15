@@ -35,6 +35,7 @@ import type {
   TaskRunContext,
   TaskRunResult,
   TaskRunner,
+  TaskSessionRequest,
 } from '@tianma/dsh-mps-executor'
 
 afterEach(() => { vi.useRealTimers() })
@@ -890,6 +891,69 @@ describe('task lifecycle', () => {
     await orchestrator.drain()
 
     expect(platform.results[0]?.evidence?.changed_files).toEqual(['artifacts/report.md'])
+  })
+
+  it('reports the session a runner names through the node', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: {
+        workspace: {
+          workspace_id: 'ws_1',
+          repo: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        },
+      },
+    }))
+    const reports: TaskSessionRequest[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        await context.reportSession('dsh-session-01H8Z')
+        return { outcome: 'success', summary: 'done' }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      sessions: {
+        report: async (request) => { reports.push(request) },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({
+      directory: join('coding', 'ws_1'),
+      sessionRef: 'dsh-session-01H8Z',
+      baseCommit: 'a1b2c3d',
+    })
+    expect(reports[0]?.assignment.task_id).toBe('tsk_1')
+    expect(platform.results[0]?.outcome).toBe('success')
+  })
+
+  it('reports an attempt that has no workspace to name a session for', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.reportSession('dsh-session-01H8Z')
+        return { outcome: 'success', summary: 'never reached' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary: 'the attempt threw: this attempt has no prepared workspace to report a session for',
+    })
   })
 
   it('keeps two attempts running at once within the slot budget', async () => {

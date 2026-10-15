@@ -84,6 +84,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `publishChanges` hands the attempt's work back. It commits under the robot identity injected per command — the host's global git configuration is never touched — and pushes the work branch, but only after the two checks the platform cannot make for it: every change must stay inside the workspace once symlinks resolve, and no changed text file may carry a credential. A refusal leaves nothing behind to push, and the result's evidence then reports the changed paths, the commit, and whether the branch was pushed, which is why a runner's own evidence is only used when the attempt published nothing.
 
+`checkoutSessionReporter` keeps the platform's view of a workspace's session true: the node records the session reference, the baseline commit it saw, and the task it served beside the workspace, and only then reports it, so a report the platform refuses never loses the reference. A restart reads those records back and re-reports them, which is what keeps the platform's workspace page showing the session and coding path of a node that just came up; that report is for display and troubleshooting only, so the platform refusing one is a warning rather than a failed handshake.
+
 ### Source map
 
 | File | Role |
@@ -95,6 +97,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | [`src/checkout.ts`](src/checkout.ts) | The code flow: fetch the cache, verify the dispatched base, reset the work branch |
 | [`src/git.ts`](src/git.ts) | The git boundary: argument-list spawning and redacted failures |
 | [`src/publish.ts`](src/publish.ts) | Handing work back: the pre-commit checks, the commit, and the push |
+| [`src/session.ts`](src/session.ts) | The session serving a workspace: what the node records and re-reports |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -104,7 +107,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 ### Invariant ownership
 
-The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it. A task's code only ever reaches its workspace through `prepareCheckout`, so a stale base is refused in one place and no runner can start work from a tree the platform did not dispatch, and it only ever leaves through `publishChanges`, which is where the workspace confinement and credential checks live.
+The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it. A task's code only ever reaches its workspace through `prepareCheckout`, so a stale base is refused in one place and no runner can start work from a tree the platform did not dispatch, and it only ever leaves through `publishChanges`, which is where the workspace confinement and credential checks live. What the platform knows about a workspace's session comes from one place too: the node records it beside the workspace before reporting it, so a refused report never costs the reference.
 
 </details>
 
@@ -131,7 +134,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
-- **Artifacts and evidence beyond the changes are the runner's** — the node commits and pushes; uploading artifacts, taking screenshots, and writing the report belong to the runner and are not implemented here.
+- **Artifacts and evidence beyond the changes are the runner's** — the node commits and pushes and reports the session; uploading artifacts, taking screenshots, and writing the report belong to the runner and are not implemented here, and the node cannot yet download the materials a task carries.
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.

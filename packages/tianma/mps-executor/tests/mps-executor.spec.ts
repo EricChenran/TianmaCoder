@@ -21,6 +21,7 @@ import {
   readNodeSecret,
   registerStopEffect,
   resolveExecutorSettings,
+  WorkspaceStore,
 } from '@tianma/dsh-mps-executor'
 import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport, ExecutorReport, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
 import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
@@ -770,6 +771,52 @@ describe('task claiming through the runtime', () => {
     expect(results[0]).toContain('failed')
     expect(reports.some(report => report.level === 'error')).toBe(false)
     node.stop()
+  })
+
+  it('re-reports the sessions it restored after a restart', async () => {
+    const settings = settingsFor()
+    const store = new WorkspaceStore({ root: settings.codingRoot })
+    await store.ensure('ws_1', 'tsk_1')
+    await store.setSession('ws_1', { ref: 'dsh-session-01H8Z', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(null),
+    ])
+    const node = new MpsExecutorRuntime({ settings, secret: () => 's', transport: queue.transport })
+
+    await node.restore()
+    await node.bootstrap()
+
+    const report = queue.calls.find(call => call.request.url.includes('/workspaces/ws_1/session'))
+    expect(report?.request.method).toBe('POST')
+    expect(report?.request.body).toContain('dsh-session-01H8Z')
+    expect(report?.request.body).toContain('"last_task_id":"tsk_1"')
+  })
+
+  it('keeps a refused session re-report from failing the handshake', async () => {
+    const settings = settingsFor()
+    const store = new WorkspaceStore({ root: settings.codingRoot })
+    await store.ensure('ws_1', 'tsk_1')
+    await store.setSession('ws_1', { ref: 'dsh-session-01H8Z', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      rejection('WORKSPACE_NOT_BOUND'),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings,
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.restore()
+    await expect(node.bootstrap()).resolves.toMatchObject({ node_id: 'node-1' })
+
+    expect(node.state).toBe('online')
+    expect(reports.some(report => report.level === 'warn' && report.message.includes('could not re-report the session of workspace ws_1'))).toBe(true)
   })
 
   it('holds its session when no runner is composed', () => {
