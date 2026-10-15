@@ -313,10 +313,11 @@ describe('task lifecycle', () => {
     })
 
     orchestrator.start()
-    // The attempt is taken first; then every renewal the platform answers with a failure.
+    // The attempt is taken first; then exactly two renewals, each answered with a failure: the
+    // first reports, and the second must be suppressed as the same wording.
     await vi.advanceTimersByTimeAsync(1_000)
-    platform.leaseAnswers.push(new Error('the platform is unreachable'))
-    await vi.advanceTimersByTimeAsync(900_000)
+    platform.leaseAnswers.push(new Error('the platform is unreachable'), new Error('the platform is unreachable'))
+    await vi.advanceTimersByTimeAsync(70_000)
     orchestrator.stop()
 
     // The case only means something if the renewal really was attempted more than once.
