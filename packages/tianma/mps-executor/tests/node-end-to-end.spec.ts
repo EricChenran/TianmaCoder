@@ -11,6 +11,7 @@
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -47,6 +48,15 @@ function temporary(prefix: string): string {
   return directory
 }
 
+/**
+ * The sha256 a platform states for the bytes it serves.
+ * @param bytes - the bytes.
+ * @returns the digest in lower-case hexadecimal.
+ */
+function sha256Of(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
 /** One request the node made. */
 interface Recorded {
   path: string
@@ -62,9 +72,22 @@ class PlatformStub {
   #port = 0
 
   #commands: Record<string, unknown>[] = []
+  #materials = new Map<string, { bytes: Buffer; digest: string }>()
 
   constructor(task: Record<string, unknown>) {
     this.#tasks = [task]
+  }
+
+  /**
+   * Serve one material this task references. The digest is what the platform states in the
+   * response header, so a test can state a wrong one on purpose.
+   * @param artifactId - the material's artifact id.
+   * @param body - the bytes to serve.
+   * @param digest - the sha256 the header states; the bytes' own digest by default.
+   */
+  serveMaterial(artifactId: string, body: string, digest?: string): void {
+    const bytes = Buffer.from(body, 'utf8')
+    this.#materials.set(artifactId, { bytes, digest: digest ?? sha256Of(bytes) })
   }
 
   /**
@@ -150,6 +173,23 @@ class PlatformStub {
         return
       }
       return this.#envelope(response, { task: next })
+    }
+    const material = /\/resources\/([^/]+)$/u.exec(path)
+    if (material !== null) {
+      const served = this.#materials.get(material[1] ?? '')
+      if (served === undefined) {
+        response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({
+          code: 'RESOURCE_NOT_IN_SCOPE', msg: 'no such material', data: null, requestId: 'req_e2e',
+        }))
+        return
+      }
+      // The download carries the bytes themselves, with the digest the platform states.
+      response.writeHead(200, {
+        'content-type': 'application/octet-stream',
+        'x-artifact-sha256': served.digest,
+        'content-length': String(served.bytes.byteLength),
+      }).end(served.bytes)
+      return
     }
     if (path.endsWith('/result')) {
       const taskId = /\/tasks\/([^/]+)\/result/u.exec(path)?.[1] ?? ''
@@ -326,6 +366,103 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('brings a task material in before the attempt starts', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_material',
+      work_item_id: 'wi_material',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '按材料里的要求改' },
+        context: { resources: ['art_material'] },
+        workspace: {
+          workspace_id: 'ws_material',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_material' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    platform.serveMaterial('art_material', '# 需求说明：按类型筛选\n')
+    const port = await platform.listen()
+    let taskBook = ''
+    let material = ''
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_material/result').length > 0)
+      // The material and the book that names it are in the workspace the attempt worked in.
+      const directory = join(workspaceRoot, 'coding', 'ws_material')
+      taskBook = readFileSync(join(directory, 'PROMPT.md'), 'utf8')
+      material = readFileSync(join(directory, '.materials', 'art_material'), 'utf8')
+    } finally {
+      await platform.close()
+    }
+
+    expect(platform.at('/exec/v1/tasks/tsk_material/resources/art_material')).toHaveLength(1)
+    expect(material).toBe('# 需求说明：按类型筛选\n')
+    // The agent is pointed at it, which is how it reads the requirement at all.
+    expect(taskBook).toContain('.materials')
+    expect(taskBook).toContain('art_material')
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_material/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+  }, 120_000)
+
+  it('refuses to start on a material whose bytes do not match the stated digest', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_tampered',
+      work_item_id: 'wi_tampered',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '用一份被篡改的材料' },
+        context: { resources: ['art_tampered'] },
+        workspace: {
+          workspace_id: 'ws_tampered',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_tampered' },
+        },
+        constraints: { must_stay_in_workspace: false },
+      },
+    })
+    // The header states a digest the bytes do not have, which is what tampering looks like.
+    platform.serveMaterial('art_tampered', 'changed on the way\n', 'f'.repeat(64))
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_tampered/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    // The attempt is blocked rather than run on material it cannot trust, and the agent
+    // never started: no work was done and nothing was delivered.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_tampered/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'blocked' })
+    expect(String(result['summary'])).toContain('could not bring in the task')
+    expect((result['evidence'] as Record<string, unknown>)['changed_files']).toEqual([])
   }, 120_000)
 
   it('keeps working through an outage, and loses none of the log', async () => {
