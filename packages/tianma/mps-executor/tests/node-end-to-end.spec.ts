@@ -204,9 +204,12 @@ class PlatformStub {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(chunk as Buffer)
     const path = (request.url ?? '').split('?')[0] ?? ''
+    const body = Buffer.concat(chunks)
+    // A chunk is megabytes; what a test needs from it is which piece arrived and how big.
+    const index = /[?&]index=(\d+)/u.exec(request.url ?? '')?.[1] ?? '?'
     this.requests.push({
       path,
-      body: Buffer.concat(chunks).toString('utf8'),
+      body: path.endsWith('/chunk') ? `chunk ${index} ${String(body.byteLength)}` : body.toString('utf8'),
       contentType: request.headers['content-type'],
     })
     if (path === '/exec/v1/auth/token') return this.#envelope(response, { token: 'tok', expires_at: 'e', node_id: 'node-e2e' })
@@ -261,6 +264,12 @@ class PlatformStub {
       const taskId = /\/tasks\/([^/]+)\/result/u.exec(path)?.[1] ?? ''
       return this.#envelope(response, { task_id: taskId, accepted: true, already_final: false, work_item_state: 'done', next: 'verify' })
     }
+    // The chunked upload the protocol requires above its single-request ceiling.
+    if (path.endsWith('/artifacts/init')) {
+      return this.#envelope(response, { upload_id: 'up_e2e', uploaded_chunks: [] })
+    }
+    if (path.endsWith('/chunk')) return this.#envelope(response, null)
+    if (path.endsWith('/complete')) return this.#envelope(response, null)
     if (path.endsWith('/artifacts')) return this.#envelope(response, { artifact_id: 'art_e2e' })
     return this.#envelope(response, null)
   }
@@ -907,6 +916,41 @@ describe('the node end to end', () => {
     expect(String(result['summary'])).toContain('could not bring in the task')
     expect((result['evidence'] as Record<string, unknown>)['changed_files']).toEqual([])
   }, 120_000)
+
+  it('chunks a report over the protocol ceiling instead of refusing it', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({
+      workspaceRoot,
+      logs,
+      mode: 'bigreport',
+      workspaceId: 'ws_big',
+      taskId: 'tsk_big',
+      base,
+      bare,
+      extra: { deliverables: { push_required: true, require_report: true, report_filename: 'BIG.md' } },
+    })
+
+    // 101 MiB at eight mebibytes a piece: the node opens an upload, sends every piece, and
+    // closes it, rather than handing the platform one request it would refuse.
+    const init = platform.at('/exec/v1/tasks/tsk_big/artifacts/init')
+    expect(init).toHaveLength(1)
+    const opened = JSON.parse(String(init[0]?.body)) as Record<string, unknown>
+    expect(opened).toMatchObject({ total_size: 101 * 1024 * 1024, chunk_size: 8 * 1024 * 1024 })
+    expect(String(opened['sha256'])).toMatch(/^[0-9a-f]{64}$/u)
+
+    const chunks = platform.at('/exec/v1/tasks/tsk_big/artifacts/up_e2e/chunk')
+    expect(chunks).toHaveLength(13)
+    expect(chunks.map(request => String(request.body).split(' ')[1])).toEqual(
+      Array.from({ length: 13 }, (_unused, index) => String(index)),
+    )
+    expect(platform.at('/exec/v1/tasks/tsk_big/artifacts/up_e2e/complete')).toHaveLength(1)
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_big/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(String((result['evidence'] as Record<string, unknown>)['report_artifact_id'])).toMatch(/^art-/u)
+  }, 180_000)
 
   it('still delivers an outcome the platform was away for', async () => {
     const root = temporary('mps-e2e-')

@@ -19,6 +19,11 @@ for (const event of events) console.log(JSON.stringify(event))
 
 // A later task in the same workspace changes the same file again, which is what makes a
 // second attempt in one workspace a real change rather than a repeat of the first.
+// A report over the protocol's single-request ceiling, which the node must chunk.
+if (process.argv[2] === 'bigreport') {
+  writeFileSync('BIG.md', Buffer.alloc(101 * 1024 * 1024, 'x'))
+}
+
 // An attempt that prints a credential, which the platform must never be told.
 if (process.argv[2] === 'secret') {
   console.log(JSON.stringify({ type: 'text', text: 'DEEPSEEK_API_KEY=sk-1234567890abcdef' }))
