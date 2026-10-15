@@ -89,7 +89,7 @@ const REGISTERED = {
   node_id: 'node-1',
   status: 'online',
   heartbeat_interval_seconds: 3,
-  claim_long_poll_seconds: 25,
+  claim_long_poll_seconds: 7,
   lease_ttl_seconds: 900,
   lease_renew_seconds: 30,
   config_revision: 1,
@@ -284,6 +284,8 @@ describe('node runtime', () => {
     ])
     const registered = await node.bootstrap()
     expect(registered.heartbeat_interval_seconds).toBe(3)
+    // The poll the platform stated is the one this node claims for, not the configured one.
+    expect(node.claimLongPollSeconds).toBe(7)
     expect(node.state).toBe('online')
     expect(node.token).toBe('tok')
     expect(node.heartbeatSeconds).toBe(3)

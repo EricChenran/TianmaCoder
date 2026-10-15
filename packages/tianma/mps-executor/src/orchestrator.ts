@@ -173,6 +173,11 @@ export interface TaskOrchestratorOptions {
    */
   canClaim?: (() => boolean) | undefined
   /**
+   * The claim long poll in force, which the platform assigns at registration; defaults to
+   * the configured value. It is read per claim, because a registration may change it.
+   */
+  claimLongPollSeconds?: (() => number) | undefined
+  /**
    * Reports the session serving an attempt's workspace. Without one, a runner's
    * `reportSession()` reports that the attempt has no workspace to report.
    */
@@ -235,6 +240,8 @@ export class TaskOrchestrator {
   readonly #spool: LogSpool
   /** Where an outcome waits when the platform cannot take it. */
   readonly #results: ResultSpool
+  /** How long a claim waits, as the platform most recently assigned it. */
+  readonly #claimLongPollSeconds: () => number
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
@@ -280,6 +287,7 @@ export class TaskOrchestrator {
       report: this.#report,
     })
     this.#canClaim = options.canClaim
+    this.#claimLongPollSeconds = options.claimLongPollSeconds ?? (() => options.settings.claimLongPollSeconds)
     this.#now = options.now ?? (() => new Date())
   }
 
@@ -338,7 +346,7 @@ export class TaskOrchestrator {
         lanes: [...this.#settings.capabilities.lanes],
         tools: [...this.#settings.capabilities.tools],
       },
-      max_wait_seconds: this.#settings.claimLongPollSeconds,
+      max_wait_seconds: this.#claimLongPollSeconds(),
     })
     if (assignment === undefined) return false
     this.#startAttempt(assignment)

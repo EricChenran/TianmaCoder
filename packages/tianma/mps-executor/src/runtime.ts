@@ -119,6 +119,8 @@ export class MpsExecutorRuntime {
   #state: NodeState = 'idle'
   #token: string | undefined
   #heartbeatSeconds: number
+  /** Claim long poll in force, as the platform most recently assigned it. */
+  #claimLongPollSeconds: number
   /** Agent version this node reported, probed once. */
   #version: string | undefined
   /** How the agent's version is probed, when a deployment composed a CLI to ask. */
@@ -149,6 +151,7 @@ export class MpsExecutorRuntime {
     this.#now = options.now ?? (() => new Date())
     this.#report = options.report ?? (() => {})
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
+    this.#claimLongPollSeconds = options.settings.claimLongPollSeconds
     this.#probeAgentVersion = options.probeAgentVersion
     this.#probeResources = options.probeResources
     this.#draining = drainingMarker(options.settings.codingRoot)
@@ -191,6 +194,7 @@ export class MpsExecutorRuntime {
       artifacts: clientArtifactUploader({ client: this.client, maxBytes: this.settings.maxArtifactBytes }),
       // Claiming stops while the disk is too full to hold another attempt.
       canClaim: () => this.#hasRoom,
+      claimLongPollSeconds: () => this.#claimLongPollSeconds,
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -228,6 +232,11 @@ export class MpsExecutorRuntime {
   /** The heartbeat period in force, as the platform most recently assigned it. */
   get heartbeatSeconds(): number {
     return this.#heartbeatSeconds
+  }
+
+  /** The claim long poll in force, as the platform most recently assigned it. */
+  get claimLongPollSeconds(): number {
+    return this.#claimLongPollSeconds
   }
 
   /** The task orchestrator, present only when a runner is composed. */
@@ -381,6 +390,11 @@ export class MpsExecutorRuntime {
       this.#configRevision = typeof revision === 'number' && Number.isFinite(revision) ? revision : undefined
       if (Number.isFinite(registered.heartbeat_interval_seconds) && registered.heartbeat_interval_seconds > 0) {
         this.#heartbeatSeconds = registered.heartbeat_interval_seconds
+      }
+      // The protocol has the platform state the poll it will hold a claim for; a node that
+      // waited a different length would hang past it or leave slots idle against its answer.
+      if (Number.isFinite(registered.claim_long_poll_seconds) && registered.claim_long_poll_seconds > 0) {
+        this.#claimLongPollSeconds = registered.claim_long_poll_seconds
       }
       this.#report({
         level: 'info',
