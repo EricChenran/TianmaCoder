@@ -162,9 +162,23 @@ function assignment(overrides: Partial<ExecTaskAssignment> = {}): ExecTaskAssign
 /** One node's resolved settings. */
 function settings(): ExecutorSettings {
   // The tools are stated so this suite reads the same on every machine; a node that
-  // states none probes the ones it has.
-  return resolveExecutorSettings({ platformHost: '10.0.0.7', nodeId: 'node-1', tools: ['node'] }, 'test-host')
+  // states none probes the ones it has. The roots are this suite's own: a node's coding
+  // root is where it writes its spools, and the default resolves against the working
+  // directory, which here is the repository.
+  const root = mkdtempSync(join(tmpdir(), 'mps-orchestrator-'))
+  scratch.push(root)
+  return resolveExecutorSettings(
+    { platformHost: '10.0.0.7', nodeId: 'node-1', tools: ['node'], workspaceRoot: root, codingRoot: join(root, 'coding') },
+    'test-host',
+  )
 }
+
+/** Roots this suite made, removed after each test. */
+const scratch: string[] = []
+
+afterEach(() => {
+  for (const root of scratch.splice(0)) rmSync(root, { recursive: true, force: true })
+})
 
 /** A runner that runs the given body. */
 function runnerOf(run: (context: TaskRunContext) => Promise<TaskRunResult>): TaskRunner {
