@@ -129,7 +129,8 @@ export interface TaskRunContext {
   /**
    * Submit log lines for this attempt.
    * @param stream - the stream the lines came from.
-   * @param lines - already-redacted lines, in order.
+   * @param lines - the lines in order; the node redacts and bounds them before they
+   * are submitted, so a runner hands over what it read.
    */
   reportLog(stream: string, lines: ExecLogLine[]): Promise<void>
 }

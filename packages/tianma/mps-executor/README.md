@@ -91,6 +91,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 The other direction is `resource()` on the runner's context: the node downloads a material the task carries — the brief, an input file the payload references — and checks it against the digest the platform states, so bytes that do not match never reach a runner. A refused material arrives as the usual envelope, so a runner sees the platform's own code rather than a bare status.
 
+`tianmaCliRunner` is the runner the node ships: it runs the tianmacoder CLI on one attempt and turns what that process did into a result. The node owns everything around the process — the working directory is the attempt's workspace, the command and instruction travel as an argument array rather than a shell line (an instruction is external input), what the run prints is streamed into the attempt's log as it arrives, cancellation asks the run to end and kills it after a grace period, and the raw log is written outside the workspace because everything inside the workspace is what the node commits. A run that exits non-zero, is stopped, or changes nothing is reported as failed rather than as a delivery; a run that changed files goes through `publish()`, which is where the commit, the push, and the pre-commit checks live.
+
 ### Source map
 
 | File | Role |
@@ -105,6 +107,7 @@ The other direction is `resource()` on the runner's context: the node downloads 
 | [`src/session.ts`](src/session.ts) | The session serving a workspace: what the node records and re-reports |
 | [`src/artifacts.ts`](src/artifacts.ts) | Uploading what an attempt produced: reads, the digest, and the size the node will transfer |
 | [`src/paths.ts`](src/paths.ts) | The one confinement rule for paths inside a coding workspace |
+| [`src/cli-runner.ts`](src/cli-runner.ts) | The runner: one CLI process per attempt, its logs, its stop, and its result |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -140,10 +143,13 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
-- **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
+- **The runner ships as a library** — the node claims and runs work only when a runner is composed as `ctx.mpsTaskRunner`; `tianmaCliRunner` is one, but nothing in the node bundle composes it yet, so a deployment wires it up or supplies its own.
 - **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented.
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
+- **The task book is not written yet** — the instruction travels as one argument, so a long transcript or rule set needs the task book the plan describes; Windows' command-line limit is why that matters.
+- **Materials are not placed in the workspace** — a runner can read them through `resource()`, but the node does not fetch them into the workspace before a run.
+- **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
 <a id="dev-note"></a>

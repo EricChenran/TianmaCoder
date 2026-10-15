@@ -60,6 +60,8 @@ export {
   filesCarryingSecrets,
   publishChanges,
 } from './publish.ts'
+export { RUNNER_STOP_GRACE_MS, runFailureSummary, stopRun, tianmaCliRunner } from './cli-runner.ts'
+export type { CliRunnerOptions } from './cli-runner.ts'
 export type {
   CheckoutPublisherOptions,
   GitIdentity,

@@ -94,6 +94,16 @@ export function taskRuntimeLimitMs(payload: Record<string, unknown>): number | u
 }
 
 /**
+ * Read the instruction a task carries, which is what a runner hands to the agent.
+ * @param payload - the payload a claim returned.
+ * @returns the instruction, or undefined when the payload states none.
+ */
+export function taskInstruction(payload: Record<string, unknown>): string | undefined {
+  const instruction = payloadField(payload, 'spec', 'raw_instruction')
+  return typeof instruction === 'string' && instruction.trim() !== '' ? instruction : undefined
+}
+
+/**
  * Read the workspace a task belongs to, which is the directory the node keeps for
  * that workspace across tasks and attempts.
  * @param payload - the payload a claim returned.

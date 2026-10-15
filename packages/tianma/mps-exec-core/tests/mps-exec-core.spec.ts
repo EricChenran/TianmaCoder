@@ -31,6 +31,7 @@ import {
   sha256Of,
   strongerOutcome,
   taskAttemptDelayMs,
+  taskInstruction,
   taskPolicy,
   taskRepository,
   taskRuntimeLimitMs,
@@ -810,6 +811,14 @@ describe('task vocabulary', () => {
     expect(taskRepository({ workspace: { repo: 'https://example.invalid/r.git' } })).toBeUndefined()
     expect(taskRepository({ workspace: {} })).toBeUndefined()
     expect(taskRepository({})).toBeUndefined()
+  })
+
+  it('reads the instruction a task carries', () => {
+    expect(taskInstruction({ spec: { raw_instruction: '增加批量下载' } })).toBe('增加批量下载')
+    expect(taskInstruction({ spec: { raw_instruction: '  ' } })).toBeUndefined()
+    expect(taskInstruction({ spec: { raw_instruction: 7 } })).toBeUndefined()
+    expect(taskInstruction({ spec: 'none' })).toBeUndefined()
+    expect(taskInstruction({})).toBeUndefined()
   })
 
   it('reads the constraints and delivery promises a payload states', () => {
