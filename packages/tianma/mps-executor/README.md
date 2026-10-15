@@ -89,6 +89,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `clientArtifactUploader` stores what an attempt produced. It reads the file only from inside the workspace, computes the SHA-256 the platform verifies the contents against, mints the idempotency key, and uploads it as multipart, because a file transfer needs a body the transport cannot JSON-encode. It refuses a file it cannot transfer — a path outside the workspace, something that is not a file, or more bytes than one request may carry — rather than failing a transfer halfway, and it never claims more than the protocol's single-request ceiling however a deployment configures its own limit. `paths.ts` holds the confinement rule both directions use, so reading an artifact and reporting a change are held to the same one.
 
+The other direction is `resource()` on the runner's context: the node downloads a material the task carries — the brief, an input file the payload references — and checks it against the digest the platform states, so bytes that do not match never reach a runner. A refused material arrives as the usual envelope, so a runner sees the platform's own code rather than a bare status.
+
 ### Source map
 
 | File | Role |
@@ -139,7 +141,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
-- **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented; the materials a task carries cannot be downloaded yet either.
+- **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented.
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.

@@ -26,6 +26,7 @@ import type {
   ExecLogLine,
   ExecLogRequest,
   ExecProgressRequest,
+  ExecResource,
   ExecResultEvidence,
   ExecResultRequest,
   ExecResultResponse,
@@ -45,6 +46,14 @@ import type { TaskSessionReporter } from './session.ts'
 
 /** The protocol calls the task lifecycle makes. */
 export interface TaskPlatformClient {
+  /**
+   * Download one task material, verified against the digest the platform states.
+   * @param taskId - the task.
+   * @param artifactId - the material, which the platform checks belongs to the task.
+   * @param signal - caller cancellation.
+   * @returns the verified contents and the digest.
+   */
+  resource(taskId: string, artifactId: string, signal?: AbortSignal): Promise<ExecResource>
   /**
    * Ask for one task, long-polling until the budget runs out.
    * @param body - the claim request.
@@ -431,6 +440,7 @@ export class TaskOrchestrator {
             publish: async () => await this.#publish(running, workspace),
             uploadArtifact: async (kind: ExecArtifactKind, path: string, meta?: Record<string, unknown>) =>
               await this.#uploadArtifact(running, workspace, kind, path, meta),
+            resource: async (artifactId: string) => await this.#resource(running, artifactId),
             reportSession: async (sessionRef: string) => { await this.#reportSession(running, workspace, sessionRef) },
             signal: running.controller.signal,
             reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
@@ -500,6 +510,16 @@ export class TaskOrchestrator {
       meta,
       signal: running.controller.signal,
     })
+  }
+
+  /**
+   * Download one of the materials this attempt's task carries.
+   * @param running - the attempt.
+   * @param artifactId - the material, which the platform checks belongs to the task.
+   * @returns the verified contents and the digest.
+   */
+  async #resource(running: RunningAttempt, artifactId: string): Promise<ExecResource> {
+    return await this.#client.resource(running.assignment.task_id, artifactId, running.controller.signal)
   }
 
   /**

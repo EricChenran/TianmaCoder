@@ -25,6 +25,7 @@ import {
   boundLogLine,
   resolveExecutorSettings,
 } from '@tianma/dsh-mps-executor'
+import type { ExecResource } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecutorReport,
   ExecutorSettings,
@@ -49,6 +50,7 @@ class FakePlatform implements TaskPlatformClient {
   readonly logs: ExecLogRequest[] = []
   readonly results: ExecResultRequest[] = []
   readonly abortAcks: ExecAbortAckRequest[] = []
+  readonly resources: { taskId: string; artifactId: string }[] = []
   readonly assignments: (ExecTaskAssignment | undefined)[] = []
   readonly leaseAnswers: (ExecLeaseResult | Error)[] = []
   readonly resultAnswers: (ExecResultResponse | Error)[] = []
@@ -57,9 +59,16 @@ class FakePlatform implements TaskPlatformClient {
   leaseGate: Promise<void> | undefined
   /** Failure the platform answers an abort acknowledgement with. */
   abortAckError: Error | undefined
+  /** Failure the platform answers a material download with. */
+  resourceError: Error | undefined
 
-  async claim(body: ExecClaimRequest): Promise<ExecTaskAssignment | undefined> {
-    this.claims.push(body)
+  async resource(taskId: string, artifactId: string): Promise<ExecResource> {
+    this.resources.push({ taskId, artifactId })
+    if (this.resourceError !== undefined) throw this.resourceError
+    return { bytes: new TextEncoder().encode(`# ${artifactId}\n`), sha256: 'sha-of-material' }
+  }
+
+  async claim(body: ExecClaimRequest): Promise<ExecTaskAssignment | undefined> {    this.claims.push(body)
     if (this.claimError !== undefined) throw this.claimError
     return this.assignments.shift()
   }
@@ -1021,6 +1030,45 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({
       outcome: 'failed',
       summary: 'the attempt threw: this attempt has no prepared workspace to upload from',
+    })
+  })
+
+  it('downloads a material a runner asks for', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        const material = await context.resource('art_01H8Z')
+        return { outcome: 'success', summary: `read ${new TextDecoder().decode(material.bytes).trim()}` }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.resources).toEqual([{ taskId: 'tsk_1', artifactId: 'art_01H8Z' }])
+    expect(platform.results[0]?.summary).toBe('read # art_01H8Z')
+  })
+
+  it('reports an attempt whose material the platform refuses', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.resourceError = new Error('RESOURCE_NOT_IN_SCOPE: not in scope')
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.resource('art_9')
+        return { outcome: 'success', summary: 'never reached' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary: 'the attempt threw: RESOURCE_NOT_IN_SCOPE: not in scope',
     })
   })
 

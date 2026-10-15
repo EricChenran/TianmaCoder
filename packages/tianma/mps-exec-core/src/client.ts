@@ -53,6 +53,27 @@ export interface ExecHttpResponse {
 /** Performs one HTTP request and returns its response. */
 export type ExecHttpTransport = (request: ExecHttpRequest) => Promise<ExecHttpResponse>
 
+/** A response whose body is a file rather than an envelope. */
+export interface ExecBinaryResponse {
+  /** HTTP status. */
+  status: number
+  /** Response headers, keyed by lower-case name. */
+  headers: Record<string, string>
+  /** Response body as bytes. */
+  bytes: Uint8Array
+}
+
+/** Performs one HTTP request whose response is a file. */
+export type ExecHttpDownload = (request: ExecHttpRequest) => Promise<ExecBinaryResponse>
+
+/** One task material the node downloaded and verified. */
+export interface ExecResource {
+  /** The material's contents. */
+  bytes: Uint8Array
+  /** Digest the node computed and checked against the platform's. */
+  sha256: string
+}
+
 /** Options for {@link ExecClient}. */
 export interface ExecClientOptions {
   /** The resolved platform address. */
@@ -61,6 +82,8 @@ export interface ExecClientOptions {
   nodeId: string
   /** Transport override; defaults to `fetch`. */
   transport?: ExecHttpTransport | undefined
+  /** Download override for file responses; defaults to `fetch`. */
+  download?: ExecHttpDownload | undefined
   /** Current bearer token, or `undefined` before authentication. */
   token?: (() => string | undefined) | undefined
   /** Budget for ordinary requests. */
@@ -422,17 +445,50 @@ export function sha256Of(bytes: Uint8Array): string {
  */
 export function createFetchTransport(fetchImpl: typeof fetch = fetch): ExecHttpTransport {
   return async (request: ExecHttpRequest): Promise<ExecHttpResponse> => {
-    const timeout = AbortSignal.timeout(request.timeoutMs)
-    const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal])
-    const init: RequestInit = { method: request.method, headers: request.headers, signal }
-    if (request.body !== undefined) init.body = request.body
-    const response = await fetchImpl(request.url, init)
-    const headers: Record<string, string> = {}
-    response.headers.forEach((value, name) => {
-      headers[name.toLowerCase()] = value
-    })
+    const response = await sendFetch(fetchImpl, request)
+    const headers = lowerCasedHeaders(response)
     return { status: response.status, headers, text: await response.text() }
   }
+}
+
+/**
+ * Wrap `fetch` as the download transport, for responses that are files.
+ * @param fetchImpl - the `fetch` implementation to call; defaults to the global one.
+ * @returns the download transport.
+ */
+export function createFetchDownload(fetchImpl: typeof fetch = fetch): ExecHttpDownload {
+  return async (request: ExecHttpRequest): Promise<ExecBinaryResponse> => {
+    const response = await sendFetch(fetchImpl, request)
+    const headers = lowerCasedHeaders(response)
+    return { status: response.status, headers, bytes: new Uint8Array(await response.arrayBuffer()) }
+  }
+}
+
+/**
+ * Perform one request with the budget and cancellation the caller asked for.
+ * @param fetchImpl - the `fetch` implementation.
+ * @param request - the request to send.
+ * @returns the response, before its body is read.
+ */
+async function sendFetch(fetchImpl: typeof fetch, request: ExecHttpRequest): Promise<Response> {
+  const timeout = AbortSignal.timeout(request.timeoutMs)
+  const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal])
+  const init: RequestInit = { method: request.method, headers: request.headers, signal }
+  if (request.body !== undefined) init.body = request.body
+  return await fetchImpl(request.url, init)
+}
+
+/**
+ * Read a response's header names the way the rest of the client does.
+ * @param response - the response.
+ * @returns the headers, keyed by lower-case name.
+ */
+function lowerCasedHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {}
+  response.headers.forEach((value, name) => {
+    headers[name.toLowerCase()] = value
+  })
+  return headers
 }
 
 /**
@@ -444,6 +500,7 @@ export class ExecClient {
   readonly #endpoint: PlatformEndpoint
   readonly #nodeId: string
   readonly #transport: ExecHttpTransport
+  readonly #download: ExecHttpDownload
   readonly #token: () => string | undefined
   readonly #requestTimeoutMs: number
   readonly #artifactTimeoutMs: number
@@ -455,6 +512,7 @@ export class ExecClient {
     this.#endpoint = options.endpoint
     this.#nodeId = options.nodeId
     this.#transport = options.transport ?? createFetchTransport()
+    this.#download = options.download ?? createFetchDownload()
     this.#token = options.token ?? (() => undefined)
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000
     this.#artifactTimeoutMs = options.artifactTimeoutMs ?? 15 * 60 * 1000
@@ -484,12 +542,7 @@ export class ExecClient {
     timeoutMs: number = this.#requestTimeoutMs,
     signal?: AbortSignal,
   ): Promise<{ status: number; envelope: ExecEnvelope<unknown> | undefined; headers: Record<string, string> }> {
-    const token = this.#token()
-    const headers: Record<string, string> = {
-      [EXEC_PROTOCOL_HEADER]: EXEC_PROTOCOL_VERSION,
-      accept: 'application/json',
-    }
-    if (token !== undefined && token !== '') headers.authorization = `Bearer ${token}`
+    const headers = this.#requestHeaders()
     const multipart = payload instanceof FormData
     if (payload !== undefined && !multipart) headers['content-type'] = 'application/json; charset=utf-8'
     const response = await this.#transport({
@@ -500,17 +553,67 @@ export class ExecClient {
       timeoutMs,
       signal,
     })
-    if (response.status === 204) return { status: response.status, envelope: undefined, headers: response.headers }
-    if (response.text.trim() === '') {
-      throw new TypeError(`exec response for ${path} carried no body (HTTP ${String(response.status)})`)
+    return { status: response.status, envelope: this.#envelopeOf(path, response.status, response.text), headers: response.headers }
+  }
+
+  /**
+   * The headers every request carries.
+   * @returns the protocol header and the bearer token once authenticated.
+   */
+  #requestHeaders(): Record<string, string> {
+    const token = this.#token()
+    const headers: Record<string, string> = {
+      [EXEC_PROTOCOL_HEADER]: EXEC_PROTOCOL_VERSION,
+      accept: 'application/json',
+    }
+    if (token !== undefined && token !== '') headers.authorization = `Bearer ${token}`
+    return headers
+  }
+
+  /**
+   * Read the envelope one response carries.
+   * @param path - protocol path, for the failure text.
+   * @param status - HTTP status.
+   * @param text - response body as text.
+   * @returns the envelope, or undefined when the status carries no body.
+   */
+  #envelopeOf(path: string, status: number, text: string): ExecEnvelope<unknown> | undefined {
+    if (status === 204) return undefined
+    if (text.trim() === '') {
+      throw new TypeError(`exec response for ${path} carried no body (HTTP ${String(status)})`)
     }
     let decoded: unknown
     try {
-      decoded = JSON.parse(response.text)
+      decoded = JSON.parse(text)
     } catch {
-      throw new TypeError(`exec response for ${path} was not JSON (HTTP ${String(response.status)})`)
+      throw new TypeError(`exec response for ${path} was not JSON (HTTP ${String(status)})`)
     }
-    return { status: response.status, envelope: parseExecEnvelope(decoded), headers: response.headers }
+    return parseExecEnvelope(decoded)
+  }
+
+  /**
+   * Require a response's envelope to carry success.
+   * @param path - protocol path, for the failure text.
+   * @param status - HTTP status.
+   * @param envelope - the envelope, or undefined when the status carried no body.
+   * @returns the payload.
+   */
+  #requireOk<T>(path: string, status: number, envelope: ExecEnvelope<unknown> | undefined): T {
+    if (envelope === undefined) {
+      throw new ExecResponseError(`exec response for ${path} carried no envelope`, {
+        code: 'INTERNAL_ERROR',
+        httpStatus: status,
+      })
+    }
+    if (envelope.code !== EXEC_OK_CODE && !isAlreadyFinal(envelope.code)) {
+      const detail = envelope.msg === '' ? '' : `: ${envelope.msg}`
+      throw new ExecResponseError(`${envelope.code}${detail}`, {
+        code: envelope.code,
+        httpStatus: status,
+        requestId: envelope.requestId,
+      })
+    }
+    return envelope.data as T
   }
 
   /**
@@ -529,21 +632,40 @@ export class ExecClient {
     signal?: AbortSignal,
   ): Promise<T> {
     const { status, envelope } = await this.#send(path, payload, timeoutMs, signal)
-    if (envelope === undefined) {
-      throw new ExecResponseError(`exec response for ${path} carried no envelope`, {
-        code: 'INTERNAL_ERROR',
-        httpStatus: status,
+    return this.#requireOk<T>(path, status, envelope)
+  }
+
+  /**
+   * Download one task material and check it against the digest the platform states.
+   * The protocol requires the node to verify it, so bytes that do not match are
+   * never handed to a caller.
+   * @param taskId - task id.
+   * @param artifactId - the material, which the platform checks belongs to the task.
+   * @param signal - caller cancellation.
+   * @returns the verified contents and the digest.
+   */
+  async resource(taskId: string, artifactId: string, signal?: AbortSignal): Promise<ExecResource> {
+    const path = `/tasks/${taskId}/resources/${artifactId}`
+    const response = await this.#download({
+      url: this.#endpoint.url(path),
+      method: 'GET',
+      headers: this.#requestHeaders(),
+      timeoutMs: this.#requestTimeoutMs,
+      signal,
+    })
+    if (response.status !== 200) {
+      // A refusal arrives as the usual envelope rather than as the file itself.
+      const envelope = this.#envelopeOf(path, response.status, new TextDecoder().decode(response.bytes))
+      this.#requireOk<unknown>(path, response.status, envelope)
+    }
+    const sha256 = sha256Of(response.bytes)
+    if (response.headers['x-artifact-sha256'] !== sha256) {
+      throw new ExecResponseError(`resource ${artifactId} did not match the digest the platform stated`, {
+        code: 'CHECKSUM_MISMATCH',
+        httpStatus: response.status,
       })
     }
-    if (envelope.code !== EXEC_OK_CODE && !isAlreadyFinal(envelope.code)) {
-      const detail = envelope.msg === '' ? '' : `: ${envelope.msg}`
-      throw new ExecResponseError(`${envelope.code}${detail}`, {
-        code: envelope.code,
-        httpStatus: status,
-        requestId: envelope.requestId,
-      })
-    }
-    return envelope.data as T
+    return { bytes: response.bytes, sha256 }
   }
 
   /**

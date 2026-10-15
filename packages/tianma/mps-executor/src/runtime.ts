@@ -17,6 +17,7 @@ import {
 import type {
   ExecCommand,
   ExecHeartbeatResult,
+  ExecHttpDownload,
   ExecHttpTransport,
   ExecRegisterResult,
   ExecResources,
@@ -67,6 +68,8 @@ export interface ExecutorRuntimeOptions {
   runner?: TaskRunnerSource | undefined
   /** Transport override; defaults to `fetch`. */
   transport?: ExecHttpTransport | undefined
+  /** Download override for file responses; defaults to `fetch`. */
+  download?: ExecHttpDownload | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
   /** Operator-visible event sink; defaults to discarding events. */
@@ -111,6 +114,7 @@ export class MpsExecutorRuntime {
       endpoint: options.settings.endpoint,
       nodeId: options.settings.nodeId,
       transport: options.transport,
+      download: options.download,
       token: () => this.#token,
       requestTimeoutMs: options.settings.requestTimeoutMs,
     })

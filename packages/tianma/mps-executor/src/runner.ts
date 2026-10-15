@@ -10,6 +10,7 @@
 import type {
   ExecArtifactKind,
   ExecLogLine,
+  ExecResource,
   ExecResultEvidence,
   ExecTaskAssignment,
   TaskOutcome,
@@ -82,6 +83,14 @@ export interface TaskRunContext {
    * no repository. The runner works on this branch and pushes it.
    */
   checkout: TaskCheckout | undefined
+  /**
+   * Download one of the materials this attempt's task carries, such as the task
+   * brief or an input file the payload references. The node checks the contents
+   * against the digest the platform states before handing them over.
+   * @param artifactId - the material, which the platform checks belongs to the task.
+   * @returns the verified contents and the digest.
+   */
+  resource(artifactId: string): Promise<ExecResource>
   /**
    * Upload one file this attempt produced, such as a screenshot, a report, or a
    * build log. The node reads it from inside the workspace, digests it, and refuses

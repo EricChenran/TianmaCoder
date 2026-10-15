@@ -15,6 +15,7 @@ import {
   ExecResponseError,
   artifactId,
   containsSecretPattern,
+  createFetchDownload,
   createFetchTransport,
   formatRfc3339,
   isAlreadyFinal,
@@ -36,7 +37,7 @@ import {
   taskWorkspaceId,
   ulid,
 } from '@tianma/dsh-mps-exec-core'
-import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'
+import type { ExecBinaryResponse, ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'
 
 /** One recorded transport call plus the response it returned. */
 interface RecordedCall {
@@ -397,16 +398,36 @@ describe('protocol client', () => {
   function client(
     responses: (ExecHttpResponse | ((request: ExecHttpRequest) => ExecHttpResponse))[],
     token?: string,
+    downloads: ExecBinaryResponse[] = [],
   ): { client: ExecClient; calls: RecordedCall[]; setToken: (value: string | undefined) => void } {
     const script = scripted(responses)
     let current = token
+    let downloaded = 0
     const instance = new ExecClient({
       endpoint,
       nodeId: 'node-3f2a',
       transport: script.transport,
       token: () => current,
+      download: async (request) => {
+        script.calls.push({ request })
+        const response = downloads[Math.min(downloaded, downloads.length - 1)]
+        downloaded += 1
+        if (response === undefined) throw new Error('scripted download ran out of responses')
+        return response
+      },
     })
     return { client: instance, calls: script.calls, setToken: (value) => { current = value } }
+  }
+
+  /**
+   * Build one file response.
+   * @param bytes - the file contents.
+   * @param sha256 - the digest the platform states, defaulting to the true one.
+   * @param status - HTTP status.
+   * @returns the response.
+   */
+  function file(bytes: Uint8Array, sha256: string = sha256Of(bytes), status = 200): ExecBinaryResponse {
+    return { status, headers: { 'x-artifact-sha256': sha256 }, bytes }
   }
 
   it('exposes the address and node id it was built with', () => {
@@ -682,6 +703,55 @@ describe('protocol client', () => {
     if (!(body instanceof FormData)) throw new Error('the artifact upload was not multipart')
     expect(body.get('meta')).toBe('{}')
     expect(body.get('kind')).toBe('log')
+  })
+
+  it('downloads a task material and checks it against the stated digest', async () => {
+    const bytes = new TextEncoder().encode('# 需求说明\n')
+    const { client: instance, calls } = client([], 'tok', [file(bytes)])
+
+    const resource = await instance.resource('tsk_1', 'art_01H8Z')
+
+    expect(calls[0]?.request.method).toBe('GET')
+    expect(calls[0]?.request.url.endsWith('/exec/v1/tasks/tsk_1/resources/art_01H8Z')).toBe(true)
+    expect(calls[0]?.request.headers.authorization).toBe('Bearer tok')
+    expect(new TextDecoder().decode(resource.bytes)).toBe('# 需求说明\n')
+    expect(resource.sha256).toBe(sha256Of(bytes))
+  })
+
+  it('refuses material whose contents do not match the stated digest', async () => {
+    const bytes = new TextEncoder().encode('tampered\n')
+    const { client: instance } = client([], undefined, [file(bytes, sha256Of(new TextEncoder().encode('original\n')))])
+
+    await expect(instance.resource('tsk_1', 'art_01H8Z')).rejects.toMatchObject({ code: 'CHECKSUM_MISMATCH' })
+  })
+
+  it('reports the envelope when the platform refuses the download', async () => {
+    const refusal = JSON.stringify({ code: 'RESOURCE_NOT_IN_SCOPE', msg: 'not in scope', data: null, requestId: 'req_2', serverTime: 't' })
+    const { client: instance } = client([], undefined, [
+      { status: 403, headers: {}, bytes: new TextEncoder().encode(refusal) },
+    ])
+
+    await expect(instance.resource('tsk_1', 'art_9')).rejects.toMatchObject({ code: 'RESOURCE_NOT_IN_SCOPE' })
+  })
+
+  it('reads a file response through the default download transport', async () => {
+    const bytes = new TextEncoder().encode('材料\n')
+    const fetchImpl = async (_url: string, init: RequestInit | undefined): Promise<Response> => {
+      expect(init?.method).toBe('GET')
+      return new Response(bytes, { status: 200, headers: { 'X-Artifact-Sha256': sha256Of(bytes) } })
+    }
+    const download = createFetchDownload(fetchImpl as typeof fetch)
+
+    const response = await download({
+      url: 'http://10.0.0.7:8791/exec/v1/tasks/tsk_1/resources/art_1',
+      method: 'GET',
+      headers: {},
+      timeoutMs: 1000,
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers['x-artifact-sha256']).toBe(sha256Of(bytes))
+    expect(new TextDecoder().decode(response.bytes)).toBe('材料\n')
   })
 
   it('digests bytes the same way the platform checks them', () => {
