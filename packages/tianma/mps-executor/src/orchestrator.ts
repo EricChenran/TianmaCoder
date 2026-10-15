@@ -36,6 +36,8 @@ import type {
   TaskProgress,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecutorSettings } from './config.ts'
+import { logSpool } from './log-spool.ts'
+import type { LogSpool } from './log-spool.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunResult, TaskRunner, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
@@ -227,6 +229,8 @@ export class TaskOrchestrator {
   readonly #sessions: TaskSessionReporter | undefined
   readonly #artifacts: TaskArtifactUploader | undefined
   readonly #hooks: TaskOrchestratorHooks
+  /** Where a batch waits when the platform cannot take it. */
+  readonly #spool: LogSpool
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
@@ -250,6 +254,11 @@ export class TaskOrchestrator {
     this.#artifacts = options.artifacts
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
+    this.#spool = logSpool({
+      root: options.settings.codingRoot,
+      send: async (taskId, batch) => { await this.#client.log(taskId, batch) },
+      report: this.#report,
+    })
     this.#canClaim = options.canClaim
     this.#now = options.now ?? (() => new Date())
   }
@@ -338,6 +347,9 @@ export class TaskOrchestrator {
         await this.#pause(SLOT_WAIT_MS)
         continue
       }
+      // Offer anything the platform has not taken yet, so a task's log does not wait for
+      // the attempt to end before it is whole.
+      await this.#spool.flush()
       if (this.#canClaim?.() === false) {
         // A node without room claims nothing; whoever knows why has already reported it.
         await this.#pause(SLOT_WAIT_MS)
@@ -599,7 +611,9 @@ export class TaskOrchestrator {
     })
     for (let start = 0; start < bounded.length; start += LOG_BATCH_MAX_LINES) {
       const batch = bounded.slice(start, start + LOG_BATCH_MAX_LINES)
-      await this.#client.log(running.assignment.task_id, {
+      // Through the spool: a platform that is briefly unreachable must not cost the lines
+      // an attempt produced, and the batch id makes offering them twice harmless.
+      await this.#spool.post(running.assignment.task_id, {
         batch_id: logBatchId(),
         stream,
         lines: batch.map(({ at, level, text }) => ({ at, level, text })),

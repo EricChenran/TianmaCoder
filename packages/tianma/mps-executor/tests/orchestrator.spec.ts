@@ -5,6 +5,8 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ExecResponseError, recoveryForCode } from '@tianma/dsh-mps-exec-core'
 import type {
@@ -195,6 +197,42 @@ function orchestratorWith(options: {
 }
 
 describe('task lifecycle', () => {
+  it('keeps and resends a log batch the platform could not take', async () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'mps-orch-spool-'))
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    let failures = 1
+    const delivered = platform.log.bind(platform)
+    platform.log = async (taskId, body) => {
+      if (failures > 0) {
+        failures -= 1
+        throw new Error('the platform is unreachable')
+      }
+      await delivered(taskId, body)
+    }
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      settings: { ...settings(), codingRoot: root },
+      runner: runnerOf(async (context) => {
+        await context.reportLog('stdout', [{ at: '2026-10-15T04:03:55.123Z', level: 'info', text: '改了 feature.txt' }])
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    orchestrator.start()
+    await vi.advanceTimersByTimeAsync(5_000)
+    orchestrator.stop()
+    rmSync(root, { recursive: true, force: true })
+
+    // The batch was refused once, so it waited on disk and the next claim offered it again.
+    expect(platform.logs.length).toBeGreaterThan(0)
+    expect(platform.logs.some(entry => entry.lines.some(line => line.text.includes('改了 feature.txt')))).toBe(true)
+    expect(reports.some(report => report.message.includes('kept 1 log line(s)'))).toBe(true)
+  })
+
   it('keeps the claim loop paused until the node says it has room', async () => {
     vi.useFakeTimers()
     const platform = new FakePlatform()

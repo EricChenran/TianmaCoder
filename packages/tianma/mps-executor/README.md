@@ -116,6 +116,8 @@ The capabilities a node registers are probed, because the platform schedules on 
 
 Every heartbeat carries a reading of this machine — the free space on the disk the coding workspaces live on, the memory in use, and the CPU time spent between two readings — because the platform schedules on what a node has. When that free space falls below `diskMinGb` the node stops claiming work, says so once per state change, and names the workspaces it keeps; it never deletes one, because releasing a bound workspace is the platform's decision.
 
+A log batch the platform could not take waits on disk instead of disappearing: the lines describe work that already happened, so the node keeps them under the coding root and offers them again under the same batch id, which the platform deduplicates. A batch the platform answers on is dropped when it refuses that batch outright, and the node says so — a gap in the log reaches the operator rather than being retried forever.
+
 ### Source map
 
 | File | Role |
@@ -176,6 +178,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
 - **Screenshots are declared, not captured** — the node takes no screenshots: it reads what the attempt declared in `.evidence/screenshots.json`, checks that each file is there and at least as large as the platform accepts, and uploads them with the metadata the declaration states. The platform's own content checks are the platform's.
+- **A spooled log waits by task** — the spool keeps one file per task under the coding root's `.buffers`, so a batch whose task the platform has since forgotten is dropped with a report rather than retried for the life of the node.
 - **The releasable list has nowhere to go** — the protocol's heartbeat carries the resource readings but no field for the workspaces a full node could release, so that list reaches the operator through the node's own report and the platform sees only the reading.
 - **Platform configuration is partly followed** — the node acts on the heartbeat interval; the claim long poll, the log batch caps, the artifact ceiling, and the redaction rules stay at the values this node declared in its capabilities, and the node says so in its report when the platform states different ones.
 - **Progress inside a run is estimated** — the event stream reports each turn and tool call, but the node states no percentage for them: only the stages it knows for certain (coding, collecting evidence, uploading) carry one.

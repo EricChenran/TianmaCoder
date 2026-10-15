@@ -37,6 +37,8 @@ export { PROBED_TOOLS, probeAgentVersion, probeTools, versionFrom } from './capa
 export type { ProbeAgentVersionOptions, ProbeToolsOptions } from './capabilities.ts'
 export { cpuCounters, cpuPercent, resourceReader } from './resources.ts'
 export type { CpuCounters, ResourceReader, ResourceReaderOptions } from './resources.ts'
+export { LOG_SPOOL_DIRECTORY, logSpool } from './log-spool.ts'
+export type { LogSpool, LogSpoolOptions, SpooledBatch } from './log-spool.ts'
 export { releasableWorkspaces } from './workspace.ts'
 export { MpsExecutorRuntime } from './runtime.ts'
 export type { ExecutorReport, NodeState } from './runtime.ts'
