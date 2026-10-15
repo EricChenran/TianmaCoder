@@ -248,6 +248,9 @@ export class TaskOrchestrator {
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
+  /** The last wording reported for each repeating failure, so a repeat is not reported. */
+  readonly #reportedFailures = new Map<string, string>()
+
   readonly #now: () => Date
   readonly #attempts = new Map<string, RunningAttempt>()
   readonly #pauses = new Map<NodeJS.Timeout, () => void>()
@@ -469,7 +472,9 @@ export class TaskOrchestrator {
       const lease = await this.#client.lease(taskId, attempt)
       if (!lease.should_continue) await this.#supersede(running)
     } catch (error) {
-      this.#report({ level: 'warn', message: `lease renewal failed for ${taskId}: ${toError(error).message}` })
+      // A renewal fails on every interval while the platform cannot take one; the same rule as
+      // the runtime's repeating failures keeps this from writing the same line each time.
+      this.#reportFailure(`lease:${taskId}`, `lease renewal failed for ${taskId}: ${toError(error).message}`)
     }
   }
 
@@ -655,6 +660,18 @@ export class TaskOrchestrator {
         message: `the session report for ${running.assignment.task_id} did not reach the platform: ${toError(error).message}`,
       })
     }
+  }
+
+  /**
+   * Report one repeating failure once, and again only when its wording changes.
+   * @param key - which failure this is, so kinds do not suppress each other.
+   * @param message - what to say.
+   * @returns nothing.
+   */
+  #reportFailure(key: string, message: string): void {
+    if (this.#reportedFailures.get(key) === message) return
+    this.#reportedFailures.set(key, message)
+    this.#report({ level: 'warn', message })
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {

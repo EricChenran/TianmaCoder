@@ -296,6 +296,34 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
   })
 
+  it('reports a renewal that keeps failing once, while its wording stays the same', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      // An attempt that stays running: a runner that settles clears the renewal timer this
+      // case is about before the platform can ever fail one.
+      runner: runnerOf(async (context) => {
+        await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }) })
+        return { outcome: 'cancelled', summary: 'stopped' }
+      }),
+    })
+
+    orchestrator.start()
+    // The attempt is taken first; then every renewal the platform answers with a failure.
+    await vi.advanceTimersByTimeAsync(1_000)
+    platform.leaseAnswers.push(new Error('the platform is unreachable'))
+    await vi.advanceTimersByTimeAsync(900_000)
+    orchestrator.stop()
+
+    // The case only means something if the renewal really was attempted more than once.
+    expect(platform.leases.length).toBeGreaterThan(1)
+    expect(reports.filter(report => report.message.includes('lease renewal failed'))).toHaveLength(1)
+  }, 60_000)
+
   it('reports the same claim failure once, and a different one when it changes', async () => {
     vi.useFakeTimers()
     const platform = new FakePlatform()
