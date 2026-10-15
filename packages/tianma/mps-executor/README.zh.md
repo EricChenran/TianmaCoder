@@ -102,6 +102,8 @@ kind: "package-reference"
 
 `read_only` 是节点唯一不推送的模式：它照常提交，然后把工作分支打成 git bundle 写进工作区内的 `.bundles/`（与任务书一样不进仓库），再由节点把它作为该次尝试的 `bundle` 产物上传，并把其 id 作为证据里的 `patch_artifact_id`、同时报 `pushed: false`。平台从该产物里取回改动——这正是它那份基线克隆的用途。
 
+`collectEvidence` 在尝试上报之前产出交付要求所需的证据：构建与端到端命令在**已交付的工作区**里经宿主 shell 运行（载荷给出的是 shell 命令，节点不向其插入任何内容），各自把输出留在 `.evidence/`（不进仓库）供平台读取；智能体写好的报告则按载荷给出的文件名取用。被要求执行的命令失败即停止后续依赖工作，并让这次尝试报 `failed` 且带上该命令的退出码与末行——而不是宣称一次会被平台门禁拒绝的交付。运行器把这些文件按协议命名的产物上传（每条命令一个 `log`、报告一个 `report`），并在结果证据里报出它们的 id。
+
 ### 源文件地图
 
 | 文件 | 职责 |
@@ -119,6 +121,7 @@ kind: "package-reference"
 | [`src/cli-runner.ts`](src/cli-runner.ts) | 运行器：一次尝试一个 CLI 进程、它的日志、停止与结果 |
 | [`src/task-book.ts`](src/task-book.ts) | 任务书：把载荷所述内容渲染给智能体 |
 | [`src/materials.ts`](src/materials.ts) | 任务携带的材料：在运行前取进工作区 |
+| [`src/evidence.ts`](src/evidence.ts) | 交付要求所需的构建、端到端运行与报告 |
 | [`src/runner.ts`](src/runner.ts) | `TaskRunner` 接缝，以及一次尝试交换的上下文与结果 |
 | [`src/report.ts`](src/report.ts) | 运维事件与所有失败路径共用的错误归一化 |
 | [`src/index.ts`](src/index.ts) | Cordis 插件：报告出口、自动启动、服务发布、运行器查找、停止副作用 |
@@ -157,6 +160,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 - **运行器需要 CLI** —— 节点默认回退到 `dsh --profile headless`，因此没有已构建或已安装 CLI 的节点会把每一次尝试都报成失败；部署若自行组合 `mpsTaskRunner` 提供者，则替换掉这个回退。
 - **任务书只陈述载荷所述内容** —— 平台发来什么就渲染什么，节点既不替它总结聊天记录，也不替它补上平台留白的意图。
 - **材料取不到就停下** —— 超过单请求上限的材料、或平台拒收的材料，都会让这次尝试报 `blocked`，而不是在没有它的情况下硬做。
+- **截图由智能体负责** —— 节点运行载荷给出的命令并上传报告，但自己不截图：平台的截图校验需要只有拍摄那次运行才知道的视口元数据。
 - **日志是行而不是事件** —— 一次运行内部的进度只有打印出来才可见，因为节点跑的是 CLI profile 而不是流式 profile。
 - **材料一次请求取一份** —— 节点用单个请求取回材料，超过上限的会被拒绝，因为分片反向拉取尚未实现；上传方向在超过协议阈值时已走分片。
 - **`read_only` 的 bundle 需要基线** —— bundle 把基线提交记为前置条件，因此接收方必须已经持有它；节点只交回工作分支。

@@ -102,6 +102,8 @@ The other direction is `resource()` on the runner's context: the node downloads 
 
 A `read_only` task is the one mode where the node does not push: it commits the work as usual, then writes a git bundle of the work branch into `.bundles/` inside the workspace — kept out of the repository like the task book — and the node uploads it as the attempt's `bundle` artifact, reporting its id as the evidence's `patch_artifact_id` with `pushed: false`. The platform fetches the change out of that artifact, which is what its clone of the baseline is for.
 
+`collectEvidence` produces what the task's deliverables require before the attempt reports: the build and the end-to-end command run in the delivered workspace through the host shell — the payload states a shell command, and the node interpolates nothing into it — each keeping its output in `.evidence/` (kept out of the repository) for the platform to read, and the report the agent wrote is taken from the file the payload names. A required command that fails stops the dependent work, and the attempt reports `failed` with that command's exit code and last line rather than claiming a delivery the platform's gates would reject. The runner uploads each of those files as the artifact the protocol names — a `log` per command, the `report` — and reports their ids in the result's evidence.
+
 ### Source map
 
 | File | Role |
@@ -119,6 +121,7 @@ A `read_only` task is the one mode where the node does not push: it commits the 
 | [`src/cli-runner.ts`](src/cli-runner.ts) | The runner: one CLI process per attempt, its logs, its stop, and its result |
 | [`src/task-book.ts`](src/task-book.ts) | The task book: what the payload states, rendered for the agent |
 | [`src/materials.ts`](src/materials.ts) | The materials a task carries, brought into the workspace before the run |
+| [`src/evidence.ts`](src/evidence.ts) | The build, the end-to-end run, and the report the deliverables require |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -160,6 +163,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
+- **Screenshots are the agent's** — the node runs the commands the payload states and uploads the report, but it takes no screenshots: the platform's screenshot checks need viewport metadata that only the run that captured them knows.
 - **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 

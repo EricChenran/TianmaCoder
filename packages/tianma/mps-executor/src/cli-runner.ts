@@ -15,6 +15,9 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { taskInstruction } from '@tianma/dsh-mps-exec-core'
+import type { TaskEvidence } from './runner.ts'
+import { collectEvidence } from './evidence.ts'
+import type { CollectedEvidence, EvidenceCommandOutcome } from './evidence.ts'
 import { toError } from './report.ts'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
 import type { PublishedChanges, TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
@@ -123,9 +126,7 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       writeRawLog(rawLog, lines, outcome)
       const notes = `raw log: ${rawLog}`
 
-      if (outcome.spawnError !== undefined) {
-        throw new Error(`could not start ${bin}: ${outcome.spawnError.message}`)
-      }
+      assertStarted(outcome, bin)
       if (outcome.kind === 'stopped') {
         return { outcome: 'failed', summary: 'the node stopped this run', notes }
       }
@@ -140,9 +141,35 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       if (published.changed_files.length === 0) {
         return { outcome: 'failed', summary: 'the run finished without changing any file', notes }
       }
+      // The evidence comes after the commit: a build writes output the delivered change
+      // must not carry, and the platform reads these results against what was pushed.
+      await context.reportProgress({ progress: 80, stage: 'collecting_evidence', message: 'collecting evidence' })
+      const collected = await collectEvidence({
+        directory,
+        payload: context.task.payload,
+        run: async line => await runShellLine(line, {
+          directory,
+          env: options.env,
+          signal: context.signal,
+          stopGraceMs,
+          now,
+          lines,
+          context,
+        }),
+      })
+      if (collected.failure !== undefined) {
+        return {
+          outcome: 'failed',
+          summary: `${collected.failure.what} evidence: ${collected.failure.message}`,
+          notes,
+        }
+      }
+      const evidence = await uploadEvidence(context, collected)
+      await context.reportProgress({ progress: 100, stage: 'uploading', message: 'evidence reported' })
       return {
         outcome: 'success',
-        summary: `changed ${String(published.changed_files.length)} file(s)${pushedNote(published)}`,
+        summary: `changed ${String(published.changed_files.length)} file(s)${pushedNote(published)}${evidenceNote(collected)}`,
+        ...(evidence === undefined ? {} : { evidence }),
         notes,
       }
     },
@@ -153,6 +180,8 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
  * A run the node can stop.
  */
 export interface StoppableRun {
+  /** Process id the host gave the run, when it started one. */
+  pid?: number | undefined
   /**
    * Ask the run to end.
    * @param signal - the signal to send.
@@ -162,16 +191,140 @@ export interface StoppableRun {
 }
 
 /**
- * Stop a run: ask it to end, then kill it if it has not ended within the grace
- * period. Windows has no signals, so the first request terminates the process there
- * either way; the escalation is what saves a run on a host that ignores it.
+ * Stop a run: the plan the host calls for, applied at once.
  * @param run - the run to stop.
- * @param graceMs - how long the run is given to end on its own.
+ * @param graceMs - how long a run that takes signals is given to end on its own.
+ * @param platform - the host platform; defaults to this one.
  */
-export function stopRun(run: StoppableRun, graceMs: number): void {
+export function stopRun(run: StoppableRun, graceMs: number, platform: NodeJS.Platform = process.platform): void {
+  const plan = stopPlan(run, platform)
+  if (plan.kind === 'taskkill') {
+    spawn('taskkill', ['/pid', String(plan.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).unref()
+    return
+  }
   run.kill()
   const timer = setTimeout(() => { run.kill('SIGKILL') }, graceMs)
   timer.unref()
+}
+
+/** How the node stops a run that does not end when it is asked to. */
+export type StopPlan =
+  | { kind: 'taskkill'; pid: number }
+  | { kind: 'signals' }
+
+/**
+ * The way one run is stopped. Windows has no signal to escalate from, and a command the
+ * node started through a shell outlives that shell, so the whole tree goes at once there;
+ * elsewhere the run is asked to end and killed after the grace period.
+ * @param run - the run, whose process id the host gave when it started one.
+ * @param platform - the host platform.
+ * @returns the plan the node applies.
+ */
+export function stopPlan(run: { pid?: number | undefined }, platform: NodeJS.Platform): StopPlan {
+  if (platform === 'win32' && run.pid !== undefined) return { kind: 'taskkill', pid: run.pid }
+  return { kind: 'signals' }
+}
+
+/**
+ * Run one command line the payload stated, in the delivered workspace, keeping what it
+ * prints in the attempt's log as well as in the evidence file.
+ *
+ * The payload states a shell command (`npm run build`), so the line runs through the
+ * host shell rather than an argument array: the node interpolates nothing into it, and
+ * the platform that dispatched the task stated it.
+ * @param line - the command line.
+ * @param options - the workspace, the environment, cancellation, and the attempt's log.
+ * @returns the exit code and everything the command printed.
+ */
+async function runShellLine(line: string, options: {
+  directory: string
+  env?: Record<string, string> | undefined
+  signal: AbortSignal
+  stopGraceMs: number
+  now: () => Date
+  lines: RunLine[]
+  context: TaskRunContext
+  platform?: NodeJS.Platform | undefined
+}): Promise<EvidenceCommandOutcome> {
+  const printed: string[] = []
+  const shell = shellFor(line, options.platform ?? process.platform)
+  const outcome = await runProcess({
+    bin: shell.bin,
+    args: shell.args,
+    directory: options.directory,
+    env: options.env,
+    signal: options.signal,
+    stopGraceMs: options.stopGraceMs,
+    now: options.now,
+    onLines: async (stream, batch) => {
+      options.lines.push(...batch.map(entry => ({ stream, line: entry })))
+      for (const entry of batch) printed.push(entry.text)
+      await options.context.reportLog(stream, batch)
+    },
+  })
+  assertStarted(outcome, line)
+  return { exit_code: exitCodeOf(outcome), output: printed.join('\n') }
+}
+
+/**
+ * The shell one command line runs through: the platform's own, because the payload states
+ * a shell command rather than an argument array.
+ * @param line - the command line.
+ * @param platform - the host platform.
+ * @returns the executable and the arguments that run the line.
+ */
+export function shellFor(line: string, platform: NodeJS.Platform): { bin: string; args: string[] } {
+  return platform === 'win32'
+    ? { bin: 'cmd.exe', args: ['/d', '/s', '/c', line] }
+    : { bin: '/bin/sh', args: ['-c', line] }
+}
+
+/**
+ * Upload what the evidence collected and report it the way the protocol names it.
+ * @param context - the attempt's context, which carries the upload.
+ * @param collected - what the attempt collected.
+ * @returns the evidence for the result, or undefined when the task required none.
+ */
+async function uploadEvidence(
+  context: TaskRunContext,
+  collected: CollectedEvidence,
+): Promise<TaskEvidence | undefined> {
+  const evidence: TaskEvidence = {}
+  if (collected.build !== undefined) {
+    const id = await context.uploadArtifact('log', collected.build.log_path, { command: collected.build.command })
+    evidence.build = { ...collected.build, log_artifact_id: id }
+  }
+  if (collected.e2e !== undefined) {
+    const id = await context.uploadArtifact('log', collected.e2e.log_path, { command: collected.e2e.command })
+    evidence.e2e = { ...collected.e2e, result_artifact_id: id }
+  }
+  if (collected.report_path !== undefined) {
+    evidence.report_artifact_id = await context.uploadArtifact('report', collected.report_path)
+  }
+  return Object.keys(evidence).length === 0 ? undefined : evidence
+}
+
+/**
+ * How one attempt describes the evidence it collected.
+ * @param collected - what the attempt collected.
+ * @returns the clause the summary appends.
+ */
+function evidenceNote(collected: CollectedEvidence): string {
+  const parts: string[] = []
+  if (collected.build !== undefined) parts.push('build')
+  if (collected.e2e !== undefined) parts.push('e2e')
+  if (collected.report_path !== undefined) parts.push('report')
+  return parts.length === 0 ? '' : `; evidence: ${parts.join(', ')}`
+}
+
+/**
+ * The exit code one command reports. A command that ended without one — the node stopped
+ * it, or something else did — reports -1, because the platform's evidence carries a number.
+ * @param outcome - what the run settled as.
+ * @returns the code the evidence reports.
+ */
+export function exitCodeOf(outcome: { code?: number | null | undefined }): number {
+  return outcome.code ?? -1
 }
 
 /**
@@ -184,12 +337,24 @@ function pushedNote(published: PublishedChanges): string {
   return published.pushed ? ' and pushed them' : ''
 }
 
+/**
+ * Refuse a run whose process never started.
+ * @param outcome - what the run settled as.
+ * @param bin - the executable the run was given.
+ * @throws Error naming the executable and why it could not start.
+ */
+function assertStarted(outcome: RunOutcome, bin: string): void {
+  if (outcome.spawnError !== undefined) {
+    throw new Error(`could not start ${bin}: ${outcome.spawnError.message}`)
+  }
+}
+
 /** What one run settled as. */
 interface RunOutcome {
   /** Why the run ended. */
   kind: 'exited' | 'stopped'
-  /** Exit code, or undefined when the node stopped the run. */
-  code: number | undefined
+  /** Exit code the host reported; null when the run ended without one. */
+  code: number | null
   /** Failure the process could not be started with. */
   spawnError?: Error | undefined
 }
@@ -261,12 +426,12 @@ async function runProcess(request: RunRequest): Promise<RunOutcome> {
     // The first settlement wins: resolving after the promise settled changes nothing,
     // so a close that follows a failed start needs no guard of its own.
     child.on('error', (error: Error) => {
-      resolve({ kind: 'exited', code: undefined, spawnError: error })
+      resolve({ kind: 'exited', code: null, spawnError: error })
     })
     child.on('close', (code: number | null) => {
       for (const stream of ['stdout', 'stderr'] as const) flush(stream, buffers[stream])
       void Promise.all(pending).then(() => {
-        resolve({ kind: stopped ? 'stopped' : 'exited', code: code ?? undefined })
+        resolve({ kind: stopped ? 'stopped' : 'exited', code })
       }, reject)
     })
   })
@@ -280,8 +445,8 @@ async function runProcess(request: RunRequest): Promise<RunOutcome> {
  * @param lastStderr - the last line the run wrote to stderr, with its separator.
  * @returns the summary.
  */
-export function runFailureSummary(code: number | undefined, lastStderr: string): string {
-  const shown = code === undefined ? 'without an exit code' : `with code ${String(code)}`
+export function runFailureSummary(code: number | null | undefined, lastStderr: string): string {
+  const shown = code === undefined || code === null ? 'without an exit code' : `with code ${String(code)}`
   return `the run exited ${shown}${lastStderr}`
 }
 
@@ -292,7 +457,7 @@ export function runFailureSummary(code: number | undefined, lastStderr: string):
  * @param outcome - how the run settled.
  */
 function writeRawLog(path: string, lines: RunLine[], outcome: RunOutcome): void {
-  const header = `# ${path}\n# ended: ${outcome.kind}${outcome.code === undefined ? '' : ` with code ${String(outcome.code)}`}`
+  const header = `# ${path}\n# ended: ${outcome.kind} with code ${String(exitCodeOf(outcome))}`
   const body = lines.map(entry => `${entry.line.at} [${entry.stream}] ${entry.line.text}`).join('\n')
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${header}\n${body}\n`, 'utf8')

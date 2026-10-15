@@ -4,12 +4,19 @@
  * settles on request, so no model and no network are involved.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, afterEach } from 'vitest'
-import { runFailureSummary, stopRun, tianmaCliRunner } from '@tianma/dsh-mps-executor'
+import {
+  exitCodeOf,
+  runFailureSummary,
+  shellFor,
+  stopPlan,
+  stopRun,
+  tianmaCliRunner,
+} from '@tianma/dsh-mps-executor'
 import type { PublishedChanges, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
 import type { ExecLogLine, ExecResource, ExecTaskAssignment, TaskProgress } from '@tianma/dsh-mps-exec-core'
 
@@ -51,6 +58,8 @@ class RecordingContext implements TaskRunContext {
   readonly materials = new Map<string, Uint8Array>()
   /** Failure the platform answers a material request with. */
   materialError: Error | undefined
+  /** Artifacts this attempt uploaded, in order. */
+  readonly uploads: { kind: string; path: string; meta?: Record<string, unknown> | undefined }[] = []
 
   constructor(readonly workspaceDirectory: string | undefined, readonly task: ExecTaskAssignment) {}
 
@@ -66,15 +75,16 @@ class RecordingContext implements TaskRunContext {
     this.logs.push({ stream, lines })
   }
 
+  async uploadArtifact(kind: string, path: string, meta?: Record<string, unknown> | undefined): Promise<string> {
+    this.uploads.push({ kind, path, meta })
+    return `art-${String(this.uploads.length)}`
+  }
+
   async resource(artifactId: string): Promise<ExecResource> {
     if (this.materialError !== undefined) throw this.materialError
     const bytes = this.materials.get(artifactId)
     if (bytes === undefined) throw new Error('this attempt downloads no material')
     return { bytes, sha256: `sha-of-${artifactId}` }
-  }
-
-  async uploadArtifact(): Promise<string> {
-    throw new Error('this attempt uploads no artifact')
   }
 
   async reportSession(): Promise<void> {
@@ -144,7 +154,11 @@ describe('the CLI runner', () => {
     // The argument array carried the instruction literally, with no shell in between.
     expect(reported(context)).toContain(`stdout:instruction=${INSTRUCTION}`)
     expect(reported(context)).toContain(`stdout:cwd=${workspace}`)
-    expect(context.progresses).toEqual([{ progress: 10, stage: 'coding', message: 'the agent is working' }])
+    expect(context.progresses).toEqual([
+      { progress: 10, stage: 'coding', message: 'the agent is working' },
+      { progress: 80, stage: 'collecting_evidence', message: 'collecting evidence' },
+      { progress: 100, stage: 'uploading', message: 'evidence reported' },
+    ])
 
     const rawLog = join(logs, 'tsk_1-2.log')
     expect(result.notes).toBe(`raw log: ${rawLog}`)
@@ -216,6 +230,73 @@ describe('the CLI runner', () => {
     expect(context.published).toBe(0)
   })
 
+  it('runs the deliverables the task requires and reports their evidence', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      deliverables: {
+        require_build: true,
+        build_command: 'node --version',
+        require_e2e: true,
+        e2e_command: 'node --version',
+        require_report: true,
+        report_filename: 'REPORT.md',
+      },
+    }))
+    writeFileSync(join(workspace, 'REPORT.md'), '# 报告\n', 'utf8')
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('success')
+    expect(result.evidence?.build).toMatchObject({ command: 'node --version', exit_code: 0, log_artifact_id: 'art-1' })
+    expect(result.evidence?.e2e).toMatchObject({ command: 'node --version', exit_code: 0, result_artifact_id: 'art-2' })
+    expect(result.evidence?.report_artifact_id).toBe('art-3')
+    expect(context.uploads.map(upload => upload.kind)).toEqual(['log', 'log', 'report'])
+    expect(result.summary).toContain('evidence: build, e2e, report')
+    // The evidence is the node's own output, so the commit never carries it.
+    expect(readFileSync(join(workspace, '.evidence', 'build.log'), 'utf8')).toContain('node --version')
+  })
+
+  it('reports a build the node stopped without an exit code', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      deliverables: { require_build: true, build_command: 'node sleeper.mjs' },
+    }))
+    writeFileSync(join(workspace, 'sleeper.mjs'), 'setInterval(() => {}, 1000)\n', 'utf8')
+
+    const running = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'ok'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      stopGraceMs: 200,
+    }).run(context)
+    // The agent's run ends at once, so the build is what this abort lands on.
+    await new Promise(resolve => setTimeout(resolve, 700))
+    context.controller.abort()
+    const result = await running
+
+    expect(result.outcome).toBe('failed')
+    expect(result.summary).toMatch(/^build evidence: the build failed with exit code /u)
+  })
+
+  it('fails an attempt whose required build fails', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      deliverables: { require_build: true, build_command: 'node -e process.exit(3)' },
+    }))
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('failed')
+    expect(result.summary).toBe('build evidence: the build failed with exit code 3')
+    expect(context.uploads).toEqual([])
+  })
+
   it('reports a run that exited non-zero with the line it failed on', async () => {
     const workspace = temporary('mps-run-')
     const logs = temporary('mps-logs-')
@@ -255,7 +336,8 @@ describe('the CLI runner', () => {
     expect(result.outcome).toBe('failed')
     expect(result.summary).toBe('the node stopped this run')
     expect(context.published).toBe(0)
-    expect(readFileSync(join(logs, 'tsk_1-2.log'), 'utf8')).toContain('ended: stopped')
+    // The host reports what a killed process settled with, so the code is its business.
+    expect(readFileSync(join(logs, 'tsk_1-2.log'), 'utf8')).toMatch(/ended: stopped with code /u)
   })
 
   it('carries the environment it was given and stamps its own clock', async () => {
@@ -364,6 +446,27 @@ describe('the CLI runner', () => {
     expect(runFailureSummary(undefined, '')).toBe('the run exited without an exit code')
   })
 
+  it('runs an evidence command through the shell the host has', () => {
+    expect(shellFor('npm run build', 'win32')).toEqual({
+      bin: 'cmd.exe',
+      args: ['/d', '/s', '/c', 'npm run build'],
+    })
+    expect(shellFor('npm run build', 'linux')).toEqual({ bin: '/bin/sh', args: ['-c', 'npm run build'] })
+  })
+
+  it('reports an exit code even when a command left none', () => {
+    expect(exitCodeOf({ code: 3 })).toBe(3)
+    expect(exitCodeOf({ code: null })).toBe(-1)
+    expect(exitCodeOf({})).toBe(-1)
+  })
+
+  it('stops a shell-spawned run by killing its tree on Windows', () => {
+    expect(stopPlan({ pid: 41 }, 'win32')).toEqual({ kind: 'taskkill', pid: 41 })
+    // A run the host gave no process id for, or a host without taskkill, takes signals.
+    expect(stopPlan({}, 'win32')).toEqual({ kind: 'signals' })
+    expect(stopPlan({ pid: 41 }, 'linux')).toEqual({ kind: 'signals' })
+  })
+
   it('asks a run to end before killing it', async () => {
     const kills: (string | number | undefined)[] = []
     const run = {
@@ -373,7 +476,7 @@ describe('the CLI runner', () => {
       },
     }
 
-    stopRun(run, 5)
+    stopRun(run, 5, 'linux')
     expect(kills).toEqual([undefined])
     await new Promise(resolve => setTimeout(resolve, 30))
     expect(kills).toEqual([undefined, 'SIGKILL'])

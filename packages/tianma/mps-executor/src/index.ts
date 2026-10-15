@@ -62,10 +62,27 @@ export {
   filesCarryingSecrets,
   publishChanges,
 } from './publish.ts'
-export { RUNNER_STOP_GRACE_MS, runFailureSummary, stopRun, tianmaCliRunner } from './cli-runner.ts'
+export {
+  RUNNER_STOP_GRACE_MS,
+  stopPlan,
+  exitCodeOf,
+  runFailureSummary,
+  shellFor,
+  stopRun,
+  tianmaCliRunner,
+} from './cli-runner.ts'
+export type { StoppableRun, StopPlan } from './cli-runner.ts'
 export { DEFAULT_CLI_COMMAND } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
+export { EVIDENCE_DIRECTORY, collectEvidence } from './evidence.ts'
 export { MATERIALS_DIRECTORY, fetchMaterials, materialFileName, taskMaterials } from './materials.ts'
+export type {
+  CollectEvidenceOptions,
+  CollectedEvidence,
+  EvidenceCommand,
+  EvidenceCommandOutcome,
+  EvidenceFailure,
+} from './evidence.ts'
 export type { FetchMaterialsOptions, MaterialFile, MaterialSource } from './materials.ts'
 export type { CliRunnerOptions } from './cli-runner.ts'
 export type {

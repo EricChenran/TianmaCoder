@@ -622,9 +622,11 @@ export class TaskOrchestrator {
       started_at: formatRfc3339(startedAt),
       finished_at: formatRfc3339(this.#now()),
       summary: result.summary,
+      // The node's own delivery facts win; what the runner collected — the build, the
+      // end-to-end run, the report — is what the node has no other way to know.
       evidence: running.published === undefined
-        ? (result.evidence ?? this.#defaultEvidence(running))
-        : this.#defaultEvidence(running),
+        ? { ...this.#defaultEvidence(running), ...result.evidence }
+        : { ...result.evidence, ...this.#defaultEvidence(running) },
       ...(result.notes === undefined ? {} : { notes: result.notes }),
     }
     for (let attempt = 1; attempt <= RESULT_SUBMIT_ATTEMPTS; attempt += 1) {

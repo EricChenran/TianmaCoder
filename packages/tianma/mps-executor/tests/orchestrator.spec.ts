@@ -269,11 +269,8 @@ describe('task lifecycle', () => {
         summary: '缺少需求说明',
         notes: '需要客户补充截图',
         evidence: {
-          changed_files: ['src/a.ts'],
-          branch: 'feature/x',
-          base_commit: 'a1b2c3d',
-          head_commit: 'e4f5a6b',
-          pushed: true,
+          build: { command: 'npm run build', exit_code: 0, duration_ms: 5, log_artifact_id: 'art_log' },
+          report_artifact_id: 'art_report',
         },
       })),
     })
@@ -284,7 +281,13 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({
       outcome: 'blocked',
       notes: '需要客户补充截图',
-      evidence: { changed_files: ['src/a.ts'], pushed: true },
+      evidence: {
+        build: { log_artifact_id: 'art_log' },
+        report_artifact_id: 'art_report',
+        // The delivery facts stay the node's own, and it published nothing here.
+        changed_files: [],
+        pushed: false,
+      },
     })
   })
 
@@ -888,11 +891,7 @@ describe('task lifecycle', () => {
         outcome: 'success',
         summary: 'done',
         evidence: {
-          changed_files: ['artifacts/report.md'],
-          branch: 'feature/tsk_1',
-          base_commit: 'a1b2c3d',
-          head_commit: 'a1b2c3d',
-          pushed: false,
+          report_artifact_id: 'art_report',
         },
       })),
     })
@@ -900,7 +899,9 @@ describe('task lifecycle', () => {
     await orchestrator.claimOnce()
     await orchestrator.drain()
 
-    expect(platform.results[0]?.evidence?.changed_files).toEqual(['artifacts/report.md'])
+    // The runner knows the report; the delivery facts stay what the node published.
+    expect(platform.results[0]?.evidence?.report_artifact_id).toBe('art_report')
+    expect(platform.results[0]?.evidence?.changed_files).toEqual([])
   })
 
   it('uploads the bundle a read_only attempt hands back and reports it as the change', async () => {
@@ -959,6 +960,54 @@ describe('task lifecycle', () => {
       pushed: false,
       patch_artifact_id: 'art_bundle',
       head_commit: 'b2c3d4e',
+    })
+  })
+
+  it('keeps the evidence a runner collected beside the node own facts', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: {
+        workspace: {
+          workspace_id: 'ws_1',
+          repo: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        },
+      },
+    }))
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        await context.publish()
+        return {
+          outcome: 'success',
+          summary: 'done',
+          evidence: {
+            build: { command: 'npm run build', exit_code: 0, duration_ms: 12, log_artifact_id: 'art_log' },
+            report_artifact_id: 'art_report',
+          },
+        }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      publisher: {
+        publish: async () => ({ changed_files: ['src/a.ts'], head_commit: 'b2c3d4e', pushed: true }),
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.evidence).toMatchObject({
+      changed_files: ['src/a.ts'],
+      head_commit: 'b2c3d4e',
+      pushed: true,
+      build: { log_artifact_id: 'art_log' },
+      report_artifact_id: 'art_report',
     })
   })
 

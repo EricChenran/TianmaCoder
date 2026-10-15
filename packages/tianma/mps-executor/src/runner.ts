@@ -23,11 +23,23 @@ export interface TaskRunResult {
   outcome: TaskOutcome
   /** Operator-visible summary of the attempt. */
   summary: string
-  /** Evidence the platform checks for a delivered change. */
-  evidence?: ExecResultEvidence | undefined
+  /**
+   * Evidence the attempt collected that the node's own facts do not carry: the build,
+   * the end-to-end run, and the report. The node fills the delivery facts.
+   */
+  evidence?: TaskEvidence | undefined
   /** Free-form notes the summary does not carry. */
   notes?: string | undefined
 }
+
+/**
+ * Evidence one attempt collected, named as the protocol's result carries it, without the
+ * delivery facts the node publishes itself.
+ */
+export type TaskEvidence = Omit<
+  ExecResultEvidence,
+  'changed_files' | 'branch' | 'base_commit' | 'head_commit' | 'pushed'
+>
 
 /** What an attempt starts from inside its workspace. */
 export interface TaskCheckout {
