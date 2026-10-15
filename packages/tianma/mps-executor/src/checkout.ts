@@ -103,6 +103,15 @@ export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<
   if (await holdsCommit(git, directory, baseCommit) === false) {
     throw new Error(`refusing to work from a base this repository does not hold: the task dispatched ${baseCommit}`)
   }
+  // The dispatched base must contain what the base branch holds. A workspace's later tasks
+  // are dispatched from the work branch's head, which is ahead of the base branch and fine;
+  // a base branch that has moved past the dispatched commit is not, because the platform
+  // then dispatched from before work that is already on the branch.
+  const ancestor = await tryRun(git, directory, ['merge-base', '--is-ancestor', `origin/${baseBranch}`, baseCommit])
+  if (ancestor === undefined) {
+    const tip = (await git.run(directory, ['rev-parse', `origin/${baseBranch}`])).stdout.trim()
+    throw new Error(`refusing to work from a base that is behind origin/${baseBranch}: the task dispatched ${baseCommit}, and origin/${baseBranch} holds ${tip}`)
+  }
   await git.run(directory, ['checkout', '--quiet', '-B', workBranch, baseCommit])
   // `checkout -B` leaves the tree alone when HEAD already sits on the branch, so a
   // retry in this workspace needs the reset to drop the last attempt's edits.

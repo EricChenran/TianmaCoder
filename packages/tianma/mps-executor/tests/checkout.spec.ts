@@ -110,6 +110,7 @@ describe('checkout preparation', () => {
       'fetch --quiet origin main',
       'fetch --quiet origin +refs/heads/*:refs/remotes/origin/*',
       'rev-parse --verify --quiet a1b2c3d^{commit}',
+      'merge-base --is-ancestor origin/main a1b2c3d',
       'checkout --quiet -B feature/tsk_1 a1b2c3d',
       'reset --quiet --hard a1b2c3d',
       'clean --quiet -fd',
@@ -272,7 +273,7 @@ describe('git on this host', () => {
     expect(existsSync(join(workspace, 'scratch.txt'))).toBe(false)
   })
 
-  it('works from the dispatched base after the branch moved on', async () => {
+  it('refuses a base the base branch has moved past', async () => {
     const git = cliGit()
     const source = await sourceRepository(git)
     const workspace = temporary('mps-workspace-')
@@ -288,11 +289,11 @@ describe('git on this host', () => {
     await git.run(source.directory, ['add', 'readme.md'])
     await git.run(source.directory, ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--quiet', '-m', 'move on'])
 
-    // The committed change does not move the node off its base: affinity means a later
-    // task starts from the work branch's head, not from wherever the branch has drifted.
-    const again = await prepareCheckout({ directory: workspace, repository, git })
-    expect(again).toEqual({ base_commit: source.commit, work_branch: 'feature/tsk_1' })
-    expect((await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(source.commit)
+    // The platform dispatched from before a commit the branch already holds, so the tree
+    // the node would hand back describes work that is no longer the branch's past.
+    await expect(prepareCheckout({ directory: workspace, repository, git })).rejects.toThrow(
+      /refusing to work from a base that is behind origin\//,
+    )
   })
 
   it('keeps what a failing command said', async () => {
