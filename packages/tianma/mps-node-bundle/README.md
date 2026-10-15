@@ -46,13 +46,12 @@ The template composes `dsh-base` with this bundle, and this bundle's patch mount
         lanes: []
         tools: []
         autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
-        cliRunner:
-          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
-          dshHome: !!js process.env.MPS_DSH_HOME ?? ''
-          jsonEvents: true
+        cliRunner: !!js "({ command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless'], dshHome: process.env.MPS_DSH_HOME ?? '', jsonEvents: true })"
 ```
 
 The environment indirection is what lets one installation image serve every node; write the values directly into the row instead when a deployment prefers a fixed profile. The two placeholders keep the profile loadable — `dsh mps-node --help` works on a machine with no environment — and `autoStart` is what decides whether the node dials at all: it is true only when `MPS_PLATFORM_HOST` is set, so an unconfigured node mounts and sits idle instead of registering under a placeholder identity. The secret is only ever read from the environment variable named by `secretEnv`.
+
+A launch of this profile from source, against a stand-in platform listening on the configured address, was observed to authenticate, register, and then claim and heartbeat on the interval the platform assigned: `POST /exec/v1/auth/token`, `POST /exec/v1/register`, then `POST /exec/v1/claim` (204 while the queue is empty) and `POST /exec/v1/heartbeat` in a loop. That is the whole of what this environment can show — the profile needs no install of its own, but a real platform and a model credential are still needed to take a task end to end.
 
 The patch mounts one row and restates no permission row. `dsh-base` already composes `workspace-write` with `ask`, the pairing its preset table admits, and a node composes no approval answerer, so an action that needs approval is refused rather than parked for a person who is not there. A deployment that wants the deterministic wording instead sets `DSH_PERMISSION_MODE` in the node's environment, which is `dsh-base`'s own switch.
 

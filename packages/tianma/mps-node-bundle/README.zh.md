@@ -46,13 +46,12 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
         lanes: []
         tools: []
         autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
-        cliRunner:
-          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
-          dshHome: !!js process.env.MPS_DSH_HOME ?? ''
-          jsonEvents: true
+        cliRunner: !!js "({ command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless'], dshHome: process.env.MPS_DSH_HOME ?? '', jsonEvents: true })"
 ```
 
 环境变量间接寻址让同一份安装镜像可以服务每一台节点；若部署更希望固定 profile，把取值直接写进该行即可。两个占位值让 profile 始终可加载——在没有任何环境变量的机器上 `dsh mps-node --help` 也能用——而是否真的发起连接由 `autoStart` 决定：它只在设置了 `MPS_PLATFORM_HOST` 时为真，因此未配置的节点只挂载并保持空闲，而不会以占位身份去注册。密钥只会从 `secretEnv` 指定的环境变量读取。
+
+本 profile 已用"从源码启动 + 一个监听在配置地址上的桩平台"实测：节点完成认证（`POST /exec/v1/auth/token`）、注册（`POST /exec/v1/register`），随后按平台给的时间间隔循环认领（队列空时 204）与心跳（`POST /exec/v1/heartbeat`）。这是本环境能给出的全部证据——profile 自身无需安装依赖，但要把任务跑到端到端，仍需真实平台与模型凭证。
 
 该 patch 只挂载一行，不重述任何权限行。`dsh-base` 本就组合了 `workspace-write` 与 `ask`，这正是其预设表所承认的配对，而节点不组合任何审批应答者，因此需要审批的动作会被拒绝，而不是为不在场的人一直挂住。若部署想要确定性的文案，就在节点环境里设置 `DSH_PERMISSION_MODE`——那是 `dsh-base` 自己的开关。
 
