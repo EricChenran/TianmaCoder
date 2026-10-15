@@ -32,6 +32,26 @@ describe('the node keeping its own report file', () => {
     ])
   })
 
+  it('stops at its ceiling and says so once', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mps-nodelog-'))
+    created.push(root)
+    const at = new Date('2026-10-16T03:00:00.000Z')
+
+    // A ceiling of two, so the third report is the one that stops it.
+    appendNodeLog(root, { level: 'info', message: 'one' }, at, 2)
+    appendNodeLog(root, { level: 'info', message: 'two' }, at, 2)
+    appendNodeLog(root, { level: 'warn', message: 'three' }, at, 2)
+    appendNodeLog(root, { level: 'warn', message: 'four' }, at, 2)
+
+    const lines = readFileSync(join(root, NODE_LOG_DIRECTORY, 'node-2026-10-16.jsonl'), 'utf8').trim().split('\n')
+    expect(lines).toHaveLength(3)
+    expect(lines.map(line => (JSON.parse(line) as NodeLogRecord).message)).toEqual([
+      'one',
+      'two',
+      'further reports are dropped from this file: it holds its ceiling of 2 lines for 2026-10-16',
+    ])
+  })
+
   it('never writes a credential-shaped value', () => {
     const root = mkdtempSync(join(tmpdir(), 'mps-nodelog-'))
     created.push(root)

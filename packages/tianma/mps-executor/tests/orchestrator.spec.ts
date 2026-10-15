@@ -296,6 +296,29 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
   })
 
+  it('reports the same claim failure once, and a different one when it changes', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    let failure = 'the platform is unreachable'
+    platform.claim = async () => { throw new Error(failure) }
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({ platform, reports, runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })) })
+
+    // A node that cannot claim retries every five seconds; reporting each one would fill its
+    // own file with the same line, so the failure is reported once and again only when it
+    // changes. Its heartbeat is what shows it is still alive.
+    orchestrator.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    failure = 'the token expired'
+    await vi.advanceTimersByTimeAsync(60_000)
+    orchestrator.stop()
+
+    expect(reports.map(report => report.message)).toEqual([
+      'claim failed: the platform is unreachable',
+      'claim failed: the token expired',
+    ])
+  }, 60_000)
+
   it('names a task it has no room for instead of starting or silently dropping it', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment())

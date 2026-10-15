@@ -241,6 +241,9 @@ export class TaskOrchestrator {
   /** Where an outcome waits when the platform cannot take it. */
   readonly #results: ResultSpool
   /** How long a claim waits, as the platform most recently assigned it. */
+  /** The last claim failure reported, so a repeat of it is not reported again. */
+  #claimFailure: string | undefined
+
   readonly #claimLongPollSeconds: () => number
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
@@ -408,7 +411,14 @@ export class TaskOrchestrator {
         const taken = await this.claimOnce()
         if (!taken) await this.#pause(EMPTY_CLAIM_PAUSE_MS)
       } catch (error) {
-        this.#report({ level: 'warn', message: `claim failed: ${toError(error).message}` })
+        // The same failure is reported once, and again only when it changes: a node that
+        // cannot claim reports it every five seconds otherwise, and a day of that fills its
+        // own file with one line. Its heartbeat is what shows it is still alive.
+        const message = `claim failed: ${toError(error).message}`
+        if (message !== this.#claimFailure) {
+          this.#claimFailure = message
+          this.#report({ level: 'warn', message })
+        }
         await this.#pause(CLAIM_FAILURE_PAUSE_MS)
       }
     }

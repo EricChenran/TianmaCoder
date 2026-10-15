@@ -15,6 +15,15 @@ import type { ExecutorReport } from './report.ts'
 /** Directory under the coding root holding the node's own reports. */
 export const NODE_LOG_DIRECTORY = 'logs'
 
+/**
+ * Most lines one day's file holds. A node that keeps failing the same way reports every
+ * time, and an unbounded file would fill the disk the node is protecting.
+ */
+export const NODE_LOG_MAX_LINES = 5000
+
+/** Lines written per day so far, so the ceiling costs no read of the file. */
+const writtenPerDay = new Map<string, number>()
+
 /** One report, as the file holds it. */
 export interface NodeLogRecord {
   /** When the node reported it. */
@@ -32,14 +41,17 @@ export interface NodeLogRecord {
  * @param at - the moment to record, for tests.
  * @returns nothing.
  */
-export function appendNodeLog(root: string, report: ExecutorReport, at: Date = new Date()): void {
+export function appendNodeLog(root: string, report: ExecutorReport, at: Date = new Date(), maxLines: number = NODE_LOG_MAX_LINES): void {
   const stamp = at.toISOString()
+  const day = stamp.slice(0, 10)
   const directory = join(root, NODE_LOG_DIRECTORY)
   mkdirSync(directory, { recursive: true })
-  const record: NodeLogRecord = {
-    at: stamp,
-    level: report.level,
-    message: redactSecretText(report.message),
-  }
-  appendFileSync(join(directory, `node-${stamp.slice(0, 10)}.jsonl`), `${JSON.stringify(record)}\n`, 'utf8')
+  const path = join(directory, `node-${day}.jsonl`)
+  const written = writtenPerDay.get(path) ?? 0
+  if (written > maxLines) return
+  const record: NodeLogRecord = written === maxLines
+    ? { at: stamp, level: 'warn', message: `further reports are dropped from this file: it holds its ceiling of ${String(maxLines)} lines for ${day}` }
+    : { at: stamp, level: report.level, message: redactSecretText(report.message) }
+  appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf8')
+  writtenPerDay.set(path, written + 1)
 }
