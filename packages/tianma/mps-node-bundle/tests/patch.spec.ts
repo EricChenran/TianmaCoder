@@ -60,6 +60,7 @@ describe('the profile bundle patch a deployment runs', () => {
       'autoStart',
       'cliRunner',
     ])
+    // The runner's own keys live inside the scripted value, pinned separately below.
   })
 
   it('takes the platform address from the environment, and never starts without one', () => {
@@ -93,8 +94,26 @@ describe('the profile bundle patch a deployment runs', () => {
   })
 
   it('runs the CLI it ships with, as one command the host can start', () => {
-    expect(keysAt(10, executorConfig())).toEqual(['command', 'dshHome', 'jsonEvents'])
-    expect(patch).toContain("command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']")
+    expect(patch).toContain('cliRunner: !!js ')
+    expect(patch).toContain("command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']")
+    expect(patch).toContain("dshHome: process.env.MPS_DSH_HOME ?? ''")
     expect(patch).toContain('jsonEvents: true')
+  })
+
+  it('writes scripted values the overlay parser accepts', () => {
+    // Two ways a node loaded without its executor at all: a scripted value nested inside a
+    // nested mapping is refused as an unknown tag, and an unquoted one holding a colon and a
+    // space reads as a mapping of its own. Both are shapes this file must never take, and
+    // both were found by launching the profile rather than by reading the file.
+    const scripted = patch.split('\n').filter(line => line.includes('!!js '))
+    expect(scripted.length).toBeGreaterThan(5)
+    for (const line of scripted) {
+      const indent = line.length - line.trimStart().length
+      const value = line.slice(line.indexOf('!!js ') + '!!js '.length)
+      expect([8], `scripted value is a direct configuration field: ${line.trim()}`).toContain(indent)
+      if (value.includes(': ')) {
+        expect(value.startsWith('"'), `scripted value holding a colon is quoted: ${line.trim()}`).toBe(true)
+      }
+    }
   })
 })

@@ -44,11 +44,9 @@
         # an absolute executable path so a node never depends on PATH, and given its
         # own DSH_HOME so a node's profile directory stays its own. Composing any
         # other mpsTaskRunner provider replaces it.
-        cliRunner:
-          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
-          dshHome: !!js process.env.MPS_DSH_HOME ?? ''
-          # The node runs the CLI it ships with, which has the event stream: the
-          # platform then sees each turn and tool call as it happens, and the node
-          # learns the session to report. A deployment with an older CLI sets this
-          # to false, because that CLI would refuse the flag.
-          jsonEvents: true
+        # One expression over the whole block: the overlay parser reads a scripted value
+        # as a direct configuration field, and rejects one nested inside a nested mapping,
+        # which is how a node came to load without its executor at all.
+        # Quoted, because a scripted value is still a YAML scalar: an unquoted one holding
+        # a colon and a space reads as a nested mapping and the overlay refuses the file.
+        cliRunner: !!js "({ command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless'], dshHome: process.env.MPS_DSH_HOME ?? '', jsonEvents: true })"
