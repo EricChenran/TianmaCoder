@@ -40,6 +40,8 @@ export type { CpuCounters, ResourceReader, ResourceReaderOptions } from './resou
 export { DRAINING_MARKER, drainingMarker } from './draining.ts'
 export type { DrainingMarker } from './draining.ts'
 export { LOG_SPOOL_DIRECTORY, logSpool } from './log-spool.ts'
+export { RESULT_SPOOL_DIRECTORY, resultSpool } from './result-spool.ts'
+export type { ResultSpool, ResultSpoolOptions, SpooledResult } from './result-spool.ts'
 export type { LogSpool, LogSpoolOptions, SpooledBatch } from './log-spool.ts'
 export { releasableWorkspaces } from './workspace.ts'
 export { MpsExecutorRuntime } from './runtime.ts'

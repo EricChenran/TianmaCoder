@@ -38,6 +38,8 @@ import type {
 import type { ExecutorSettings } from './config.ts'
 import { logSpool } from './log-spool.ts'
 import type { LogSpool } from './log-spool.ts'
+import { resultSpool } from './result-spool.ts'
+import type { ResultSpool } from './result-spool.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunResult, TaskRunner, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
@@ -231,6 +233,8 @@ export class TaskOrchestrator {
   readonly #hooks: TaskOrchestratorHooks
   /** Where a batch waits when the platform cannot take it. */
   readonly #spool: LogSpool
+  /** Where an outcome waits when the platform cannot take it. */
+  readonly #results: ResultSpool
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
@@ -257,6 +261,22 @@ export class TaskOrchestrator {
     this.#spool = logSpool({
       root: options.settings.codingRoot,
       send: async (taskId, batch) => { await this.#client.log(taskId, batch) },
+      report: this.#report,
+    })
+    this.#results = resultSpool({
+      root: options.settings.codingRoot,
+      send: async (taskId, body) => { await this.#client.result(taskId, body) },
+      // A result is worth submitting while the platform still leases the attempt; after
+      // that it describes work the platform has already reassigned.
+      holds: async (taskId, attempt) => {
+        try {
+          const lease = await this.#client.lease(taskId, attempt)
+          return lease.should_continue
+        } catch {
+          // No answer is not a withdrawal: the result waits for the next flush.
+          return true
+        }
+      },
       report: this.#report,
     })
     this.#canClaim = options.canClaim
@@ -347,9 +367,10 @@ export class TaskOrchestrator {
         await this.#pause(SLOT_WAIT_MS)
         continue
       }
-      // Offer anything the platform has not taken yet, so a task's log does not wait for
-      // the attempt to end before it is whole.
+      // Offer anything the platform has not taken yet — a task's log, and the outcome of an
+      // attempt whose result the platform could not take when it settled.
       await this.#spool.flush()
+      await this.#results.flush()
       if (this.#canClaim?.() === false) {
         // A node without room claims nothing; whoever knows why has already reported it.
         await this.#pause(SLOT_WAIT_MS)
@@ -698,9 +719,12 @@ export class TaskOrchestrator {
           return
         }
         if (attempt === RESULT_SUBMIT_ATTEMPTS) {
+          // The platform being unreachable is not a refusal: the outcome is kept and
+          // offered again, so a task is not redone just because its result missed a window.
+          this.#results.keep(taskId, body)
           this.#report({
             level: 'error',
-            message: `could not submit the ${outcome} result for ${taskId} after ${attempt} attempts: ${toError(error).message}`,
+            message: `could not submit the ${outcome} result for ${taskId} after ${attempt} attempts, so it is kept for later: ${toError(error).message}`,
           })
           return
         }

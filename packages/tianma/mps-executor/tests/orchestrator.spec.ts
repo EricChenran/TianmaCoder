@@ -277,6 +277,58 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
   })
 
+  it('keeps an outcome the platform could not take, and a restarted node submits it', async () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'mps-results-'))
+    const codingRoot = join(root, 'coding')
+
+    // The first process: every submission attempt fails with no answer at all.
+    const down = new FakePlatform()
+    down.assignments.push(assignment())
+    // Unreachable for as long as this process runs: a queue would run dry and let a later
+    // attempt through, which is not what an outage looks like.
+    const submissions: ExecResultRequest[] = []
+    down.result = async (_taskId, body) => {
+      submissions.push(body)
+      throw new Error('the platform is unreachable')
+    }
+    const reports: ExecutorReport[] = []
+    const first = orchestratorWith({
+      platform: down,
+      reports,
+      settings: { ...settings(), codingRoot },
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+    first.orchestrator.start()
+    // Long enough for the submission's own retries and their backoff.
+    await vi.advanceTimersByTimeAsync(30_000)
+    first.orchestrator.stop()
+
+    // The outcome was kept, not lost, and the operator can see why.
+    expect(submissions.length).toBeGreaterThan(1)
+    expect(existsSync(join(codingRoot, '.results', 'tsk_1.json'))).toBe(true)
+    expect(reports.some(report => report.message.includes('kept for later'))).toBe(true)
+
+    // The next process: the platform is back and still leases the attempt, so the result
+    // the last process could not hand over is submitted by this one.
+    const back = new FakePlatform()
+    // The lease cannot be checked at all: no answer is not a withdrawal, so the result is
+    // offered rather than thrown away.
+    back.leaseAnswers.push(new Error('no answer'))
+    const second = orchestratorWith({
+      platform: back,
+      settings: { ...settings(), codingRoot },
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+    second.orchestrator.start()
+    await vi.advanceTimersByTimeAsync(30_000)
+    second.orchestrator.stop()
+    rmSync(root, { recursive: true, force: true })
+
+    expect(back.results.map(entry => entry.summary)).toEqual(['done'])
+    expect(back.results[0]).toMatchObject({ outcome: 'success', attempt: 1 })
+  })
+
   it('leaves a result the platform already holds as it stands', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment())
