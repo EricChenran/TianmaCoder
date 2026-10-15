@@ -40,6 +40,13 @@ export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 export const DEFAULT_MAX_ARTIFACT_BYTES = 500 * 1024 * 1024
 
 /** `user.name` a node commits under until a deployment names its robot. */
+/**
+ * The command the node runs one attempt with when a deployment states none: the
+ * headless profile of the CLI, which prints its answer and exits. A deployment
+ * points this at an absolute executable path so a node never depends on `PATH`.
+ */
+export const DEFAULT_CLI_COMMAND: readonly string[] = ['dsh', '--profile', 'headless']
+
 export const DEFAULT_GIT_USER_NAME = 'tianma-mps-node'
 
 /** `user.email` a node commits under until a deployment names its robot. */
@@ -47,6 +54,16 @@ export const DEFAULT_GIT_USER_EMAIL = 'mps-node@localhost'
 
 /** Agent version reported before the deployment states the built CLI version. */
 export const UNKNOWN_AGENT_VERSION = 'unknown'
+
+/** The CLI runner a node falls back to, as configuration states it. */
+export interface CliRunnerConfig {
+  /** Command and its leading arguments; the instruction is appended. */
+  command: string[]
+  /** Directory the runner keeps one raw log per attempt under; blank means beside the workspace root. */
+  logsDirectory: string
+  /** `DSH_HOME` the run uses, so a node's profile directory stays its own; blank inherits the environment. */
+  dshHome: string
+}
 
 /** The executor node's plugin configuration. */
 export interface Config {
@@ -76,6 +93,11 @@ export interface Config {
   gitUserEmail?: string
   /** Largest artifact the node uploads in one request. */
   maxArtifactBytes?: number
+  /**
+   * The CLI runner the node falls back to when no runner is composed under
+   * `mpsTaskRunner`; composing one there takes precedence.
+   */
+  cliRunner?: CliRunnerConfig
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   /** Heartbeat period in seconds. */
@@ -115,6 +137,11 @@ export const Config: z<Config> = z.object({
   gitUserName: z.string().default(DEFAULT_GIT_USER_NAME),
   gitUserEmail: z.string().default(DEFAULT_GIT_USER_EMAIL),
   maxArtifactBytes: z.number().step(1).min(1).default(DEFAULT_MAX_ARTIFACT_BYTES),
+  cliRunner: z.object({
+    command: z.array(z.string()).default([]),
+    logsDirectory: z.string().default(''),
+    dshHome: z.string().default(''),
+  }).default({ command: [], logsDirectory: '', dshHome: '' }),
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
@@ -127,6 +154,16 @@ export const Config: z<Config> = z.object({
   labels: z.dict(z.string()).default({}),
   autoStart: z.boolean().default(true),
 })
+
+/** The CLI runner one node row resolves to. */
+export interface ResolvedCliRunner {
+  /** Command and its leading arguments. */
+  command: string[]
+  /** Directory the runner keeps one raw log per attempt under. */
+  logsDirectory: string
+  /** `DSH_HOME` the run uses, or undefined to inherit the node's environment. */
+  dshHome?: string | undefined
+}
 
 /** The configuration resolved into the values the node runtime runs with. */
 export interface ExecutorSettings {
@@ -148,6 +185,8 @@ export interface ExecutorSettings {
   gitUserEmail: string
   /** Largest artifact the node uploads in one request. */
   maxArtifactBytes: number
+  /** The CLI runner the node falls back to when no runner is composed. */
+  cliRunner: ResolvedCliRunner
   /** Concurrent task capacity. */
   slotsTotal: number
   /** Heartbeat period in seconds. */
@@ -168,6 +207,28 @@ export interface ExecutorSettings {
   labels: Record<string, string>
   /** Whether the node starts on load. */
   autoStart: boolean
+}
+
+/**
+ * Resolve the CLI runner a node falls back to. A command that names no executable is
+ * refused here, when the profile loads, rather than when the first attempt starts.
+ * @param stated - the block a node row states, if any.
+ * @param workspaceRoot - the directory a node's own files live under.
+ * @returns the resolved runner configuration.
+ */
+function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: string): ResolvedCliRunner {
+  const statedCommand = stated?.command ?? []
+  const command = statedCommand.length === 0 ? [...DEFAULT_CLI_COMMAND] : statedCommand
+  if (command[0] === undefined || command[0] === '') {
+    throw new TypeError('the CLI runner needs the command it starts, such as dsh --profile headless')
+  }
+  const logs = (stated?.logsDirectory ?? '').trim()
+  const home = (stated?.dshHome ?? '').trim()
+  return {
+    command,
+    logsDirectory: logs === '' ? join(workspaceRoot, 'logs') : logs,
+    dshHome: home === '' ? undefined : home,
+  }
 }
 
 /**
@@ -202,6 +263,7 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     gitUserName: config.gitUserName ?? DEFAULT_GIT_USER_NAME,
     gitUserEmail: config.gitUserEmail ?? DEFAULT_GIT_USER_EMAIL,
     maxArtifactBytes: config.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES,
+    cliRunner: resolveCliRunner(config.cliRunner, workspaceRoot),
     slotsTotal: config.slotsTotal ?? 1,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,

@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { tianmaCliRunner } from './cli-runner.ts'
 import { readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
@@ -167,6 +168,14 @@ export function registerStopEffect(ctx: Context, runtime: MpsExecutorRuntime): (
  */
 export function apply(ctx: Context, config: Config): void {
   const settings = resolveExecutorSettings(config)
+  // The node's own runner, used when nothing composes one under the service key. A
+  // deployment that wants a different execution strategy composes its own provider
+  // and this one is never reached.
+  const ownRunner = tianmaCliRunner({
+    command: settings.cliRunner.command,
+    logsDirectory: settings.cliRunner.logsDirectory,
+    env: settings.cliRunner.dshHome === undefined ? undefined : { DSH_HOME: settings.cliRunner.dshHome },
+  })
   const runtime = new MpsExecutorRuntime({
     settings,
     // Read when the handshake starts: the profile loads, and its help prints,
@@ -174,7 +183,7 @@ export function apply(ctx: Context, config: Config): void {
     secret: () => readNodeSecret(config),
     // Read when the node starts claiming, so a runner composed by any other row
     // is found even when it mounts after this one.
-    runner: () => ctx.get(TASK_RUNNER_SERVICE),
+    runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? ownRunner,
     report: createReportSink(ctx.logger('mps-executor')),
   })
   ctx.provide('mpsExecutor', runtime)

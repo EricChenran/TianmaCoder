@@ -46,6 +46,9 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
         lanes: []
         tools: []
         autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
+        cliRunner:
+          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
+          dshHome: !!js process.env.MPS_DSH_HOME ?? ''
 ```
 
 环境变量间接寻址让同一份安装镜像可以服务每一台节点；若部署更希望固定 profile，把取值直接写进该行即可。两个占位值让 profile 始终可加载——在没有任何环境变量的机器上 `dsh mps-node --help` 也能用——而是否真的发起连接由 `autoStart` 决定：它只在设置了 `MPS_PLATFORM_HOST` 时为真，因此未配置的节点只挂载并保持空闲，而不会以占位身份去注册。密钥只会从 `secretEnv` 指定的环境变量读取。
@@ -64,6 +67,8 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
 | `MPS_NODE_SLOTS` | 并发任务数；默认 `1` |
 | `MPS_NODE_WORKSPACE` | 节点上报的工作区根目录；默认取进程工作目录 |
 | `MPS_AGENT_VERSION` | 上报的 Agent 版本；默认 `unknown` |
+| `MPS_DSH_BIN` | 节点执行一次尝试所用 CLI 的绝对路径；默认取 `PATH` 上的 `dsh` |
+| `MPS_DSH_HOME` | 该次运行使用的 `DSH_HOME`，使节点的 profile 目录自成一份；不设则继承环境 |
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -84,7 +89,7 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
 
 ### 不变量归属
 
-节点所连的地址属于执行插件那份经校验的配置，而不是本 patch：patch 只提供取值，而插件会拒绝把协议头、路径或端口写进 host。
+节点所连的地址属于执行插件那份经校验的配置，而不是本 patch：patch 只提供取值，而插件会拒绝把协议头、路径或端口写进 host。节点执行所用的运行器同样属于执行插件：它回退到此处声明的 CLI 运行器，而组合任何其它 `mpsTaskRunner` 提供者都会替换掉这个回退，无需改动本 patch。
 
 </details>
 

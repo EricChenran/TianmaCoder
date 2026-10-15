@@ -40,3 +40,10 @@
         agentVersion: !!js process.env.MPS_AGENT_VERSION ?? 'unknown'
         labels: {}
         autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
+        # The runner the node falls back to: the CLI's headless profile, pointed at
+        # an absolute executable path so a node never depends on PATH, and given its
+        # own DSH_HOME so a node's profile directory stays its own. Composing any
+        # other mpsTaskRunner provider replaces it.
+        cliRunner:
+          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
+          dshHome: !!js process.env.MPS_DSH_HOME ?? ''

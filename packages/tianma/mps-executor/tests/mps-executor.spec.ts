@@ -18,12 +18,21 @@ import {
   apply,
   autoStartNode,
   createReportSink,
+  TASK_RUNNER_SERVICE,
   readNodeSecret,
   registerStopEffect,
   resolveExecutorSettings,
   WorkspaceStore,
 } from '@tianma/dsh-mps-executor'
-import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport, ExecutorReport, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
+import type {
+  ExecHttpRequest,
+  ExecHttpResponse,
+  ExecHttpTransport,
+  ExecutorReport,
+  TaskRunContext,
+  TaskRunResult,
+  TaskRunner,
+} from '@tianma/dsh-mps-executor'
 import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
 
 /** One recorded call of the fake transport. */
@@ -548,6 +557,35 @@ describe('plugin wiring', () => {
     expect(node.client.endpoint.url('/register')).toBe('https://192.168.1.31:9443/exec/v1/register')
   })
 
+  it('resolves the CLI runner it falls back to', () => {
+    const defaults = settingsFor()
+    expect(defaults.cliRunner).toEqual({
+      command: ['dsh', '--profile', 'headless'],
+      logsDirectory: join(defaults.workspaceRoot, 'logs'),
+      dshHome: undefined,
+    })
+
+    const stated = settingsFor({
+      cliRunner: {
+        command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
+        logsDirectory: 'C:\\node-logs',
+        dshHome: 'C:\\node-home',
+      },
+    })
+    expect(stated.cliRunner).toEqual({
+      command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
+      logsDirectory: 'C:\\node-logs',
+      dshHome: 'C:\\node-home',
+    })
+
+    // Blank strings mean "use the default", and a command with no executable is refused.
+    const blank = settingsFor({ cliRunner: { command: [], logsDirectory: '   ', dshHome: '  ' } })
+    expect(blank.cliRunner.logsDirectory).toBe(join(blank.workspaceRoot, 'logs'))
+    expect(blank.cliRunner.dshHome).toBeUndefined()
+    expect(() => settingsFor({ cliRunner: { command: [''], logsDirectory: '', dshHome: '' } }))
+      .toThrow(/needs the command it starts/)
+  })
+
   it('dials the configured platform host and port on load', async () => {
     vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
     const answers = [
@@ -575,13 +613,98 @@ describe('plugin wiring', () => {
       if (node === undefined) throw new Error('the node service was not published')
       await vi.waitFor(() => { expect(node.state).toBe('online') })
       expect(node.token).toBe('tok')
-      expect(urls).toEqual([
+      // The handshake comes first; a node that can run work then claims.
+      expect(urls.slice(0, 2)).toEqual([
         'https://10.0.0.7:9443/custom/auth/token',
         'https://10.0.0.7:9443/custom/register',
       ])
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('the runner the node falls back to', () => {
+  /** One claim answer carrying a task the node can run. */
+  const CLAIMED = {
+    task: {
+      task_id: 'tsk_1',
+      work_item_id: 'wi_1',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2026-10-15T04:16:00.123+08:00',
+      lease_renew_seconds: 30,
+      payload: { limits: { max_runtime_seconds: 60 }, spec: { raw_instruction: '增加批量下载' } },
+    },
+  }
+
+  it('claims with its own CLI runner when nothing else provides one', async () => {
+    vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
+    const answers = [
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-31' }),
+      envelope(REGISTERED),
+      envelope(null),
+    ]
+    const urls: string[] = []
+    let calls = 0
+    vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+      urls.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      const answer = answers[Math.min(calls, answers.length - 1)]
+      calls += 1
+      return new Response(answer?.text ?? '', { status: answer?.status ?? 200, headers: { 'content-type': 'application/json' } })
+    })
+    try {
+      const ctx = new Context()
+      // A node with its own DSH_HOME still resolves the runner it falls back to.
+      apply(ctx, {
+        platformHost: '10.0.0.7',
+        nodeId: 'node-31',
+        cliRunner: { command: ['dsh', '--profile', 'headless'], logsDirectory: '', dshHome: 'C:\\node-home' },
+      })
+
+      // Claiming only happens when the node resolved a runner to execute with.
+      await vi.waitFor(() => { expect(urls.some(url => url.endsWith('/claim'))).toBe(true) })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('lets a composed runner take precedence over its own', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(CLAIMED),
+      envelope(null),
+      envelope({ task_id: 'tsk_1', accepted: true, already_final: false, work_item_state: 'done', next: 'verify' }),
+    ])
+    let ran = false
+    const composed: TaskRunner = {
+      async run(): Promise<TaskRunResult> {
+        ran = true
+        return { outcome: 'success', summary: 'composed runner' }
+      },
+    }
+    const ctx = new Context()
+    ctx.provide(TASK_RUNNER_SERVICE, composed)
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? { run: async () => ({ outcome: 'failed', summary: 'the node own runner' }) },
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    await node.start()
+    await vi.advanceTimersByTimeAsync(50)
+    node.stop()
+
+    expect(ran).toBe(true)
+    expect(reports.some(report => report.message.includes('the node own runner'))).toBe(false)
   })
 })
 

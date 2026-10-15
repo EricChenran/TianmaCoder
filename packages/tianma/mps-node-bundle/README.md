@@ -46,6 +46,9 @@ The template composes `dsh-base` with this bundle, and this bundle's patch mount
         lanes: []
         tools: []
         autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
+        cliRunner:
+          command: !!js [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless']
+          dshHome: !!js process.env.MPS_DSH_HOME ?? ''
 ```
 
 The environment indirection is what lets one installation image serve every node; write the values directly into the row instead when a deployment prefers a fixed profile. The two placeholders keep the profile loadable — `dsh mps-node --help` works on a machine with no environment — and `autoStart` is what decides whether the node dials at all: it is true only when `MPS_PLATFORM_HOST` is set, so an unconfigured node mounts and sits idle instead of registering under a placeholder identity. The secret is only ever read from the environment variable named by `secretEnv`.
@@ -64,6 +67,8 @@ The patch mounts one row and restates no permission row. `dsh-base` already comp
 | `MPS_NODE_SLOTS` | Concurrent tasks; defaults to `1` |
 | `MPS_NODE_WORKSPACE` | Workspace root the node reports; defaults to the process working directory |
 | `MPS_AGENT_VERSION` | Agent version reported; defaults to `unknown` |
+| `MPS_DSH_BIN` | Absolute path of the CLI the node runs one attempt with; defaults to `dsh` on `PATH` |
+| `MPS_DSH_HOME` | `DSH_HOME` the run uses, so a node's profile directory stays its own; unset inherits the environment |
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -84,7 +89,7 @@ The package's substance is `cordis.patch.yml`, declared by the `dsh.bundle.patch
 
 ### Invariant ownership
 
-The address the node dials belongs to the executor plugin's validated configuration, not to this patch: the patch only supplies values, and the plugin rejects a host that carries a scheme, a path, or a port.
+The address the node dials belongs to the executor plugin's validated configuration, not to this patch: the patch only supplies values, and the plugin rejects a host that carries a scheme, a path, or a port. The runner the node executes with belongs to the executor plugin too: it falls back to the CLI runner stated here, and composing any other `mpsTaskRunner` provider replaces that fallback without touching this patch.
 
 </details>
 
