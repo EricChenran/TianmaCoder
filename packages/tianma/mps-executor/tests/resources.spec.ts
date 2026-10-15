@@ -5,6 +5,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { cpuCounters, cpuPercent, resourceReader } from '@tianma/dsh-mps-executor'
 
 describe('reading CPU time', () => {
@@ -72,6 +75,15 @@ describe('reading the resources of one machine', () => {
     expect(reading.mem_percent).toBeLessThanOrEqual(100)
     expect(reading.cpu_percent).toBeGreaterThanOrEqual(0)
     expect(reading.cpu_percent).toBeLessThanOrEqual(100)
+  })
+
+  it('measures the volume that will hold a root the first attempt has not created yet', async () => {
+    // A coding root exists only once an attempt needs it, and a node whose disk reading
+    // failed would report an empty disk and stop taking work.
+    const missing = join(mkdtempSync(join(tmpdir(), 'mps-resources-')), 'not-created-yet', 'coding')
+    const measured = await resourceReader({ root: missing }).read()
+
+    expect(measured.disk_free_gb).toBeGreaterThan(0)
   })
 
   it('reports no memory in use when the host reports no memory at all', async () => {

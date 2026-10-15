@@ -6,8 +6,10 @@
  * @module @tianma/dsh-mps-executor/resources
  */
 
+import { existsSync } from 'node:fs'
 import { statfs } from 'node:fs/promises'
 import { cpus, freemem, totalmem } from 'node:os'
+import { dirname, resolve } from 'node:path'
 import type { ExecResources } from '@tianma/dsh-mps-exec-core'
 
 /** Bytes in the gigabytes the protocol states disk space in. */
@@ -106,7 +108,12 @@ export function resourceReader(options: ResourceReaderOptions): ResourceReader {
  * @returns the free bytes available to this process.
  */
 async function freeBytesOf(root: string): Promise<number> {
-  const stats = await statfs(root)
+  // The root is the coding directory, which the first attempt creates: a reading taken
+  // before then has to come from the volume that will hold it. Reporting nothing instead
+  // reads as a full disk, and a node that believes its disk is full stops taking work.
+  let candidate = resolve(root)
+  while (!existsSync(candidate) && dirname(candidate) !== candidate) candidate = dirname(candidate)
+  const stats = await statfs(candidate)
   return stats.bavail * stats.bsize
 }
 
