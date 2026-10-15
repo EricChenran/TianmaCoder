@@ -27,6 +27,7 @@ import {
   requestRetryDelayMs,
   resolvePlatformEndpoint,
   retryAfterDelayMs,
+  sha256Of,
   strongerOutcome,
   taskAttemptDelayMs,
   taskPolicy,
@@ -55,6 +56,15 @@ interface FetchObservation {
  * @param responses - one response per call, or a function deriving it from the request.
  * @returns the transport and the recorded calls.
  */
+/**
+ * The JSON body of a recorded request.
+ * @param request - the recorded request.
+ * @returns the body as text, or an empty object when the request carried none.
+ */
+function jsonBody(request: ExecHttpRequest | undefined): string {
+  return typeof request?.body === 'string' ? request.body : '{}'
+}
+
 function scripted(responses: (ExecHttpResponse | ((request: ExecHttpRequest) => ExecHttpResponse))[]): {
   transport: ExecHttpTransport
   calls: RecordedCall[]
@@ -417,7 +427,7 @@ describe('protocol client', () => {
     expect(calls[0]?.request.method).toBe('POST')
     expect(calls[0]?.request.headers[EXEC_PROTOCOL_HEADER]).toBe(EXEC_PROTOCOL_VERSION)
     expect(calls[0]?.request.headers.authorization).toBeUndefined()
-    expect(JSON.parse(calls[0]?.request.body ?? '{}')).toMatchObject({ node_id: 'node-3f2a', secret: 's' })
+    expect(JSON.parse(jsonBody(calls[0]?.request))).toMatchObject({ node_id: 'node-3f2a', secret: 's' })
   })
 
   it('carries the bearer token on authenticated requests', async () => {
@@ -447,7 +457,7 @@ describe('protocol client', () => {
     const result = await instance.lease('tsk_1', 2)
     expect(result.should_continue).toBe(true)
     expect(calls[0]?.request.url).toBe('http://10.0.0.7:8791/exec/v1/tasks/tsk_1/lease')
-    expect(JSON.parse(calls[0]?.request.body ?? '{}')).toEqual({ node_id: 'node-3f2a', attempt: 2 })
+    expect(JSON.parse(jsonBody(calls[0]?.request))).toEqual({ node_id: 'node-3f2a', attempt: 2 })
   })
 
   it('reports progress and logs without reading a payload', async () => {
@@ -621,6 +631,62 @@ describe('protocol client', () => {
     const { client: instance, calls } = client([ok(null)], '')
     await instance.drain('maintenance')
     expect(calls[0]?.request.headers.authorization).toBeUndefined()
+  })
+
+  it('uploads an artifact as multipart with the digest the platform verifies', async () => {
+    const { client: instance, calls } = client([ok(null)])
+    const bytes = new TextEncoder().encode('# 开发报告\n')
+    const sha256 = sha256Of(bytes)
+
+    await instance.uploadArtifact('tsk_1', {
+      artifact_id: 'art_01H8Z',
+      kind: 'report',
+      filename: '开发报告.md',
+      bytes,
+      sha256,
+      meta: '{"require_report":true}',
+    })
+
+    const request = calls[0]?.request
+    expect(request?.method).toBe('POST')
+    expect(request?.url.endsWith('/exec/v1/tasks/tsk_1/artifacts')).toBe(true)
+    // The boundary belongs to fetch, so the client must not claim a JSON body.
+    expect(request?.headers['content-type']).toBeUndefined()
+    const body = request?.body
+    expect(body).toBeInstanceOf(FormData)
+    if (!(body instanceof FormData)) throw new Error('the artifact upload was not multipart')
+    expect(body.get('artifact_id')).toBe('art_01H8Z')
+    expect(body.get('kind')).toBe('report')
+    expect(body.get('sha256')).toBe(sha256)
+    expect(body.get('meta')).toBe('{"require_report":true}')
+    const file = body.get('file')
+    expect(file).toBeInstanceOf(Blob)
+    if (!(file instanceof Blob)) throw new Error('the artifact upload carried no file')
+    expect(file.size).toBe(bytes.byteLength)
+    expect(await file.text()).toBe('# 开发报告\n')
+  })
+
+  it('sends an empty metadata object when the caller states none', async () => {
+    const { client: instance, calls } = client([ok(null)])
+    const bytes = new TextEncoder().encode('log\n')
+
+    await instance.uploadArtifact('tsk_2', {
+      artifact_id: 'art_02H8Z',
+      kind: 'log',
+      filename: 'build.log',
+      bytes,
+      sha256: sha256Of(bytes),
+    })
+
+    const body = calls[0]?.request.body
+    if (!(body instanceof FormData)) throw new Error('the artifact upload was not multipart')
+    expect(body.get('meta')).toBe('{}')
+    expect(body.get('kind')).toBe('log')
+  })
+
+  it('digests bytes the same way the platform checks them', () => {
+    expect(sha256Of(new TextEncoder().encode(''))).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+    expect(sha256Of(new TextEncoder().encode('abc'))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
   })
 })
 

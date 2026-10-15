@@ -20,6 +20,7 @@ import {
 } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
+  ExecArtifactKind,
   ExecClaimRequest,
   ExecLeaseResult,
   ExecLogLine,
@@ -39,6 +40,7 @@ import type { ExecutorReport } from './report.ts'
 import type { TaskRunResult, TaskRunner, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
 import type { PublishedChanges } from './runner.ts'
 import type { TaskPublisher } from './publish.ts'
+import type { TaskArtifactUploader } from './artifacts.ts'
 import type { TaskSessionReporter } from './session.ts'
 
 /** The protocol calls the task lifecycle makes. */
@@ -156,6 +158,11 @@ export interface TaskOrchestratorOptions {
    * `reportSession()` reports that the attempt has no workspace to report.
    */
   sessions?: TaskSessionReporter | undefined
+  /**
+   * Uploads what an attempt produced. Without one, a runner's `uploadArtifact()`
+   * reports that the attempt has no workspace to upload from.
+   */
+  artifacts?: TaskArtifactUploader | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -201,6 +208,7 @@ export class TaskOrchestrator {
   readonly #workspaces: TaskWorkspaceAllocator | undefined
   readonly #publisher: TaskPublisher | undefined
   readonly #sessions: TaskSessionReporter | undefined
+  readonly #artifacts: TaskArtifactUploader | undefined
   readonly #hooks: TaskOrchestratorHooks
   readonly #report: (report: ExecutorReport) => void
   readonly #now: () => Date
@@ -220,6 +228,7 @@ export class TaskOrchestrator {
     this.#workspaces = options.workspaces
     this.#publisher = options.publisher
     this.#sessions = options.sessions
+    this.#artifacts = options.artifacts
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
     this.#now = options.now ?? (() => new Date())
@@ -420,6 +429,8 @@ export class TaskOrchestrator {
             workspaceDirectory: workspace?.directory,
             checkout: workspace?.checkout,
             publish: async () => await this.#publish(running, workspace),
+            uploadArtifact: async (kind: ExecArtifactKind, path: string, meta?: Record<string, unknown>) =>
+              await this.#uploadArtifact(running, workspace, kind, path, meta),
             reportSession: async (sessionRef: string) => { await this.#reportSession(running, workspace, sessionRef) },
             signal: running.controller.signal,
             reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
@@ -460,6 +471,35 @@ export class TaskOrchestrator {
     })
     running.published = published
     return published
+  }
+
+  /**
+   * Upload one file this attempt produced.
+   * @param running - the attempt.
+   * @param workspace - the workspace the attempt was prepared with.
+   * @param kind - what the file is.
+   * @param path - path of the file, relative to the workspace.
+   * @param meta - what the platform keeps beside the artifact.
+   * @returns the artifact id the platform stored it under.
+   */
+  async #uploadArtifact(
+    running: RunningAttempt,
+    workspace: TaskWorkspace | undefined,
+    kind: ExecArtifactKind,
+    path: string,
+    meta?: Record<string, unknown>,
+  ): Promise<string> {
+    if (this.#artifacts === undefined || workspace === undefined) {
+      throw new Error('this attempt has no prepared workspace to upload from')
+    }
+    return await this.#artifacts.upload({
+      taskId: running.assignment.task_id,
+      directory: workspace.directory,
+      kind,
+      path,
+      meta,
+      signal: running.controller.signal,
+    })
   }
 
   /**

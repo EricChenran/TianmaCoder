@@ -36,6 +36,15 @@ interface TransportCall {
  * @param answers - one answer per call; the last answer repeats once the queue is spent.
  * @returns the transport and its recorded calls.
  */
+/**
+ * The JSON body of a recorded request.
+ * @param request - the recorded request.
+ * @returns the body as text, or an empty object when the request carried none.
+ */
+function jsonBody(request: ExecHttpRequest | undefined): string {
+  return typeof request?.body === 'string' ? request.body : '{}'
+}
+
 function queueTransport(answers: ExecHttpResponse[]): { transport: ExecHttpTransport; calls: TransportCall[] } {
   const calls: TransportCall[] = []
   const transport: ExecHttpTransport = async (request) => {
@@ -257,7 +266,7 @@ describe('node runtime', () => {
     expect(calls[0]?.request.url.endsWith('/auth/token')).toBe(true)
     expect(calls[0]?.request.headers.authorization).toBeUndefined()
     expect(calls[1]?.request.headers.authorization).toBe('Bearer tok')
-    expect(JSON.parse(calls[1]?.request.body ?? '{}')).toMatchObject({
+    expect(JSON.parse(jsonBody(calls[1]?.request))).toMatchObject({
       node_id: 'node-1',
       name: 'node-1',
       host: 'test-host',
@@ -313,7 +322,7 @@ describe('node runtime', () => {
     const result = await node.heartbeatOnce()
     expect(result.node_status).toBe('online')
     expect(node.availableSlots()).toBe(1)
-    expect(JSON.parse(calls[2]?.request.body ?? '{}')).toMatchObject({
+    expect(JSON.parse(jsonBody(calls[2]?.request))).toMatchObject({
       node_id: 'node-1',
       agent_version: '1.2.3',
       slots: { total: 2, running: 1, available: 1 },
@@ -631,7 +640,7 @@ describe('task claiming through the runtime', () => {
     expect(node.availableSlots()).toBe(1)
     expect(reports.some(report => report.level === 'error')).toBe(false)
 
-    const bodies = queue.calls.map(call => call.request.body ?? '')
+    const bodies = queue.calls.map(call => jsonBody(call.request))
     expect(bodies.some(body => body.includes('"progress":30') && body.includes('"stage":"coding"'))).toBe(true)
     expect(bodies.some(body => body.includes('"outcome":"success"'))).toBe(true)
     node.stop()
@@ -765,7 +774,7 @@ describe('task claiming through the runtime', () => {
     await vi.advanceTimersByTimeAsync(0)
     await node.tasks?.drain()
 
-    const results = queue.calls.map(call => call.request.body ?? '').filter(body => body.includes('"outcome"'))
+    const results = queue.calls.map(call => jsonBody(call.request)).filter(body => body.includes('"outcome"'))
     expect(results).toHaveLength(1)
     expect(results[0]).toContain('"outcome":"failed"')
     expect(results[0]).toContain('failed')

@@ -70,6 +70,14 @@ export type {
 export { WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, WorkspaceStore } from './workspace.ts'
 export type { WorkspaceRecord, WorkspaceSession, WorkspaceStoreOptions } from './workspace.ts'
 export { checkoutSessionReporter, restoredSessionReports } from './session.ts'
+export { ARTIFACT_CHUNK_THRESHOLD_BYTES, clientArtifactUploader } from './artifacts.ts'
+export type {
+  ArtifactPlatformClient,
+  ArtifactUploaderOptions,
+  TaskArtifactRequest,
+  TaskArtifactUploader,
+} from './artifacts.ts'
+export { isInside, resolveWithinWorkspace } from './paths.ts'
 export type {
   CheckoutSessionReporterOptions,
   RestoredSessionReport,

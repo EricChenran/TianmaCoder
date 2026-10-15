@@ -25,6 +25,7 @@ import type {
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
+import { clientArtifactUploader } from './artifacts.ts'
 import { cliGit } from './git.ts'
 import { checkoutPublisher } from './publish.ts'
 import { checkoutSessionReporter, restoredSessionReports } from './session.ts'
@@ -141,6 +142,7 @@ export class MpsExecutorRuntime {
         identity: { name: this.settings.gitUserName, email: this.settings.gitUserEmail },
       }),
       sessions: checkoutSessionReporter({ store: this.#workspaces, client: this.client }),
+      artifacts: clientArtifactUploader({ client: this.client, maxBytes: this.settings.maxArtifactBytes }),
       report: this.#report,
       now: this.#now,
       hooks: {

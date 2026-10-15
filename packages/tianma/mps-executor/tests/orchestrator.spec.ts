@@ -28,6 +28,7 @@ import {
 import type {
   ExecutorReport,
   ExecutorSettings,
+  TaskArtifactRequest,
   TaskCheckout,
   TaskOrchestratorHooks,
   TaskPlatformClient,
@@ -953,6 +954,73 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({
       outcome: 'failed',
       summary: 'the attempt threw: this attempt has no prepared workspace to report a session for',
+    })
+  })
+
+  it('uploads what a runner produced through the node', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: {
+        workspace: {
+          workspace_id: 'ws_1',
+          repo: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        },
+      },
+    }))
+    const uploads: TaskArtifactRequest[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        const artifact = await context.uploadArtifact('screenshot', 'shots/detail.png', { width: 1440 })
+        return { outcome: 'success', summary: `uploaded ${artifact}` }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      artifacts: {
+        upload: async (request) => {
+          uploads.push(request)
+          return 'art_01H8Z'
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(uploads).toHaveLength(1)
+    expect(uploads[0]).toMatchObject({
+      taskId: 'tsk_1',
+      directory: join('coding', 'ws_1'),
+      kind: 'screenshot',
+      path: 'shots/detail.png',
+      meta: { width: 1440 },
+    })
+    expect(platform.results[0]?.summary).toBe('uploaded art_01H8Z')
+  })
+
+  it('reports an attempt that has no workspace to upload from', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.uploadArtifact('report', 'report.md')
+        return { outcome: 'success', summary: 'never reached' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary: 'the attempt threw: this attempt has no prepared workspace to upload from',
     })
   })
 

@@ -7,6 +7,7 @@
  * @module @tianma/dsh-mps-exec-core/client
  */
 
+import { createHash } from 'node:crypto'
 import { retryAfterDelayMs } from './backoff.ts'
 import type { PlatformEndpoint } from './endpoint.ts'
 import { ExecResponseError } from './errors.ts'
@@ -27,8 +28,12 @@ export interface ExecHttpRequest {
   method: 'GET' | 'POST'
   /** Request headers, already including the protocol header. */
   headers: Record<string, string>
-  /** Encoded JSON body, absent for `GET`. */
-  body?: string | undefined
+  /**
+   * Body to send, absent for `GET`. A `FormData` body is sent as multipart, which is
+   * how an artifact upload carries a file; the transport leaves its content type to
+   * `fetch` so the boundary matches.
+   */
+  body?: string | FormData | undefined
   /** Budget for this one request. */
   timeoutMs: number
   /** Caller cancellation, combined with the timeout. */
@@ -60,6 +65,11 @@ export interface ExecClientOptions {
   token?: (() => string | undefined) | undefined
   /** Budget for ordinary requests. */
   requestTimeoutMs?: number | undefined
+  /**
+   * Budget for one artifact upload. A file transfer outlasts an ordinary request by
+   * orders of magnitude, so it gets its own budget rather than the request one.
+   */
+  artifactTimeoutMs?: number | undefined
 }
 
 /** Which slot capacity a registering or heartbeating node reports. */
@@ -376,6 +386,34 @@ export type ExecConfigResult = { config_revision: number } & Record<string, unkn
 /** Payload of `GET /capabilities`. */
 export type ExecCapabilitiesResult = Record<string, unknown>
 
+/** What an artifact is, as the platform's artifact table names it. */
+export type ExecArtifactKind = 'screenshot' | 'report' | 'video' | 'log' | 'diff' | 'bundle' | 'other'
+
+/** One artifact to upload. */
+export interface ExecArtifactUpload {
+  /** Idempotency key the node generates. */
+  artifact_id: string
+  /** What the file is. */
+  kind: ExecArtifactKind
+  /** File name the platform stores. */
+  filename: string
+  /** File contents. */
+  bytes: Uint8Array
+  /** Content SHA-256, which the platform verifies. */
+  sha256: string
+  /** JSON string the platform keeps beside the artifact. */
+  meta?: string | undefined
+}
+
+/**
+ * Compute the SHA-256 the platform verifies an artifact against.
+ * @param bytes - the file contents.
+ * @returns the digest as lower-case hex.
+ */
+export function sha256Of(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
 /**
  * Wrap `fetch` as the transport, lower-casing response header names so the rest
  * of the client reads them the same way from every implementation.
@@ -408,6 +446,7 @@ export class ExecClient {
   readonly #transport: ExecHttpTransport
   readonly #token: () => string | undefined
   readonly #requestTimeoutMs: number
+  readonly #artifactTimeoutMs: number
 
   /**
    * @param options - the platform address, node id, optional transport and token supplier, and timeout.
@@ -418,6 +457,7 @@ export class ExecClient {
     this.#transport = options.transport ?? createFetchTransport()
     this.#token = options.token ?? (() => undefined)
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000
+    this.#artifactTimeoutMs = options.artifactTimeoutMs ?? 15 * 60 * 1000
   }
 
   /** The platform address this client dials. */
@@ -450,12 +490,13 @@ export class ExecClient {
       accept: 'application/json',
     }
     if (token !== undefined && token !== '') headers.authorization = `Bearer ${token}`
-    if (payload !== undefined) headers['content-type'] = 'application/json; charset=utf-8'
+    const multipart = payload instanceof FormData
+    if (payload !== undefined && !multipart) headers['content-type'] = 'application/json; charset=utf-8'
     const response = await this.#transport({
       url: this.#endpoint.url(path),
       method: payload === undefined ? 'GET' : 'POST',
       headers,
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      body: payload === undefined ? undefined : multipart ? payload : JSON.stringify(payload),
       timeoutMs,
       signal,
     })
@@ -706,6 +747,24 @@ export class ExecClient {
       this.#requestTimeoutMs,
       signal,
     )
+  }
+
+  /**
+   * Upload one artifact for an attempt. The platform verifies the digest, so the
+   * node computes it rather than letting the transport decide.
+   * @param taskId - task id.
+   * @param upload - the artifact, its contents, and the digest of those contents.
+   * @param signal - caller cancellation.
+   * @returns nothing; the platform answers with the artifact it stored.
+   */
+  async uploadArtifact(taskId: string, upload: ExecArtifactUpload, signal?: AbortSignal): Promise<void> {
+    const form = new FormData()
+    form.set('artifact_id', upload.artifact_id)
+    form.set('kind', upload.kind)
+    form.set('sha256', upload.sha256)
+    form.set('meta', upload.meta ?? '{}')
+    form.append('file', new Blob([upload.bytes.slice()]), upload.filename)
+    await this.#sendOk<unknown>(`/tasks/${taskId}/artifacts`, form, this.#artifactTimeoutMs, signal)
   }
 
   /**

@@ -55,6 +55,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `codingRoot` | `coding` inside the workspace root | Directory the node keeps its coding workspaces under |
 | `gitUserName` | `tianma-mps-node` | `user.name` injected into every commit the node makes |
 | `gitUserEmail` | `mps-node@localhost` | `user.email` injected into every commit the node makes |
+| `maxArtifactBytes` | `524288000` | Largest artifact the node uploads, before the protocol's single-request ceiling |
 | `slotsTotal` | `1` | Concurrent tasks the node accepts |
 | `heartbeatSeconds` | `10` | Heartbeat period, until the platform assigns another |
 | `claimLongPollSeconds` | `25` | Claim long-poll budget |
@@ -86,6 +87,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `checkoutSessionReporter` keeps the platform's view of a workspace's session true: the node records the session reference, the baseline commit it saw, and the task it served beside the workspace, and only then reports it, so a report the platform refuses never loses the reference. A restart reads those records back and re-reports them, which is what keeps the platform's workspace page showing the session and coding path of a node that just came up; that report is for display and troubleshooting only, so the platform refusing one is a warning rather than a failed handshake.
 
+`clientArtifactUploader` stores what an attempt produced. It reads the file only from inside the workspace, computes the SHA-256 the platform verifies the contents against, mints the idempotency key, and uploads it as multipart, because a file transfer needs a body the transport cannot JSON-encode. It refuses a file it cannot transfer — a path outside the workspace, something that is not a file, or more bytes than one request may carry — rather than failing a transfer halfway, and it never claims more than the protocol's single-request ceiling however a deployment configures its own limit. `paths.ts` holds the confinement rule both directions use, so reading an artifact and reporting a change are held to the same one.
+
 ### Source map
 
 | File | Role |
@@ -98,6 +101,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | [`src/git.ts`](src/git.ts) | The git boundary: argument-list spawning and redacted failures |
 | [`src/publish.ts`](src/publish.ts) | Handing work back: the pre-commit checks, the commit, and the push |
 | [`src/session.ts`](src/session.ts) | The session serving a workspace: what the node records and re-reports |
+| [`src/artifacts.ts`](src/artifacts.ts) | Uploading what an attempt produced: reads, the digest, and the size the node will transfer |
+| [`src/paths.ts`](src/paths.ts) | The one confinement rule for paths inside a coding workspace |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -107,7 +112,7 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 ### Invariant ownership
 
-The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it. A task's code only ever reaches its workspace through `prepareCheckout`, so a stale base is refused in one place and no runner can start work from a tree the platform did not dispatch, and it only ever leaves through `publishChanges`, which is where the workspace confinement and credential checks live. What the platform knows about a workspace's session comes from one place too: the node records it beside the workspace before reporting it, so a refused report never costs the reference.
+The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it. A task's code only ever reaches its workspace through `prepareCheckout`, so a stale base is refused in one place and no runner can start work from a tree the platform did not dispatch, and it only ever leaves through `publishChanges`, which is where the workspace confinement and credential checks live. What the platform knows about a workspace's session comes from one place too: the node records it beside the workspace before reporting it, so a refused report never costs the reference. Confinement itself has one home, `resolveWithinWorkspace`, so reading an artifact and reporting a change cannot drift apart.
 
 </details>
 
@@ -134,7 +139,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
-- **Artifacts and evidence beyond the changes are the runner's** — the node commits and pushes and reports the session; uploading artifacts, taking screenshots, and writing the report belong to the runner and are not implemented here, and the node cannot yet download the materials a task carries.
+- **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented; the materials a task carries cannot be downloaded yet either.
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.

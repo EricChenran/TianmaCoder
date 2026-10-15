@@ -74,6 +74,8 @@ export interface Config {
   gitUserName?: string
   /** `user.email` the node commits under. */
   gitUserEmail?: string
+  /** Largest artifact the node uploads in one request. */
+  maxArtifactBytes?: number
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   /** Heartbeat period in seconds. */
@@ -112,6 +114,7 @@ export const Config: z<Config> = z.object({
   codingRoot: z.string().default(''),
   gitUserName: z.string().default(DEFAULT_GIT_USER_NAME),
   gitUserEmail: z.string().default(DEFAULT_GIT_USER_EMAIL),
+  maxArtifactBytes: z.number().step(1).min(1).default(DEFAULT_MAX_ARTIFACT_BYTES),
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
@@ -143,6 +146,8 @@ export interface ExecutorSettings {
   gitUserName: string
   /** `user.email` injected into every commit the node makes. */
   gitUserEmail: string
+  /** Largest artifact the node uploads in one request. */
+  maxArtifactBytes: number
   /** Concurrent task capacity. */
   slotsTotal: number
   /** Heartbeat period in seconds. */
@@ -196,6 +201,7 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
       : config.codingRoot.trim(),
     gitUserName: config.gitUserName ?? DEFAULT_GIT_USER_NAME,
     gitUserEmail: config.gitUserEmail ?? DEFAULT_GIT_USER_EMAIL,
+    maxArtifactBytes: config.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES,
     slotsTotal: config.slotsTotal ?? 1,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,

@@ -8,12 +8,12 @@
  * @module @tianma/dsh-mps-executor/publish
  */
 
-import { existsSync } from 'node:fs'
-import { readFile, realpath, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { containsSecretPattern, taskPolicy } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment, TaskPolicy } from '@tianma/dsh-mps-exec-core'
 import type { GitRunner } from './git.ts'
+import { resolveWithinWorkspace } from './paths.ts'
 import type { PublishedChanges, TaskCheckout } from './runner.ts'
 
 /** Largest changed file the node scans for credentials. */
@@ -73,17 +73,6 @@ export interface CheckoutPublisherOptions {
   git: GitRunner
   /** The robot identity the node commits under. */
   identity: GitIdentity
-}
-
-/**
- * Whether a resolved path sits strictly inside the root.
- * @param root - the resolved root.
- * @param target - the resolved path.
- * @returns true when the path is below the root.
- */
-function isInside(root: string, target: string): boolean {
-  const offset = relative(root, target)
-  return offset !== '' && !offset.startsWith('..') && !isAbsolute(offset)
 }
 
 /** Split git's newline-separated output into paths. */
@@ -154,28 +143,12 @@ export async function assertChangesInside(
   files: readonly string[],
   forbiddenPaths?: readonly string[] | undefined,
 ): Promise<void> {
-  const root = await realpath(directory)
   for (const file of files) {
-    if (isAbsolute(file) || file.split('/').includes('..')) {
-      throw new Error(`refusing to publish ${file}: it is not a path inside the workspace`)
-    }
     const forbidden = forbiddenPaths?.find(pattern => isForbidden(pattern, file))
     if (forbidden !== undefined) {
       throw new Error(`refusing to publish ${file}: the task forbids changes matching ${JSON.stringify(forbidden)}`)
     }
-    const target = join(root, file)
-    if (existsSync(target)) {
-      const resolved = await realpath(target)
-      if (!isInside(root, resolved)) {
-        throw new Error(`refusing to publish ${file}: it resolves outside the workspace at ${resolved}`)
-      }
-      continue
-    }
-    // A path git reports that is not on disk any more is judged by where it lived.
-    const parent = await realpath(dirname(target))
-    if (parent !== root && !isInside(root, parent)) {
-      throw new Error(`refusing to publish ${file}: it resolves outside the workspace at ${parent}`)
-    }
+    await resolveWithinWorkspace(directory, file)
   }
 }
 

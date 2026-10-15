@@ -8,6 +8,7 @@
  */
 
 import type {
+  ExecArtifactKind,
   ExecLogLine,
   ExecResultEvidence,
   ExecTaskAssignment,
@@ -81,6 +82,16 @@ export interface TaskRunContext {
    * no repository. The runner works on this branch and pushes it.
    */
   checkout: TaskCheckout | undefined
+  /**
+   * Upload one file this attempt produced, such as a screenshot, a report, or a
+   * build log. The node reads it from inside the workspace, digests it, and refuses
+   * one beyond the size the protocol allows in a single request.
+   * @param kind - what the file is.
+   * @param path - path of the file, relative to the workspace.
+   * @param meta - what the platform keeps beside the artifact.
+   * @returns the artifact id the platform stored it under, for the result evidence.
+   */
+  uploadArtifact(kind: ExecArtifactKind, path: string, meta?: Record<string, unknown>): Promise<string>
   /**
    * Report the session serving this attempt's workspace. The node records it beside
    * the workspace and tells the platform, which needs the reference to show and
