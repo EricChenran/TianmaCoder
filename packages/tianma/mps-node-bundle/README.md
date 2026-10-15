@@ -31,6 +31,8 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
   dsh --profile mps-node
 ```
 
+Before starting a node, a deployment can confirm what the machine will dial: `dsh --profile mps-node --show-config` prints the resolved endpoint, identity, workspace and coding roots, and the agent CLI, reading the same environment this row reads. It prints the secret's variable name and never its value.
+
 The template composes `dsh-base` with this bundle, and this bundle's patch mounts the node row:
 
 ```yaml

@@ -7,9 +7,11 @@
  * @module @tianma/dsh-mps-executor/startup
  */
 
+import { hostname } from 'node:os'
 import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
+import { EXECUTOR_ENV, executorConfigFromEnv, resolveExecutorSettings } from './config.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'mps-executor-startup'
@@ -27,20 +29,57 @@ The platform address and this node's identity come from the environment:
   MPS_NODE_SECRET         pre-shared secret; required to start
   MPS_NODE_SLOTS          concurrent tasks (default 1)
   MPS_NODE_WORKSPACE      workspace root the node reports (default: the process working directory)
+
+Pass --show-config to print the address this machine will dial and the identity it will use,
+resolved from the same environment, without registering anywhere.
 `
+
+/**
+ * The settings this machine would use, as lines a deployment can read.
+ *
+ * The secret is named, never printed: a readout is a diagnostic, and a diagnostic that leaks
+ * the credential is a liability. The values come from {@link executorConfigFromEnv} and the
+ * package's own resolver, so they cannot drift from what the profile row resolves.
+ * @param env - the environment to read.
+ * @returns one line per resolved setting.
+ */
+export function describeConfig(env: NodeJS.ProcessEnv = process.env): string {
+  const settings = resolveExecutorSettings(executorConfigFromEnv(env), hostname())
+  return [
+    `endpoint             ${settings.endpoint.url('/register')}`,
+    `node id              ${settings.nodeId}`,
+    `node name            ${settings.nodeName}`,
+    `node host            ${settings.nodeHost}`,
+    `slots                ${String(settings.slotsTotal)}`,
+    `workspace root       ${settings.workspaceRoot}`,
+    `coding root          ${settings.codingRoot}`,
+    `secret               from ${EXECUTOR_ENV.secret} (value not printed)`,
+    `agent CLI            ${settings.cliRunner.command.join(' ')}`,
+    `agent version        ${settings.agentVersion}`,
+    '',
+  ].join('\n')
+}
 
 /**
  * This application's command: no arguments of its own, and the help text that
  * names the environment a node needs.
+ * @param exit - the launcher's exit path, used by a readout so the node never starts.
  * @returns a fresh program, so one process can build it more than once.
  */
-export function nodeCommand(): Command {
+export function nodeCommand(exit?: (code: number) => void): Command {
   return new Command()
     .name('dsh mps-node')
     .description('Run the Tianma MPS executor node: register this machine with the management platform and keep its heartbeat.')
     .helpOption('-h, --help', 'show this help')
+    .option('--show-config', 'print the resolved platform address and identity, then exit')
     .addHelpText('after', HELP_AFTER)
-    .action(() => { /* the node is configured by its profile row; it takes no command-line input */ })
+    .action((options: { showConfig?: boolean }) => {
+      // The node is configured by its profile row; the readout below is the only command-line
+      // input, and it decides nothing: it reports what the row would resolve.
+      if (options.showConfig !== true) return
+      process.stdout.write(describeConfig())
+      exit?.(0)
+    })
 }
 
 /**
@@ -50,5 +89,5 @@ export function nodeCommand(): Command {
  * @param ctx - the Cordis context the launcher supplied.
  */
 export function apply(ctx: Context): void {
-  parseCmdline(ctx, nodeCommand())
+  parseCmdline(ctx, nodeCommand(ctx.get('appExit')))
 }

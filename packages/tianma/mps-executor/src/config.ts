@@ -287,6 +287,58 @@ function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: st
  * @param hostname - this machine's host name; injectable for tests.
  * @returns the resolved settings.
  */
+/**
+ * The environment variables a deployment states the node's address and identity in. The node
+ * profile's own row reads these too; naming them here is what lets `--show-config` answer with
+ * the same values the row would use.
+ */
+export const EXECUTOR_ENV = {
+  platformHost: 'MPS_PLATFORM_HOST',
+  platformPort: 'MPS_PLATFORM_PORT',
+  platformScheme: 'MPS_PLATFORM_SCHEME',
+  platformBasePath: 'MPS_PLATFORM_BASE_PATH',
+  nodeId: 'MPS_NODE_ID',
+  nodeName: 'MPS_NODE_NAME',
+  nodeHost: 'MPS_NODE_HOST',
+  nodeSlots: 'MPS_NODE_SLOTS',
+  workspaceRoot: 'MPS_NODE_WORKSPACE',
+  secret: 'MPS_NODE_SECRET',
+  dshBin: 'MPS_DSH_BIN',
+  dshHome: 'MPS_DSH_HOME',
+} as const
+
+/**
+ * Read a configuration out of an environment, the way the node profile's row reads it.
+ * @param env - the environment to read, defaults to this process's.
+ * @returns the configuration to resolve; absent values are left to the resolver's defaults.
+ */
+export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
+  // The two the resolver refuses to default, refused here for the same reason: a node that
+  // does not know which platform it belongs to must not resolve an address at all.
+  const host = env[EXECUTOR_ENV.platformHost]?.trim() ?? ''
+  if (host === '') throw new Error(`${EXECUTOR_ENV.platformHost} is required: the node has to be told which platform it belongs to`)
+  const requiredNodeId = env[EXECUTOR_ENV.nodeId]?.trim() ?? ''
+  if (requiredNodeId === '') throw new Error(`${EXECUTOR_ENV.nodeId} is required: the platform identifies this machine by it`)
+  const config: Config = { platformHost: host, nodeId: requiredNodeId }
+  const port = env[EXECUTOR_ENV.platformPort]
+  if (port !== undefined && port !== '') config.platformPort = Number(port)
+  const scheme = env[EXECUTOR_ENV.platformScheme]
+  if (scheme === 'http' || scheme === 'https') config.platformScheme = scheme
+  const basePath = env[EXECUTOR_ENV.platformBasePath]
+  if (basePath !== undefined && basePath !== '') config.platformBasePath = basePath
+  const nodeName = env[EXECUTOR_ENV.nodeName]
+  if (nodeName !== undefined && nodeName !== '') config.nodeName = nodeName
+  const nodeHost = env[EXECUTOR_ENV.nodeHost]
+  if (nodeHost !== undefined && nodeHost !== '') config.nodeHost = nodeHost
+  const slots = env[EXECUTOR_ENV.nodeSlots]
+  if (slots !== undefined && slots !== '') config.slotsTotal = Number(slots)
+  const workspace = env[EXECUTOR_ENV.workspaceRoot]
+  if (workspace !== undefined && workspace !== '') config.workspaceRoot = workspace
+  const secretEnv = env[EXECUTOR_ENV.secret]
+  if (secretEnv !== undefined && secretEnv !== '') config.secretEnv = secretEnv
+  return config
+}
+
 export function resolveExecutorSettings(config: Config, hostname: string = hostHostname()): ExecutorSettings {
   const endpoint = resolvePlatformEndpoint({
     host: config.platformHost,
