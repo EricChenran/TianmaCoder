@@ -107,7 +107,7 @@ A `read_only` task is the one mode where the node does not push: it commits the 
 
 A screenshot is the one piece of evidence the node cannot produce, because only the run that captured it knows its viewport and route: the task book tells the attempt to write them under `.evidence/screenshots/` and to declare each in `.evidence/screenshots.json` with its route, caption, and size, and the node checks that declaration — the file is there, inside the workspace, and no smaller than the platform accepts — before uploading each with the metadata the platform keeps and reporting `screenshots[]` in the evidence.
 
-The node is also exercised end to end: a spec boots this plugin through the Loader from a `cordis.yml`, with its configuration validated, dials a platform on this host, and runs one task in a real clone — the agent is a stub, everything else is the node: the checkout, the commit and push, the evidence commands, the artifacts, the session report, and the result.
+The node is also exercised end to end: a spec boots this plugin through the Loader from a `cordis.yml`, with its configuration validated, dials a platform on this host, and runs real tasks in a real clone — the agent is a stub, everything else is the node: the checkout, the commit, the push or the bundle, the evidence commands, the artifacts, the session report, the capability promise, and the result. Both access modes are covered: a `read_write` task is pushed to the origin and a `read_only` one goes back as a bundle with nothing pushed.
 
 ### Source map
 

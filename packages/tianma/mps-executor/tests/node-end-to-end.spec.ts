@@ -254,6 +254,10 @@ describe('the node end to end', () => {
     // The node registered with the address it was configured with, then worked one task.
     expect(platform.at('/exec/v1/auth/token')).toHaveLength(1)
     expect(platform.at('/exec/v1/register')).toHaveLength(1)
+    // Capabilities are a promise: the node declares both access modes because it does both.
+    const registered = platform.at('/exec/v1/register')[0]?.body ?? ''
+    expect(registered).toContain('"access_modes":["read_only","read_write"]')
+    expect(registered).toContain('"supported_protocols":["exec/v1"]')
     expect(platform.at('/exec/v1/claim').length).toBeGreaterThan(0)
 
     const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_e2e/result')[0]?.body ?? '{}') as Record<string, unknown>
@@ -280,5 +284,52 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('hands a read_only task back as a bundle without pushing anything', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_ro',
+      work_item_id: 'wi_ro',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '只读模式交付' },
+        workspace: {
+          workspace_id: 'ws_ro',
+          access_mode: 'read_only',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_ro' },
+        },
+        constraints: { must_stay_in_workspace: true },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_ro/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_ro/result')[0]?.body ?? '{}') as Record<string, unknown>
+    const evidence = result['evidence'] as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+    expect(evidence['changed_files']).toEqual(['REPORT.md', 'feature.txt'])
+    // The platform cannot fetch a branch in this mode, so the work goes back as a bundle.
+    expect(evidence['pushed']).toBe(false)
+    expect(evidence['patch_artifact_id']).toMatch(/^art-/u)
+    await expect(run('git', ['rev-parse', 'feature/tsk_ro'], { cwd: bare })).rejects.toThrow()
+    const uploads = platform.at('/exec/v1/tasks/tsk_ro/artifacts')
+    expect(uploads).toHaveLength(1)
+    expect(uploads[0]?.body).toContain('bundle')
   }, 120_000)
 })
