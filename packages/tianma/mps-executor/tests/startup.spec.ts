@@ -8,6 +8,15 @@ import { Context } from '@deepseek-ai/cordis'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import {
+  DEFAULT_CLAIM_LONG_POLL_SECONDS,
+  DEFAULT_DISK_MIN_GB,
+  DEFAULT_HEARTBEAT_SECONDS,
+  DEFAULT_LEASE_RENEW_SECONDS,
+  DEFAULT_MAX_ARTIFACT_BYTES,
+  DEFAULT_SHUTDOWN_GRACE_SECONDS,
+  DEFAULT_TASK_RUNTIME_SECONDS,
+} from '@tianma/dsh-mps-executor'
 import { describeConfig, apply, inject, name, nodeCommand } from '@tianma/dsh-mps-executor/startup'
 
 describe('node command line', () => {
@@ -109,6 +118,16 @@ describe('answering what this machine will dial', () => {
     expect(lines).toContain('node name            demo')
     expect(lines).toContain('node host            demo-host')
     expect(lines).toContain('agent version        node-build-7')
+    // The limits, which decide whether work is taken and how long it is held, stated against
+    // the resolver's own constants: an intentional default change then needs no new literal
+    // here, and the readout cannot quietly disagree with the resolver.
+    expect(lines).toContain(`disk floor (GB)      ${String(DEFAULT_DISK_MIN_GB)}`)
+    expect(lines).toContain(`heartbeat (s)        ${String(DEFAULT_HEARTBEAT_SECONDS)}`)
+    expect(lines).toContain(`claim wait (s)       ${String(DEFAULT_CLAIM_LONG_POLL_SECONDS)}`)
+    expect(lines).toContain(`lease renew (s)      ${String(DEFAULT_LEASE_RENEW_SECONDS)}`)
+    expect(lines).toContain(`task runtime (s)     ${String(DEFAULT_TASK_RUNTIME_SECONDS)}`)
+    expect(lines).toContain(`shutdown grace (s)   ${String(DEFAULT_SHUTDOWN_GRACE_SECONDS)}`)
+    expect(lines).toContain(`max artifact bytes   ${String(DEFAULT_MAX_ARTIFACT_BYTES)}`)
     expect(lines).toContain('slots                4')
     expect(lines).toContain('workspace root       /srv/node')
     expect(lines).toContain(`coding root          ${join('/srv/node', 'coding')}`)

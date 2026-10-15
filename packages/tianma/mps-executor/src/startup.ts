@@ -57,6 +57,16 @@ export function describeConfig(env: NodeJS.ProcessEnv = process.env): string {
     `secret               from ${EXECUTOR_ENV.secret} (value not printed)`,
     `agent CLI            ${settings.cliRunner.command.join(' ')}`,
     `agent version        ${settings.agentVersion}`,
+    // The limits decide whether the node takes work at all and how long it holds it, and a
+    // deployment can only see them here: the disk floor below which it stops claiming is the
+    // one that made a node look idle while work waited.
+    `disk floor (GB)      ${String(settings.diskMinGb)}`,
+    `heartbeat (s)        ${String(settings.heartbeatSeconds)}`,
+    `claim wait (s)       ${String(settings.claimLongPollSeconds)}`,
+    `lease renew (s)      ${String(settings.leaseRenewSeconds)}`,
+    `task runtime (s)     ${String(settings.taskRuntimeSeconds)}`,
+    `shutdown grace (s)   ${String(settings.shutdownGraceSeconds)}`,
+    `max artifact bytes   ${String(settings.maxArtifactBytes)}`,
     '',
   ].join('\n')
 }

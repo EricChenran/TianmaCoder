@@ -49,7 +49,7 @@ MPS_PLATFORM_HOST=192.168.1.10 MPS_PLATFORM_PORT=8791 MPS_NODE_ID=node-3f2a MPS_
         cliRunner: !!js "({ command: [process.env.MPS_DSH_BIN ?? 'dsh', '--profile', 'headless'], dshHome: process.env.MPS_DSH_HOME ?? '', jsonEvents: true })"
 ```
 
-启动前可以先确认这台机器会拨哪个地址：`dsh --profile mps-node --show-config` 会打印解析后的接入点、身份、工作区与编码根、以及 agent CLI，读的就是本行所读的同一份环境；密钥只打印变量名，绝不打印值。
+启动前可以先确认这台机器会拨哪个地址：`dsh --profile mps-node --show-config` 会打印解析后的接入点、身份、工作区与编码根、agent CLI，以及它将遵守的各项上限（接活前要求的可用磁盘、心跳与认领间隔、续租周期、单次运行上限、单次上传的产物上限），读的就是本行所读的同一份环境；密钥只打印变量名，绝不打印值。
 
 环境变量间接寻址让同一份安装镜像可以服务每一台节点；若部署更希望固定 profile，把取值直接写进该行即可。两个占位值让 profile 始终可加载——在没有任何环境变量的机器上 `dsh mps-node --help` 也能用——而是否真的发起连接由 `autoStart` 决定：它只在设置了 `MPS_PLATFORM_HOST` 时为真，因此未配置的节点只挂载并保持空闲，而不会以占位身份去注册。密钥只会从 `secretEnv` 指定的环境变量读取。
 
