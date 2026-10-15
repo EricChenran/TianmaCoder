@@ -161,6 +161,9 @@ describe('platform endpoint', () => {
   it('rejects a port outside the TCP range', () => {
     expect(() => resolvePlatformEndpoint({ host: 'h', port: 0 })).toThrow(/between 1 and 65535/)
     expect(() => resolvePlatformEndpoint({ host: 'h', port: 65_536 })).toThrow(/between 1 and 65535/)
+    // An unbracketed IPv6 address always carries at least two colons, so one colon followed by
+    // digits is a port written into the host, which would otherwise be bracketed as an address.
+    expect(() => resolvePlatformEndpoint({ host: '10.0.0.7:8791' })).toThrow(/write the port in its own setting/u)
     expect(resolvePlatformEndpoint({ host: 'h', port: 1 }).port).toBe(1)
     expect(resolvePlatformEndpoint({ host: 'h', port: 65_535 }).port).toBe(65_535)
   })

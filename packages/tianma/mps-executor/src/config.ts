@@ -325,7 +325,15 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
   const port = env[EXECUTOR_ENV.platformPort]
   if (port !== undefined && port !== '') config.platformPort = Number(port)
   const scheme = env[EXECUTOR_ENV.platformScheme]
-  if (scheme === 'http' || scheme === 'https') config.platformScheme = scheme
+  // The value arrives as text, so this is the boundary that decides whether it is one the node
+  // connects with. Skipping anything else silently left the schema to exchange it for its
+  // default, and the node dialled a scheme nobody asked for.
+  if (scheme !== undefined && scheme !== '') {
+    if (scheme !== 'http' && scheme !== 'https') {
+      throw new TypeError(`${EXECUTOR_ENV.platformScheme} must be "http" or "https", got ${JSON.stringify(scheme)}`)
+    }
+    config.platformScheme = scheme
+  }
   const basePath = env[EXECUTOR_ENV.platformBasePath]
   if (basePath !== undefined && basePath !== '') config.platformBasePath = basePath
   const nodeName = env[EXECUTOR_ENV.nodeName]

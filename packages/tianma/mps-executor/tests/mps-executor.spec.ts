@@ -11,19 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  Config,
-  DEFAULT_SECRET_ENV,
-  MpsExecutorRuntime,
-  UNKNOWN_AGENT_VERSION,
-  apply,
-  autoStartNode,
-  createReportSink,
-  TASK_RUNNER_SERVICE,
-  readNodeSecret,
-  registerStopEffect,
-  resolveExecutorSettings,
-  WorkspaceStore,
-} from '@tianma/dsh-mps-executor'
+  Config, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
 import type {
   ExecHttpRequest,
   ExecHttpResponse,
@@ -1368,6 +1356,22 @@ describe('task claiming through the runtime', () => {
     expect(node.tasks).toBeUndefined()
     expect(reports.some(report => report.message.includes('no task runner composed'))).toBe(true)
     node.stop()
+  })
+})
+
+describe('a scheme the node does not connect with', () => {
+  it('is refused however it was stated, rather than exchanged for the default', () => {
+    const env = {
+      MPS_PLATFORM_HOST: '10.0.0.7',
+      MPS_NODE_ID: 'node-1',
+      MPS_NODE_WORKSPACE: codingRoot(),
+      MPS_PLATFORM_SCHEME: 'ftp',
+    }
+
+    expect(() => executorConfigFromEnv(env)).toThrow(/must be "http" or "https/u)
+
+    // And a scheme the node does connect with is carried through, not dropped.
+    expect(executorConfigFromEnv({ ...env, MPS_PLATFORM_SCHEME: 'https' }).platformScheme).toBe('https')
   })
 })
 

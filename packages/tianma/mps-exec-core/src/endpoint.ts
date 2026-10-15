@@ -80,6 +80,11 @@ function normalizeHost(host: string): string {
   if (trimmed.endsWith(']')) {
     throw new TypeError(`platform host has a closing bracket without an opening one, got ${JSON.stringify(host)}`)
   }
+  // A single colon followed by digits is a port on a host, not an address: an unbracketed
+  // IPv6 address always carries at least two colons.
+  if (/^[^:]+:\d+$/u.test(trimmed)) {
+    throw new TypeError(`platform host must be a bare host or address, got ${JSON.stringify(host)}; write the port in its own setting, not in the host`)
+  }
   // A bare colon-bearing value is an unbracketed IPv6 address; every URL built
   // from it needs the brackets, so add them here rather than at each call site.
   return trimmed.includes(':') ? `[${trimmed}]` : trimmed
