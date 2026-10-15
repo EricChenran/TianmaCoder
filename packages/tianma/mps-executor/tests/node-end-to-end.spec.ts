@@ -350,17 +350,19 @@ async function boot(options: {
   // The Loader's own module loader, adjusted in place: the repository forbids new unknown
   // casts, and the loader's type is its complete interface rather than the two members this
   // test replaces.
-  // The loader's module resolution is replaced whole, because its type is the complete
-  // ModuleLoaderV2 interface and this test owns exactly one specifier. Narrowing it without a
-  // cast is not reachable here; the assertion is confined to the test's own harness.
-  booted.loader.internal = {
-    version: 'v2',
-    async import(specifier: string) {
-      const found = modules.get(specifier)
-      if (found === undefined) throw new Error(`unexpected Loader import: ${specifier}`)
-      return found
-    },
-  } as unknown as NonNullable<typeof booted.loader.internal>
+  // This test answers one specifier and leaves the loader's own resolution in place for
+  // everything else, so the coverage runtime reaches its own modules and nothing is forged.
+  const delegate = booted.loader.internal
+  if (delegate === undefined) throw new Error('the Loader published no module loader to adjust')
+  // Narrowed by its own discriminant: the loader's type is a union, and only v2 has the
+  // import this test replaces.
+  if (delegate.version !== 'v2') throw new Error(`the Loader published a ${delegate.version} module loader, and this test adjusts v2`)
+  const load: typeof delegate.import = async (specifier, parentURL, importAttributes, phase, isEntryPoint) => {
+    const found = modules.get(specifier)
+    if (found !== undefined) return found
+    return await delegate.import(specifier, parentURL, importAttributes, phase, isEntryPoint)
+  }
+  booted.loader.internal = { ...delegate, version: 'v2', import: load }
   await booted.loader.create({
     name: 'cordis:include',
     config: { path: pathToFileURL(configPath).href },
