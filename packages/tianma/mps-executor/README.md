@@ -155,11 +155,11 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
 - **The runner needs the CLI** — the node falls back to `dsh --profile headless`, so a node without the built or installed CLI reports every attempt as failed; a deployment that composes its own `mpsTaskRunner` provider replaces the fallback.
-- **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented.
+- **Materials arrive in one request each** — the node fetches a material with one request and refuses a larger one, because the chunked reverse fetch is not implemented; uploads are chunked above the protocol's threshold.
 - **A `read_only` bundle needs the baseline** — the bundle names the base commit as a prerequisite, so the receiver must already hold it; the node hands back the work branch only.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
-- **Materials arrive in one request each** — one over the protocol's single-request ceiling is refused because the chunked fetch is not implemented, and the attempt reports `blocked` rather than working without it.
+- **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
 - **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 

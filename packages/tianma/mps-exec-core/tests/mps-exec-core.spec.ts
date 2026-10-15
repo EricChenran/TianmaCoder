@@ -688,6 +688,35 @@ describe('protocol client', () => {
     expect(await file.text()).toBe('# 开发报告\n')
   })
 
+  it('opens, fills, and closes a chunked upload', async () => {
+    const { client: instance, calls } = client([
+      ok({ upload_id: 'upload-1', uploaded_chunks: [0] }),
+      ok(null),
+      ok(null),
+    ])
+
+    const session = await instance.initArtifact('tsk_1', {
+      artifact_id: 'art_1',
+      kind: 'bundle',
+      total_size: 3,
+      chunk_size: 2,
+      sha256: 'sha-of-all',
+      meta: '{"branch":"feature/tsk_1"}',
+    })
+    expect(session).toEqual({ upload_id: 'upload-1', uploaded_chunks: [0] })
+
+    await instance.uploadArtifactChunk('tsk_1', 'upload-1', 1, new Uint8Array([7, 8]))
+    await instance.completeArtifact('tsk_1', 'upload-1')
+
+    expect(calls[0]?.request.url.endsWith('/exec/v1/tasks/tsk_1/artifacts/init')).toBe(true)
+    expect(jsonBody(calls[0]?.request)).toContain('"chunk_size":2')
+    expect(calls[1]?.request.url.endsWith('/tasks/tsk_1/artifacts/upload-1/chunk?index=1')).toBe(true)
+    // A chunk travels as bytes, not as JSON.
+    expect(calls[1]?.request.headers['content-type']).toBe('application/octet-stream')
+    expect(calls[1]?.request.body).toEqual(new Uint8Array([7, 8]))
+    expect(calls[2]?.request.url.endsWith('/tasks/tsk_1/artifacts/upload-1/complete')).toBe(true)
+  })
+
   it('sends an empty metadata object when the caller states none', async () => {
     const { client: instance, calls } = client([ok(null)])
     const bytes = new TextEncoder().encode('log\n')
@@ -753,6 +782,28 @@ describe('protocol client', () => {
     expect(response.status).toBe(200)
     expect(response.headers['x-artifact-sha256']).toBe(sha256Of(bytes))
     expect(new TextDecoder().decode(response.bytes)).toBe('材料\n')
+  })
+
+  it('sends a chunk through fetch as bytes', async () => {
+    const bodies: (BodyInit | null | undefined)[] = []
+    const fetchImpl = async (_url: string, init: RequestInit | undefined): Promise<Response> => {
+      bodies.push(init?.body)
+      return new Response(
+        JSON.stringify({ code: 'OK', msg: '', data: null, requestId: 'req_1', serverTime: 't' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }
+    const client = new ExecClient({
+      endpoint: resolvePlatformEndpoint({ host: '10.0.0.7' }),
+      nodeId: 'node-1',
+      transport: createFetchTransport(fetchImpl as typeof fetch),
+    })
+
+    await client.uploadArtifactChunk('tsk_1', 'upload-1', 2, new Uint8Array([1, 2, 3]))
+
+    // `fetch` takes the chunk as a blob part, so the bytes travel unchanged.
+    expect(bodies[0]).toBeInstanceOf(Blob)
+    expect((bodies[0] as Blob).size).toBe(3)
   })
 
   it('digests bytes the same way the platform checks them', () => {

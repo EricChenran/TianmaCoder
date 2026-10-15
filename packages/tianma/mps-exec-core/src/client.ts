@@ -33,7 +33,7 @@ export interface ExecHttpRequest {
    * how an artifact upload carries a file; the transport leaves its content type to
    * `fetch` so the boundary matches.
    */
-  body?: string | FormData | undefined
+  body?: string | FormData | Uint8Array | undefined
   /** Budget for this one request. */
   timeoutMs: number
   /** Caller cancellation, combined with the timeout. */
@@ -412,6 +412,30 @@ export type ExecCapabilitiesResult = Record<string, unknown>
 /** What an artifact is, as the platform's artifact table names it. */
 export type ExecArtifactKind = 'screenshot' | 'report' | 'video' | 'log' | 'diff' | 'bundle' | 'other'
 
+/** What one chunked artifact upload states when it opens. */
+export interface ExecArtifactUploadInit {
+  /** Artifact the node minted, which makes the upload idempotent. */
+  artifact_id: string
+  /** What the file is. */
+  kind: ExecArtifactKind
+  /** Size of the whole file in bytes. */
+  total_size: number
+  /** Size of one chunk in bytes. */
+  chunk_size: number
+  /** SHA-256 of the whole file, which the platform verifies when the upload closes. */
+  sha256: string
+  /** JSON the platform keeps beside the artifact. */
+  meta?: string | undefined
+}
+
+/** One chunked artifact upload the platform opened. */
+export interface ExecArtifactUploadSession {
+  /** Upload to address the chunks and the completion to. */
+  upload_id: string
+  /** Chunk indices the platform already holds, so a resumed upload sends only the rest. */
+  uploaded_chunks: number[]
+}
+
 /** One artifact to upload. */
 export interface ExecArtifactUpload {
   /** Idempotency key the node generates. */
@@ -474,7 +498,10 @@ async function sendFetch(fetchImpl: typeof fetch, request: ExecHttpRequest): Pro
   const timeout = AbortSignal.timeout(request.timeoutMs)
   const signal = request.signal === undefined ? timeout : AbortSignal.any([timeout, request.signal])
   const init: RequestInit = { method: request.method, headers: request.headers, signal }
-  if (request.body !== undefined) init.body = request.body
+  if (request.body !== undefined) {
+    // A chunk travels as bytes; `fetch` takes them as a blob part.
+    init.body = request.body instanceof Uint8Array ? new Blob([request.body.slice()]) : request.body
+  }
   return await fetchImpl(request.url, init)
 }
 
@@ -541,15 +568,23 @@ export class ExecClient {
     payload: unknown,
     timeoutMs: number = this.#requestTimeoutMs,
     signal?: AbortSignal,
+    query?: Record<string, string>,
   ): Promise<{ status: number; envelope: ExecEnvelope<unknown> | undefined; headers: Record<string, string> }> {
     const headers = this.#requestHeaders()
     const multipart = payload instanceof FormData
-    if (payload !== undefined && !multipart) headers['content-type'] = 'application/json; charset=utf-8'
+    const binary = payload instanceof Uint8Array
+    if (binary) headers['content-type'] = 'application/octet-stream'
+    else if (payload !== undefined && !multipart) headers['content-type'] = 'application/json; charset=utf-8'
+    // The endpoint owns the address; a query is the caller's, because a protocol path
+    // is bare and the endpoint refuses anything else.
+    const url = query === undefined
+      ? this.#endpoint.url(path)
+      : `${this.#endpoint.url(path)}?${new URLSearchParams(query).toString()}`
     const response = await this.#transport({
-      url: this.#endpoint.url(path),
+      url,
       method: payload === undefined ? 'GET' : 'POST',
       headers,
-      body: payload === undefined ? undefined : multipart ? payload : JSON.stringify(payload),
+      body: payload === undefined || multipart || binary ? payload : JSON.stringify(payload),
       timeoutMs,
       signal,
     })
@@ -630,8 +665,9 @@ export class ExecClient {
     payload: unknown,
     timeoutMs: number = this.#requestTimeoutMs,
     signal?: AbortSignal,
+    query?: Record<string, string>,
   ): Promise<T> {
-    const { status, envelope } = await this.#send(path, payload, timeoutMs, signal)
+    const { status, envelope } = await this.#send(path, payload, timeoutMs, signal, query)
     return this.#requireOk<T>(path, status, envelope)
   }
 
@@ -887,6 +923,65 @@ export class ExecClient {
     form.set('meta', upload.meta ?? '{}')
     form.append('file', new Blob([upload.bytes.slice()]), upload.filename)
     await this.#sendOk<unknown>(`/tasks/${taskId}/artifacts`, form, this.#artifactTimeoutMs, signal)
+  }
+
+  /**
+   * Open a chunked upload for an artifact the protocol requires in pieces.
+   * @param taskId - the task the artifact belongs to.
+   * @param init - what the upload states: the artifact, its size, its digest, and the pieces.
+   * @param signal - caller cancellation.
+   * @returns the upload the platform opened and the chunks it already holds.
+   */
+  async initArtifact(
+    taskId: string,
+    init: ExecArtifactUploadInit,
+    signal?: AbortSignal,
+  ): Promise<ExecArtifactUploadSession> {
+    return await this.#sendOk<ExecArtifactUploadSession>(
+      `/tasks/${taskId}/artifacts/init`,
+      init,
+      this.#artifactTimeoutMs,
+      signal,
+    )
+  }
+
+  /**
+   * Send one chunk of an open upload. Chunks may arrive out of order and be resent.
+   * @param taskId - the task the artifact belongs to.
+   * @param uploadId - the upload the platform opened.
+   * @param index - the chunk's index.
+   * @param bytes - the chunk's contents.
+   * @param signal - caller cancellation.
+   */
+  async uploadArtifactChunk(
+    taskId: string,
+    uploadId: string,
+    index: number,
+    bytes: Uint8Array,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.#sendOk<unknown>(
+      `/tasks/${taskId}/artifacts/${uploadId}/chunk`,
+      bytes,
+      this.#artifactTimeoutMs,
+      signal,
+      { index: String(index) },
+    )
+  }
+
+  /**
+   * Close an upload, which makes the platform verify the whole artifact's digest.
+   * @param taskId - the task the artifact belongs to.
+   * @param uploadId - the upload the platform opened.
+   * @param signal - caller cancellation.
+   */
+  async completeArtifact(taskId: string, uploadId: string, signal?: AbortSignal): Promise<void> {
+    await this.#sendOk<unknown>(
+      `/tasks/${taskId}/artifacts/${uploadId}/complete`,
+      {},
+      this.#artifactTimeoutMs,
+      signal,
+    )
   }
 
   /**
