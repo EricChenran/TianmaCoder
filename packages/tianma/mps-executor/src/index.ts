@@ -74,7 +74,14 @@ export {
 export type { StoppableRun, StopPlan } from './cli-runner.ts'
 export { DEFAULT_CLI_COMMAND } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
-export { EVIDENCE_DIRECTORY, collectEvidence } from './evidence.ts'
+export {
+  EVIDENCE_DIRECTORY,
+  SCREENSHOT_MANIFEST,
+  SCREENSHOTS_DIRECTORY,
+  SCREENSHOT_MIN_HEIGHT,
+  SCREENSHOT_MIN_WIDTH,
+  collectEvidence,
+} from './evidence.ts'
 export { MATERIALS_DIRECTORY, fetchMaterials, materialFileName, taskMaterials } from './materials.ts'
 export type {
   CollectEvidenceOptions,
@@ -82,6 +89,7 @@ export type {
   EvidenceCommand,
   EvidenceCommandOutcome,
   EvidenceFailure,
+  EvidenceScreenshot,
 } from './evidence.ts'
 export type { FetchMaterialsOptions, MaterialFile, MaterialSource } from './materials.ts'
 export type { CliRunnerOptions } from './cli-runner.ts'

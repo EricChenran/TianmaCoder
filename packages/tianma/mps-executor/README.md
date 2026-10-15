@@ -104,6 +104,8 @@ A `read_only` task is the one mode where the node does not push: it commits the 
 
 `collectEvidence` produces what the task's deliverables require before the attempt reports: the build and the end-to-end command run in the delivered workspace through the host shell — the payload states a shell command, and the node interpolates nothing into it — each keeping its output in `.evidence/` (kept out of the repository) for the platform to read, and the report the agent wrote is taken from the file the payload names. A required command that fails stops the dependent work, and the attempt reports `failed` with that command's exit code and last line rather than claiming a delivery the platform's gates would reject. The runner uploads each of those files as the artifact the protocol names — a `log` per command, the `report` — and reports their ids in the result's evidence.
 
+A screenshot is the one piece of evidence the node cannot produce, because only the run that captured it knows its viewport and route: the task book tells the attempt to write them under `.evidence/screenshots/` and to declare each in `.evidence/screenshots.json` with its route, caption, and size, and the node checks that declaration — the file is there, inside the workspace, and no smaller than the platform accepts — before uploading each with the metadata the platform keeps and reporting `screenshots[]` in the evidence.
+
 ### Source map
 
 | File | Role |
@@ -163,7 +165,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **A refused material stops the attempt** — a material over the single-request ceiling, or one the platform refuses, makes the attempt report `blocked` rather than working without it.
-- **Screenshots are the agent's** — the node runs the commands the payload states and uploads the report, but it takes no screenshots: the platform's screenshot checks need viewport metadata that only the run that captured them knows.
+- **Screenshots are declared, not captured** — the node takes no screenshots: it reads what the attempt declared in `.evidence/screenshots.json`, checks that each file is there and at least as large as the platform accepts, and uploads them with the metadata the declaration states. The platform's own content checks are the platform's.
 - **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 

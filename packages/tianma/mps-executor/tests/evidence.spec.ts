@@ -7,7 +7,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
-import { EVIDENCE_DIRECTORY, collectEvidence } from '@tianma/dsh-mps-executor'
+import {
+  EVIDENCE_DIRECTORY,
+  SCREENSHOT_MANIFEST,
+  SCREENSHOTS_DIRECTORY,
+  collectEvidence,
+} from '@tianma/dsh-mps-executor'
 import type { EvidenceCommandOutcome } from '@tianma/dsh-mps-executor'
 
 /** Directories one test created, removed after it. */
@@ -166,6 +171,120 @@ describe('collecting evidence', () => {
       what: 'report',
       message: 'the task requires a report at ../outside.md, which the attempt did not write',
     })
+  })
+
+  it('collects the screenshots an attempt declared, with what the platform keeps', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, SCREENSHOTS_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'detail.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'list.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify([
+      {
+        file: join(SCREENSHOTS_DIRECTORY, 'detail.png'),
+        route: '/orders/123',
+        caption: '批量下载入口',
+        width: 1440,
+        height: 900,
+        viewport: '1440x900',
+        captured_at: '2026-10-15T04:03:55.123Z',
+        scenario: '批量下载',
+      },
+      // A declaration may state only what it knows: the caption falls back to the route.
+      { file: join(SCREENSHOTS_DIRECTORY, 'list.png'), route: '/orders' },
+    ]), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toBeUndefined()
+    expect(collected.screenshots).toEqual([
+      {
+        path: join(SCREENSHOTS_DIRECTORY, 'detail.png'),
+        route: '/orders/123',
+        caption: '批量下载入口',
+        meta: {
+          width: 1440,
+          height: 900,
+          viewport: '1440x900',
+          route: '/orders/123',
+          captured_at: '2026-10-15T04:03:55.123Z',
+          scenario: '批量下载',
+        },
+      },
+      {
+        path: join(SCREENSHOTS_DIRECTORY, 'list.png'),
+        route: '/orders',
+        caption: '/orders',
+        meta: { route: '/orders' },
+      },
+    ])
+  })
+
+  it('refuses fewer screenshots than the task requires', async () => {
+    const directory = temporary('mps-evidence-')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true, min_screenshots: 2 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toEqual({
+      what: 'screenshots',
+      message: `the task requires 2 screenshot(s) at ${SCREENSHOT_MANIFEST}, and the attempt declared 0`,
+    })
+  })
+
+  it('refuses a screenshot under the size the platform accepts', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, SCREENSHOTS_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'small.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify([
+      { file: join(SCREENSHOTS_DIRECTORY, 'small.png'), route: '/orders/123', width: 320, height: 200 },
+    ]), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true, min_screenshots: 1 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure?.what).toBe('screenshots')
+    expect(collected.failure?.message).toContain('under the 800x600 the platform accepts')
+  })
+
+  it('refuses a declared screenshot the attempt did not write', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, EVIDENCE_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify([
+      { file: join(SCREENSHOTS_DIRECTORY, 'gone.png'), route: '/orders/123' },
+    ]), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true, min_screenshots: 1 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure?.what).toBe('screenshots')
+    expect(collected.failure?.message).toContain('which the attempt did not write')
+  })
+
+  it('refuses a declaration without a file and a route', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, EVIDENCE_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify([{ caption: '无路由' }]), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true, min_screenshots: 1 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure?.message).toContain('without a file and a route')
   })
 
   it('refuses a required deliverable that states no command', async () => {

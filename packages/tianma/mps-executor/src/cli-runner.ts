@@ -301,6 +301,14 @@ async function uploadEvidence(
   if (collected.report_path !== undefined) {
     evidence.report_artifact_id = await context.uploadArtifact('report', collected.report_path)
   }
+  if (collected.screenshots !== undefined) {
+    const screenshots: Record<string, unknown>[] = []
+    for (const screenshot of collected.screenshots) {
+      const id = await context.uploadArtifact('screenshot', screenshot.path, screenshot.meta)
+      screenshots.push({ artifact_id: id, route: screenshot.route, caption: screenshot.caption })
+    }
+    evidence.screenshots = screenshots
+  }
   return Object.keys(evidence).length === 0 ? undefined : evidence
 }
 
@@ -314,6 +322,7 @@ function evidenceNote(collected: CollectedEvidence): string {
   if (collected.build !== undefined) parts.push('build')
   if (collected.e2e !== undefined) parts.push('e2e')
   if (collected.report_path !== undefined) parts.push('report')
+  if (collected.screenshots !== undefined) parts.push('screenshots')
   return parts.length === 0 ? '' : `; evidence: ${parts.join(', ')}`
 }
 

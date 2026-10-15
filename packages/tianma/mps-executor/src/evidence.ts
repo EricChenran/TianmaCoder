@@ -11,12 +11,24 @@
  * @module @tianma/dsh-mps-executor/evidence
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { excludeFromRepository, resolveWithinWorkspace } from './paths.ts'
 
 /** Directory inside the workspace where the node keeps the evidence it collected. */
 export const EVIDENCE_DIRECTORY = '.evidence'
+
+/** Directory inside the evidence where an attempt leaves the screenshots it captured. */
+export const SCREENSHOTS_DIRECTORY = join(EVIDENCE_DIRECTORY, 'screenshots')
+
+/** File the attempt declares its screenshots in, relative to the workspace. */
+export const SCREENSHOT_MANIFEST = join(EVIDENCE_DIRECTORY, 'screenshots.json')
+
+/** Smallest width the platform accepts for a screenshot. */
+export const SCREENSHOT_MIN_WIDTH = 800
+
+/** Smallest height the platform accepts for a screenshot. */
+export const SCREENSHOT_MIN_HEIGHT = 600
 
 /** One command the node ran for evidence. */
 export interface EvidenceCommand {
@@ -33,9 +45,21 @@ export interface EvidenceCommand {
 /** Why an attempt could not collect the evidence its deliverables require. */
 export interface EvidenceFailure {
   /** Which deliverable failed. */
-  what: 'build' | 'e2e' | 'report'
+  what: 'build' | 'e2e' | 'report' | 'screenshots'
   /** What to tell the operator. */
   message: string
+}
+
+/** One screenshot an attempt captured and declared. */
+export interface EvidenceScreenshot {
+  /** Path of the file, relative to the workspace. */
+  path: string
+  /** Route the screenshot shows. */
+  route: string
+  /** Caption the platform shows beside it. */
+  caption: string
+  /** What the platform keeps beside the artifact. */
+  meta: Record<string, unknown>
 }
 
 /** What one attempt collected. */
@@ -46,6 +70,8 @@ export interface CollectedEvidence {
   e2e?: EvidenceCommand | undefined
   /** The report the agent wrote, when the payload required one. */
   report_path?: string | undefined
+  /** The screenshots the attempt captured, when the payload required any. */
+  screenshots?: EvidenceScreenshot[] | undefined
   /** Set when a required deliverable could not be produced. */
   failure?: EvidenceFailure | undefined
 }
@@ -132,7 +158,90 @@ export async function collectEvidence(options: CollectEvidenceOptions): Promise<
     }
     collected.report_path = stated
   }
+  if (deliverables['require_screenshots'] === true) {
+    const screenshots = await readScreenshots(options.directory, deliverables)
+    if ('failure' in screenshots) return { ...collected, failure: screenshots.failure }
+    collected.screenshots = screenshots.screenshots
+  }
   return collected
+}
+
+/**
+ * Read the screenshots an attempt declared. The node cannot capture them — the browser
+ * that did knows the viewport and the route — so the attempt declares each one and the
+ * node checks what it can before the platform sees it.
+ * @param directory - the workspace the attempt delivered from.
+ * @param deliverables - the payload's deliverables block.
+ * @returns the screenshots, or why they cannot be handed over.
+ */
+async function readScreenshots(
+  directory: string,
+  deliverables: Record<string, unknown>,
+): Promise<{ screenshots: EvidenceScreenshot[] } | { failure: EvidenceFailure }> {
+  const minimum = count(deliverables['min_screenshots']) ?? 1
+  let declared: unknown
+  try {
+    declared = JSON.parse(readFileSync(join(directory, SCREENSHOT_MANIFEST), 'utf8'))
+  } catch {
+    // No manifest is the same answer as no screenshots: the attempt declared none.
+    declared = undefined
+  }
+  const entries = Array.isArray(declared) ? declared : []
+  if (entries.length < minimum) {
+    return {
+      failure: {
+        what: 'screenshots',
+        message: `the task requires ${String(minimum)} screenshot(s) at ${SCREENSHOT_MANIFEST}, and the attempt declared ${String(entries.length)}`,
+      },
+    }
+  }
+  const screenshots: EvidenceScreenshot[] = []
+  for (const entry of entries) {
+    const stated = record(entry)
+    const file = text(stated['file'])
+    const route = text(stated['route'])
+    if (file === undefined || route === undefined) {
+      return {
+        failure: {
+          what: 'screenshots',
+          message: `${SCREENSHOT_MANIFEST} declares a screenshot without a file and a route`,
+        },
+      }
+    }
+    const width = count(stated['width'])
+    const height = count(stated['height'])
+    if (width !== undefined && height !== undefined && (width < SCREENSHOT_MIN_WIDTH || height < SCREENSHOT_MIN_HEIGHT)) {
+      return {
+        failure: {
+          what: 'screenshots',
+          message: `${file} is ${String(width)}x${String(height)}, under the ${String(SCREENSHOT_MIN_WIDTH)}x${String(SCREENSHOT_MIN_HEIGHT)} the platform accepts`,
+        },
+      }
+    }
+    const path = await resolveWithinWorkspace(directory, file).catch(() => undefined)
+    if (path === undefined || !existsSync(path)) {
+      return {
+        failure: {
+          what: 'screenshots',
+          message: `${SCREENSHOT_MANIFEST} declares ${file}, which the attempt did not write`,
+        },
+      }
+    }
+    screenshots.push({
+      path: file,
+      route,
+      caption: text(stated['caption']) ?? route,
+      meta: {
+        ...(width === undefined ? {} : { width }),
+        ...(height === undefined ? {} : { height }),
+        ...(text(stated['viewport']) === undefined ? {} : { viewport: text(stated['viewport']) }),
+        route,
+        ...(text(stated['captured_at']) === undefined ? {} : { captured_at: text(stated['captured_at']) }),
+        ...(text(stated['scenario']) === undefined ? {} : { scenario: text(stated['scenario']) }),
+      },
+    })
+  }
+  return { screenshots }
 }
 
 /**
@@ -189,4 +298,13 @@ function record(value: unknown): Record<string, unknown> {
  */
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value : undefined
+}
+
+/**
+ * Read one value as a positive count.
+ * @param value - the value.
+ * @returns the count, or undefined.
+ */
+function count(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
 }

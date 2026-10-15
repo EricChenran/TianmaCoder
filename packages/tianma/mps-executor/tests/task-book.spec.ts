@@ -125,7 +125,7 @@ describe('the task book', () => {
     expect(book).toContain('- 构建命令：npm run build')
     expect(book).toContain('- E2E 命令：npm run test:e2e')
     expect(book).toContain('- 报告文件名：REPORT.md')
-    expect(book).toContain('- 至少 2 张截图')
+    expect(book).toContain('- 至少 2 张截图：写入 .evidence/screenshots/，并在 .evidence/screenshots.json 里逐张声明')
     expect(book).toContain('## 材料\n\n- art_ctx\n- art_pdf')
     expect(book).toContain('## 聊天记录')
     expect(book).toContain('- 起于：2026-10-14T09:00:00.000+08:00')

@@ -4,7 +4,7 @@
  * settles on request, so no model and no network are involved.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -242,9 +242,16 @@ describe('the CLI runner', () => {
         e2e_command: 'node --version',
         require_report: true,
         report_filename: 'REPORT.md',
+        require_screenshots: true,
+        min_screenshots: 1,
       },
     }))
     writeFileSync(join(workspace, 'REPORT.md'), '# 报告\n', 'utf8')
+    mkdirSync(join(workspace, '.evidence', 'screenshots'), { recursive: true })
+    writeFileSync(join(workspace, '.evidence', 'screenshots', 'detail.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(workspace, '.evidence', 'screenshots.json'), JSON.stringify([
+      { file: '.evidence/screenshots/detail.png', route: '/orders/123', caption: '批量下载入口', width: 1440, height: 900 },
+    ]), 'utf8')
 
     const result = await runnerFor(logs, 'ok').run(context)
 
@@ -252,8 +259,12 @@ describe('the CLI runner', () => {
     expect(result.evidence?.build).toMatchObject({ command: 'node --version', exit_code: 0, log_artifact_id: 'art-1' })
     expect(result.evidence?.e2e).toMatchObject({ command: 'node --version', exit_code: 0, result_artifact_id: 'art-2' })
     expect(result.evidence?.report_artifact_id).toBe('art-3')
-    expect(context.uploads.map(upload => upload.kind)).toEqual(['log', 'log', 'report'])
-    expect(result.summary).toContain('evidence: build, e2e, report')
+    expect(context.uploads.map(upload => upload.kind)).toEqual(['log', 'log', 'report', 'screenshot'])
+    expect(context.uploads[3]?.meta).toMatchObject({ route: '/orders/123', width: 1440, height: 900 })
+    expect(result.evidence?.screenshots).toEqual([
+      { artifact_id: 'art-4', route: '/orders/123', caption: '批量下载入口' },
+    ])
+    expect(result.summary).toContain('evidence: build, e2e, report, screenshots')
     // The evidence is the node's own output, so the commit never carries it.
     expect(readFileSync(join(workspace, '.evidence', 'build.log'), 'utf8')).toContain('node --version')
   })

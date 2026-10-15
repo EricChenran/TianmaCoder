@@ -19,6 +19,7 @@ import {
   taskWorkspaceId,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment, TaskRepository } from '@tianma/dsh-mps-exec-core'
+import { SCREENSHOTS_DIRECTORY, SCREENSHOT_MANIFEST } from './evidence.ts'
 import type { MaterialFile } from './materials.ts'
 import { taskMaterials } from './materials.ts'
 import { excludeFromRepository } from './paths.ts'
@@ -113,6 +114,16 @@ export function writeTaskBook(options: {
 }
 
 /**
+ * One path as the book shows it: the book is read as text, so its paths read the same on
+ * every host.
+ * @param path - the path to render.
+ * @returns the path with forward slashes.
+ */
+function slashes(path: string): string {
+  return path.replace(/\\/gu, '/')
+}
+
+/**
  * Append one section, skipping the ones the payload states nothing for.
  * @param lines - the book so far.
  * @param title - the section heading.
@@ -153,8 +164,7 @@ function materialLines(facts: BookFacts, materials: MaterialFile[]): string[] {
   const written = new Map(materials.map(material => [material.artifact_id, material.path]))
   return facts.materials.map((id) => {
     const path = written.get(id)
-    // The book is read as text, so its paths read the same on every host.
-    return path === undefined ? `- ${id}` : `- ${path.replace(/\\/gu, '/')}（${id}）`
+    return path === undefined ? `- ${id}` : `- ${slashes(path)}（${id}）`
   })
 }
 
@@ -184,7 +194,11 @@ function deliveryLines(facts: BookFacts): string[] {
   if (facts.buildCommand !== undefined) lines.push(`- 构建命令：${facts.buildCommand}`)
   if (facts.e2eCommand !== undefined) lines.push(`- E2E 命令：${facts.e2eCommand}`)
   if (facts.reportFilename !== undefined) lines.push(`- 报告文件名：${facts.reportFilename}`)
-  if (facts.minScreenshots !== undefined) lines.push(`- 至少 ${String(facts.minScreenshots)} 张截图`)
+  if (facts.minScreenshots !== undefined) {
+    lines.push(
+      `- 至少 ${String(facts.minScreenshots)} 张截图：写入 ${slashes(SCREENSHOTS_DIRECTORY)}/，并在 ${slashes(SCREENSHOT_MANIFEST)} 里逐张声明 file、route、caption、width、height`,
+    )
+  }
   return lines
 }
 
