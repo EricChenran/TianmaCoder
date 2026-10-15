@@ -17,6 +17,7 @@ import {
   resolvePlatformEndpoint,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecCapabilities, PlatformEndpoint, PlatformScheme } from '@tianma/dsh-mps-exec-core'
+import { probeTools } from './capabilities.ts'
 
 /** Environment variable holding the pre-shared node secret when configuration names none. */
 export const DEFAULT_SECRET_ENV = 'MPS_NODE_SECRET'
@@ -162,6 +163,8 @@ export const Config: z<Config> = z.object({
 export interface ResolvedCliRunner {
   /** Command and its leading arguments. */
   command: string[]
+  /** The executable those arguments run, captured where the command was checked. */
+  bin: string
   /** Directory the runner keeps one raw log per attempt under. */
   logsDirectory: string
   /** `DSH_HOME` the run uses, or undefined to inherit the node's environment. */
@@ -227,10 +230,14 @@ function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: st
   if (command[0] === undefined || command[0] === '') {
     throw new TypeError('the CLI runner needs the command it starts, such as dsh --profile headless')
   }
+  // The check above is what makes this executable exist; TypeScript cannot see through an
+  // element read, so the resolved runner carries it explicitly.
+  const bin = command[0] as string
   const logs = (stated?.logsDirectory ?? '').trim()
   const home = (stated?.dshHome ?? '').trim()
   return {
     command,
+    bin,
     logsDirectory: logs === '' ? join(workspaceRoot, 'logs') : logs,
     dshHome: home === '' ? undefined : home,
     jsonEvents: stated?.jsonEvents === true,
@@ -278,7 +285,9 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     capabilities: {
       lanes: [...(config.lanes ?? [])],
-      tools: [...(config.tools ?? [])],
+      // A capability is a promise: the tools are the ones this machine has, unless a
+      // deployment states the set it wants to be scheduled for.
+      tools: config.tools === undefined || config.tools.length === 0 ? probeTools() : [...config.tools],
       os: platform(),
       access_modes: ['read_only', 'read_write'],
       max_artifact_bytes: DEFAULT_MAX_ARTIFACT_BYTES,

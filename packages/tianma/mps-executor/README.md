@@ -66,8 +66,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `leaseRenewSeconds` | `30` | Lease renewal period, until a claim states the platform's own |
 | `taskRuntimeSeconds` | `10800` | Runtime ceiling for one attempt, until the task payload states its own |
 | `requestTimeoutMs` | `15000` | Budget for one ordinary request |
-| `lanes` / `tools` | empty | Capability promise the node registers |
-| `agentVersion` | `unknown` | Agent version reported |
+| `lanes` / `tools` | lanes empty, tools probed | Capability promise the node registers; stated tools replace the probed set |
+| `agentVersion` | probed from the CLI | Agent version reported; the stated value is the fallback when the CLI cannot say |
 | `labels` | empty | Operator labels |
 | `autoStart` | `true` | Whether the node authenticates and registers as soon as the profile loads |
 
@@ -110,6 +110,8 @@ A screenshot is the one piece of evidence the node cannot produce, because only 
 The node is also exercised end to end: a spec boots this plugin through the Loader from a `cordis.yml`, with its configuration validated, dials a platform on this host, and runs real tasks in a real clone — the agent is a stub, everything else is the node: the checkout, the commit, the push or the bundle, the evidence commands, the artifacts, the session report, the capability promise, and the result. Both access modes are covered: a `read_write` task is pushed to the origin and a `read_only` one goes back as a bundle with nothing pushed.
 
 The platform's configuration is fetched when the revision it states moves: the node follows the heartbeat interval the platform asks for — re-arming its timer without dropping the work in flight — and names the parameters it keeps at the values it declared, so an instruction never disappears silently.
+
+The capabilities a node registers are probed, because the platform schedules on them: the tools come from the machine's `PATH` and the agent version from the CLI the node runs. A deployment that wants to be scheduled for a stated set of tools, or to report a stated version, still can — the probe is what happens when it states none.
 
 ### Source map
 

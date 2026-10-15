@@ -87,6 +87,12 @@ export interface ExecutorRuntimeOptions {
   now?: (() => Date) | undefined
   /** Operator-visible event sink; defaults to discarding events. */
   report?: ((report: ExecutorReport) => void) | undefined
+  /**
+   * How this node learns the agent version it reports. The plugin composes it from the CLI
+   * the node runs, so the platform schedules on the build that is really here.
+   * @returns the version, or undefined when the CLI could not say.
+   */
+  probeAgentVersion?: (() => Promise<string | undefined>) | undefined
 }
 
 /**
@@ -105,6 +111,10 @@ export class MpsExecutorRuntime {
   #state: NodeState = 'idle'
   #token: string | undefined
   #heartbeatSeconds: number
+  /** Agent version this node reported, probed once. */
+  #version: string | undefined
+  /** How the agent's version is probed, when a deployment composed a CLI to ask. */
+  #probeAgentVersion: (() => Promise<string | undefined>) | undefined
   /** Platform configuration revision this node has applied; undefined before registration. */
   #configRevision: number | undefined
   #timer: ReturnType<typeof setInterval> | undefined
@@ -125,6 +135,7 @@ export class MpsExecutorRuntime {
     this.#now = options.now ?? (() => new Date())
     this.#report = options.report ?? (() => {})
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
+    this.#probeAgentVersion = options.probeAgentVersion
     this.client = new ExecClient({
       endpoint: options.settings.endpoint,
       nodeId: options.settings.nodeId,
@@ -268,7 +279,7 @@ export class MpsExecutorRuntime {
         name: this.settings.nodeName,
         host: this.settings.nodeHost,
         protocol_version: EXEC_PROTOCOL_VERSION,
-        agent_version: this.settings.agentVersion,
+        agent_version: await this.#agentVersion(),
         slots: this.slots(),
         capabilities: this.settings.capabilities,
         workspace_root: this.settings.workspaceRoot,
@@ -319,6 +330,18 @@ export class MpsExecutorRuntime {
       await this.#applyConfiguration(heartbeat.config_revision, signal)
     }
     return heartbeat
+  }
+
+  /**
+   * The agent version this node reports. A deployment may state one; otherwise the node
+   * asks the CLI it runs, so the platform schedules on the build that is really here.
+   * @returns the version.
+   */
+  async #agentVersion(): Promise<string> {
+    if (this.#version !== undefined) return this.#version
+    const probed = this.#probeAgentVersion === undefined ? undefined : await this.#probeAgentVersion()
+    this.#version = probed ?? this.settings.agentVersion
+    return this.#version
   }
 
   /**

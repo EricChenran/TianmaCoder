@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { tianmaCliRunner } from './cli-runner.ts'
+import { probeAgentVersion } from './capabilities.ts'
 import { readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
@@ -31,6 +32,8 @@ export {
   readNodeSecret,
   resolveExecutorSettings,
 } from './config.ts'
+export { PROBED_TOOLS, probeAgentVersion, probeTools, versionFrom } from './capabilities.ts'
+export type { ProbeAgentVersionOptions, ProbeToolsOptions } from './capabilities.ts'
 export { MpsExecutorRuntime } from './runtime.ts'
 export type { ExecutorReport, NodeState } from './runtime.ts'
 export type { ExecutorRuntimeOptions } from './runtime.ts'
@@ -221,6 +224,9 @@ export function apply(ctx: Context, config: Config): void {
     // Read when the node starts claiming, so a runner composed by any other row
     // is found even when it mounts after this one.
     runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? ownRunner,
+    // The version is probed from the CLI this node runs, so the platform schedules on
+    // the build that is really here rather than a value someone wrote down.
+    probeAgentVersion: async () => await probeAgentVersion({ bin: settings.cliRunner.bin }),
     report: createReportSink(ctx.logger('mps-executor')),
   })
   ctx.provide('mpsExecutor', runtime)

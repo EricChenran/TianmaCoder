@@ -561,6 +561,7 @@ describe('plugin wiring', () => {
     const defaults = settingsFor()
     expect(defaults.cliRunner).toEqual({
       command: ['dsh', '--profile', 'headless'],
+      bin: 'dsh',
       logsDirectory: join(defaults.workspaceRoot, 'logs'),
       dshHome: undefined,
       jsonEvents: false,
@@ -576,6 +577,7 @@ describe('plugin wiring', () => {
     })
     expect(stated.cliRunner).toEqual({
       command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
+      bin: 'C:\\tools\\dsh.exe',
       logsDirectory: 'C:\\node-logs',
       dshHome: 'C:\\node-home',
       jsonEvents: true,
@@ -831,6 +833,49 @@ describe('the runner the node falls back to', () => {
     await node.heartbeatOnce()
 
     expect(reports.some(report => report.message.includes('could not read platform configuration 3'))).toBe(true)
+  })
+
+  it('registers the agent version it probed from its own CLI', async () => {
+    vi.useFakeTimers()
+    let probes = 0
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      probeAgentVersion: async () => { probes += 1; return '0.2.1-alpha.2' },
+      report: () => { /* this test reads the register body */ },
+    })
+
+    await node.bootstrap()
+
+    const registered = queue.calls.find(call => call.request.url.endsWith('/register'))
+    expect(JSON.parse(jsonBody(registered?.request))).toMatchObject({ agent_version: '0.2.1-alpha.2' })
+    // Probed once: a version does not change while the node runs.
+    expect(probes).toBe(1)
+  })
+
+  it('reports the stated version when the CLI cannot say which it is', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+    ])
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ agentVersion: '1.0.0-stated' }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeAgentVersion: async () => undefined,
+      report: () => { /* this test reads the register body */ },
+    })
+
+    await node.bootstrap()
+
+    const registered = queue.calls.find(call => call.request.url.endsWith('/register'))
+    expect(JSON.parse(jsonBody(registered?.request))).toMatchObject({ agent_version: '1.0.0-stated' })
   })
 
   it('lets a composed runner take precedence over its own', async () => {

@@ -67,7 +67,7 @@ kind: "package-reference"
 | `taskRuntimeSeconds` | `10800` | 单次尝试的运行时限，直到任务载荷给出自己的取值 |
 | `requestTimeoutMs` | `15000` | 单个普通请求的预算 |
 | `lanes` / `tools` | 空 | 节点注册的能力承诺 |
-| `agentVersion` | `unknown` | 上报的 Agent 版本 |
+| `agentVersion` | 从 CLI 探测 | 上报的 Agent 版本；CLI 报不出来时取声明的值 |
 | `labels` | 空 | 运维标签 |
 | `autoStart` | `true` | profile 加载后是否立即认证并注册 |
 
@@ -110,6 +110,8 @@ kind: "package-reference"
 节点还有端到端用例：它们从 `cordis.yml` 经 Loader 启动本插件（配置经校验），拨向本机上的一个平台桩，在真实克隆里跑完真实任务——只有智能体是桩，其余都是节点本身：检出、提交、推送或打包回传、证据命令、产物、会话上报、能力承诺与结果。两种交付模式都有覆盖：`read_write` 的任务推送到 origin，`read_only` 的任务以 bundle 回传且什么都不推。
 
 平台配置在其 config_revision 变化时拉取：节点跟随平台要求的心跳间隔（重新起表，且不打断在跑的工作），并逐一报出它保留为自身声明值的参数，任何指令都不会无声消失。
+
+节点注册的能力是**探测**出来的，因为平台据此调度：工具来自本机 `PATH`，Agent 版本来自节点所运行的 CLI。想让节点按一份声明好的工具集被调度、或上报一个声明的版本，仍然可以——探测只是"什么都没声明"时的默认。
 
 ### 源文件地图
 

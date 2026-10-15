@@ -153,7 +153,9 @@ function assignment(overrides: Partial<ExecTaskAssignment> = {}): ExecTaskAssign
 
 /** One node's resolved settings. */
 function settings(): ExecutorSettings {
-  return resolveExecutorSettings({ platformHost: '10.0.0.7', nodeId: 'node-1' }, 'test-host')
+  // The tools are stated so this suite reads the same on every machine; a node that
+  // states none probes the ones it has.
+  return resolveExecutorSettings({ platformHost: '10.0.0.7', nodeId: 'node-1', tools: ['node'] }, 'test-host')
 }
 
 /** A runner that runs the given body. */
@@ -204,7 +206,7 @@ describe('task lifecycle', () => {
 
     expect(platform.claims).toEqual([{
       available_slots: 1,
-      capabilities: { lanes: [], tools: [] },
+      capabilities: { lanes: [], tools: ['node'] },
       max_wait_seconds: settings().claimLongPollSeconds,
     }])
     expect(hooks.started).toEqual([{
