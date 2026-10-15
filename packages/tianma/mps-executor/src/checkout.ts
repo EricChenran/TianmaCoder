@@ -1,11 +1,11 @@
 /**
  * The code an attempt starts from. The node works the tasks of one platform
  * workspace in the workspace's own repository cache: it initializes and fetches that
- * cache instead of cloning a fresh tree, checks the dispatched base commit against
- * what the platform's branch really holds before touching anything, and resets the
- * work branch onto that commit with the previous attempt's leftovers cleared. A
- * stale base is refused rather than silently worked from, because the result would
- * describe a tree the platform never dispatched.
+ * cache instead of cloning a fresh tree, fetches the branches a task names, checks
+ * that the origin holds the base commit the platform dispatched, and resets the work
+ * branch onto that commit with the previous attempt's leftovers cleared. A base no
+ * fetch can reach is refused rather than silently worked from, because the result
+ * would describe a tree nobody dispatched.
  * @module @tianma/dsh-mps-executor/checkout
  */
 
@@ -63,12 +63,26 @@ function required(value: string | undefined, field: string): string {
 }
 
 /**
- * Bring the workspace's repository cache to the dispatched base commit, verify that
- * commit is what the platform's branch holds, and reset the work branch onto it.
+ * Whether the repository holds one commit, however it was reached.
+ * @param git - the runner every git command goes through.
+ * @param directory - the repository cache.
+ * @param commit - the commit to look for.
+ * @returns true when the commit is there.
+ */
+async function holdsCommit(git: GitRunner, directory: string, commit: string): Promise<boolean> {
+  return await tryRun(git, directory, ['rev-parse', '--verify', '--quiet', `${commit}^{commit}`]) !== undefined
+}
+
+/**
+ * Bring the workspace's repository cache to the dispatched base commit and reset the work
+ * branch onto it. The base is the commit the platform dispatched — the base branch's head
+ * for a workspace's first task, and the work branch's head for a later one — so what the
+ * node verifies is that the origin holds it at all: a base no fetch can reach is refused
+ * rather than worked from, because the result would describe a tree nobody dispatched.
  * @param options - the directory, the repository the payload named, and git.
  * @returns the checkout the attempt works on.
- * @throws Error when the payload omits a field the flow needs, when the base commit
- * is not what origin holds, or when git fails.
+ * @throws Error when the payload omits a field the flow needs, when the origin holds no
+ * such commit, or when git fails.
  */
 export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<TaskCheckout> {
   const { directory, repository, git } = options
@@ -83,9 +97,11 @@ export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<
   else if (origin.stdout.trim() !== url) await git.run(directory, ['remote', 'set-url', 'origin', url])
 
   await git.run(directory, ['fetch', '--quiet', 'origin', baseBranch])
-  const tip = (await git.run(directory, ['rev-parse', `origin/${baseBranch}`])).stdout.trim()
-  if (tip !== baseCommit) {
-    throw new Error(`refusing to work from a stale base: origin/${baseBranch} holds ${tip}, the task dispatched ${baseCommit}`)
+  // Then every branch: a workspace's later tasks are dispatched from the work branch an
+  // earlier task pushed onto, which the base branch alone would never bring.
+  await git.run(directory, ['fetch', '--quiet', 'origin', '+refs/heads/*:refs/remotes/origin/*'])
+  if (await holdsCommit(git, directory, baseCommit) === false) {
+    throw new Error(`refusing to work from a base this repository does not hold: the task dispatched ${baseCommit}`)
   }
   await git.run(directory, ['checkout', '--quiet', '-B', workBranch, baseCommit])
   // `checkout -B` leaves the tree alone when HEAD already sits on the branch, so a

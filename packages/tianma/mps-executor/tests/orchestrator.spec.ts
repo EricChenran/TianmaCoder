@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ExecResponseError, recoveryForCode } from '@tianma/dsh-mps-exec-core'
@@ -197,6 +197,51 @@ function orchestratorWith(options: {
 }
 
 describe('task lifecycle', () => {
+  it('replays the log a previous process spooled before the platform went away', async () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'mps-restart-'))
+    const codingRoot = join(root, 'coding')
+
+    // The first process: the platform takes nothing, so the batch ends up on disk and the
+    // process goes away with it still there.
+    const down = new FakePlatform()
+    down.assignments.push(assignment())
+    down.log = async () => { throw new Error('the platform is unreachable') }
+    const first = orchestratorWith({
+      platform: down,
+      settings: { ...settings(), codingRoot },
+      reports: [],
+      runner: runnerOf(async (context) => {
+        await context.reportLog('stdout', [{ at: '2026-10-15T04:03:55.123Z', level: 'info', text: '崩前最后一行' }])
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+    first.orchestrator.start()
+    await vi.advanceTimersByTimeAsync(5_000)
+    first.orchestrator.stop()
+
+    const spooled = readFileSync(join(codingRoot, '.buffers', 'tsk_1.jsonl'), 'utf8')
+    expect(spooled).toContain('崩前最后一行')
+
+    // The next process: a fresh orchestrator over the same coding root, and a platform that
+    // is back. The first claim offers what the last one could not.
+    const back = new FakePlatform()
+    back.assignments.push(assignment())
+    const second = orchestratorWith({
+      platform: back,
+      settings: { ...settings(), codingRoot },
+      reports: [],
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+    second.orchestrator.start()
+    await vi.advanceTimersByTimeAsync(5_000)
+    second.orchestrator.stop()
+    rmSync(root, { recursive: true, force: true })
+
+    expect(back.logs.some(entry => entry.lines.some(line => line.text.includes('崩前最后一行')))).toBe(true)
+    expect(existsSync(join(codingRoot, '.buffers', 'tsk_1.jsonl'))).toBe(false)
+  })
+
   it('keeps and resends a log batch the platform could not take', async () => {
     vi.useFakeTimers()
     const root = mkdtempSync(join(tmpdir(), 'mps-orch-spool-'))

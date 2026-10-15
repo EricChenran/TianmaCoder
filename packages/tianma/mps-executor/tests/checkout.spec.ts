@@ -108,7 +108,8 @@ describe('checkout preparation', () => {
       'remote get-url origin',
       'remote add origin https://example.invalid/r.git',
       'fetch --quiet origin main',
-      'rev-parse origin/main',
+      'fetch --quiet origin +refs/heads/*:refs/remotes/origin/*',
+      'rev-parse --verify --quiet a1b2c3d^{commit}',
       'checkout --quiet -B feature/tsk_1 a1b2c3d',
       'reset --quiet --hard a1b2c3d',
       'clean --quiet -fd',
@@ -142,14 +143,30 @@ describe('checkout preparation', () => {
     expect(git.calls).toContain('remote set-url origin https://example.invalid/r.git')
   })
 
-  it('refuses a base the platform branch no longer holds', async () => {
+  it('works from the base the platform dispatched even when the branch moved past it', async () => {
     const directory = temporary('mps-flow-')
     const git = new RecordingGit()
     git.failures.add('remote get-url origin')
+    // The platform dispatches what it synced before the task, so the branch having moved
+    // on since is the platform's business: the node works from the commit it was given.
     git.answers.set('rev-parse origin/main', 'f0f0f0f\n')
 
+    const checkout = await prepareCheckout({ directory, repository: REPOSITORY, git })
+
+    expect(checkout).toEqual({ base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' })
+    expect(git.calls).toContain('checkout --quiet -B feature/tsk_1 a1b2c3d')
+  })
+
+  it('refuses a base no fetch can reach', async () => {
+    const directory = temporary('mps-flow-')
+    const git = new RecordingGit()
+    git.failures.add('remote get-url origin')
+    // Neither the branches the task names nor a full fetch turn the commit up: no result
+    // this node could report would describe the tree the platform dispatched.
+    git.failures.add('rev-parse --verify --quiet a1b2c3d^{commit}')
+
     await expect(prepareCheckout({ directory, repository: REPOSITORY, git })).rejects.toThrow(
-      /refusing to work from a stale base: origin\/main holds f0f0f0f, the task dispatched a1b2c3d/,
+      /refusing to work from a base this repository does not hold: the task dispatched a1b2c3d/,
     )
     expect(git.calls).not.toContain('clean --quiet -fd')
   })
@@ -255,7 +272,7 @@ describe('git on this host', () => {
     expect(existsSync(join(workspace, 'scratch.txt'))).toBe(false)
   })
 
-  it('refuses a base the branch moved past', async () => {
+  it('works from the dispatched base after the branch moved on', async () => {
     const git = cliGit()
     const source = await sourceRepository(git)
     const workspace = temporary('mps-workspace-')
@@ -271,7 +288,11 @@ describe('git on this host', () => {
     await git.run(source.directory, ['add', 'readme.md'])
     await git.run(source.directory, ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--quiet', '-m', 'move on'])
 
-    await expect(prepareCheckout({ directory: workspace, repository, git })).rejects.toThrow(/refusing to work from a stale base/)
+    // The committed change does not move the node off its base: affinity means a later
+    // task starts from the work branch's head, not from wherever the branch has drifted.
+    const again = await prepareCheckout({ directory: workspace, repository, git })
+    expect(again).toEqual({ base_commit: source.commit, work_branch: 'feature/tsk_1' })
+    expect((await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(source.commit)
   })
 
   it('keeps what a failing command said', async () => {

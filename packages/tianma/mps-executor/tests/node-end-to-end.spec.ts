@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -57,13 +57,21 @@ interface Recorded {
 /** The platform the node dials: it answers one task and records everything it was sent. */
 class PlatformStub {
   readonly requests: Recorded[] = []
-  readonly task: Record<string, unknown>
+  #tasks: Record<string, unknown>[]
   #server: Server | undefined
   #port = 0
-  #claimed = false
 
   constructor(task: Record<string, unknown>) {
-    this.task = task
+    this.#tasks = [task]
+  }
+
+  /**
+   * Offer one more task at the next claim, which is how a platform returns a workspace to
+   * the node that already holds it.
+   * @param task - the assignment the claim answers with.
+   */
+  offer(task: Record<string, unknown>): void {
+    this.#tasks.push(task)
   }
 
   /** Start listening on this host. */
@@ -104,15 +112,16 @@ class PlatformStub {
     if (path === '/exec/v1/auth/token') return this.#envelope(response, { token: 'tok', expires_at: 'e', node_id: 'node-e2e' })
     if (path === '/exec/v1/register') return this.#envelope(response, { registered: true })
     if (path === '/exec/v1/claim') {
-      if (this.#claimed) {
+      const next = this.#tasks.shift()
+      if (next === undefined) {
         response.writeHead(204).end()
         return
       }
-      this.#claimed = true
-      return this.#envelope(response, { task: this.task })
+      return this.#envelope(response, { task: next })
     }
     if (path.endsWith('/result')) {
-      return this.#envelope(response, { task_id: 'tsk_e2e', accepted: true, already_final: false, work_item_state: 'done', next: 'verify' })
+      const taskId = /\/tasks\/([^/]+)\/result/u.exec(path)?.[1] ?? ''
+      return this.#envelope(response, { task_id: taskId, accepted: true, already_final: false, work_item_state: 'done', next: 'verify' })
     }
     if (path.endsWith('/artifacts')) return this.#envelope(response, { artifact_id: 'art_e2e' })
     return this.#envelope(response, null)
@@ -284,6 +293,92 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('returns a second task in the same workspace to the same session', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_first',
+      work_item_id: 'wi_first',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '第一次改动' },
+        workspace: {
+          workspace_id: 'ws_same',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/ws_same' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    let firstHead: unknown
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_first/result').length > 0)
+
+      const first = JSON.parse(platform.at('/exec/v1/tasks/tsk_first/result')[0]?.body ?? '{}') as Record<string, unknown>
+      const firstEvidence = first['evidence'] as Record<string, unknown>
+      firstHead = firstEvidence['head_commit']
+      const firstSession = JSON.parse(platform.at('/exec/v1/workspaces/ws_same/session')[0]?.body ?? '{}') as Record<string, unknown>
+      expect(first['outcome']).toBe('success')
+
+      // The platform hands the same workspace back with the session it was told about.
+      platform.offer({
+        task_id: 'tsk_second',
+        work_item_id: 'wi_second',
+        attempt: 1,
+        max_attempts: 3,
+        kind: 'coding',
+        priority: 400,
+        lease_expire_at: '2030-01-01T00:00:00Z',
+        lease_renew_seconds: 30,
+        payload: {
+          limits: { max_runtime_seconds: 300, session_hint: { previous_session_ref: firstSession['session_ref'] } },
+          spec: { raw_instruction: '第二次改动' },
+          workspace: {
+            workspace_id: 'ws_same',
+            access_mode: 'read_write',
+            repo: {
+              url: bare.replace(/\\/gu, '/'),
+              base_branch: 'main',
+              base_commit: String(firstEvidence['head_commit']),
+              work_branch: 'feature/ws_same',
+            },
+          },
+          constraints: { must_stay_in_workspace: false },
+          deliverables: { push_required: true },
+        },
+      })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_second/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    const second = JSON.parse(platform.at('/exec/v1/tasks/tsk_second/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(second).toMatchObject({ outcome: 'success' })
+    // The second task was carried out in the workspace the first one left behind: its base
+    // commit is the head the first one pushed.
+    expect((second['evidence'] as Record<string, unknown>)['base_commit']).toBe(firstHead)
+    // Both tasks reported the same session, so the platform can follow one conversation.
+    const sessions = platform.at('/exec/v1/workspaces/ws_same/session').map(request => JSON.parse(request.body) as Record<string, unknown>)
+    expect(sessions.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(sessions.map(session => String(session['session_ref']))).size).toBe(1)
+    // One coding directory serves both, and the node kept the record across them.
+    const state = JSON.parse(readFileSync(join(workspaceRoot, 'coding', '.state.json'), 'utf8')) as Record<string, unknown>
+    expect((state['workspaces'] as Record<string, unknown>[]).map(record => record['workspace_id'])).toEqual(['ws_same'])
+    expect((state['workspaces'] as Record<string, unknown>[])[0]?.['last_task_id']).toBe('tsk_second')
   }, 120_000)
 
   it('hands a read_only task back as a bundle without pushing anything', async () => {

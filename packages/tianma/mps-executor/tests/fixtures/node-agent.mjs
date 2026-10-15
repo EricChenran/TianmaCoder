@@ -4,7 +4,7 @@
  * declares — and prints the event stream the headless profile prints under `--json`.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const events = [
   { type: 'session', sessionId: 'dsh-session-e2e' },
@@ -17,7 +17,11 @@ const events = [
 ]
 for (const event of events) console.log(JSON.stringify(event))
 
-writeFileSync('feature.txt', 'batch download\n', 'utf8')
+// A later task in the same workspace changes the same file again, which is what makes a
+// second attempt in one workspace a real change rather than a repeat of the first.
+const instruction = process.argv.at(-1) ?? ''
+if (instruction.includes('第二次')) appendFileSync('feature.txt', 'second pass\n', 'utf8')
+else writeFileSync('feature.txt', 'batch download\n', 'utf8')
 writeFileSync('REPORT.md', '# 开发报告\n\n增加了批量下载。\n', 'utf8')
 mkdirSync('.evidence/screenshots', { recursive: true })
 writeFileSync('.evidence/screenshots/detail.png', 'PNG-ish bytes\n', 'utf8')
