@@ -130,6 +130,8 @@ class PlatformStub {
 
   #commands: Record<string, unknown>[] = []
   #materials = new Map<string, { bytes: Buffer; digest: string }>()
+  /** Whether this platform still lets a node continue the task it leases. */
+  leaseContinues = true
 
   constructor(task: Record<string, unknown>) {
     this.#tasks = [task]
@@ -230,6 +232,13 @@ class PlatformStub {
         return
       }
       return this.#envelope(response, { task: next })
+    }
+    if (path.endsWith('/lease')) {
+      // The renewal that keeps an attempt alive, or withdraws it.
+      return this.#envelope(response, {
+        lease_expire_at: '2030-01-01T00:00:00Z',
+        should_continue: this.leaseContinues,
+      })
     }
     const material = /\/resources\/([^/]+)$/u.exec(path)
     if (material !== null) {
@@ -431,6 +440,55 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('discards an attempt whose lease the platform withdraws, and submits nothing', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_withdrawn',
+      work_item_id: 'wi_withdrawn',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      // A renewal this soon is what brings the withdrawal inside the test.
+      lease_renew_seconds: 1,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '做一半时租约被收回' },
+        workspace: {
+          workspace_id: 'ws_withdrawn',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_withdrawn' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    platform.leaseContinues = false
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['slow'] })
+      // The node renews, is told to stop, and says so in the log it still owes the platform.
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_withdrawn/log')
+        .some(request => request.body.includes('no result is submitted')))
+      // Give a superseded attempt every chance to submit something it must not.
+      await new Promise(resolve => setTimeout(resolve, 2_000))
+      expect(platform.at('/exec/v1/tasks/tsk_withdrawn/result')).toEqual([])
+      // The attempt is gone from the node's own account of what it is running.
+      await waitFor(() => platform.at('/exec/v1/heartbeat')
+        .some(request => request.body.includes('"running_tasks":[]')))
+    } finally {
+      await platform.close()
+    }
+
+    expect(platform.at('/exec/v1/tasks/tsk_withdrawn/lease')).toHaveLength(1)
+    expect(platform.at('/exec/v1/tasks/tsk_withdrawn/result')).toEqual([])
   }, 120_000)
 
   it('keeps a workspace the platform releases while that workspace is working', async () => {
