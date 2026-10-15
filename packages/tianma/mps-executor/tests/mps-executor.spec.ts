@@ -181,7 +181,7 @@ describe('node configuration', () => {
     expect(settings.capabilities.lanes).toEqual(['frontend'])
     expect(settings.capabilities.tools).toEqual(['node'])
     expect(settings.capabilities.os).toBe(process.platform)
-    expect(settings.capabilities.access_modes).toEqual(['read_write'])
+    expect(settings.capabilities.access_modes).toEqual(['read_only', 'read_write'])
     expect(settings.capabilities.supported_protocols).toEqual(['exec/v1'])
     expect(settings.labels).toEqual({ owner: 'ops' })
   })

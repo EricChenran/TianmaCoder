@@ -67,6 +67,19 @@ export interface PublishedChanges {
   head_commit: string
   /** Whether the work branch was pushed. */
   pushed: boolean
+  /**
+   * The bundle a `read_only` attempt hands back instead of a push, present only in
+   * that access mode.
+   */
+  bundle?: TaskBundle | undefined
+}
+
+/** A git bundle carrying one attempt's commits, and the digest the platform verifies. */
+export interface TaskBundle {
+  /** Path of the bundle, relative to the workspace. */
+  path: string
+  /** SHA-256 of the file. */
+  sha256: string
 }
 
 /** What a runner is given for one attempt. */

@@ -903,6 +903,65 @@ describe('task lifecycle', () => {
     expect(platform.results[0]?.evidence?.changed_files).toEqual(['artifacts/report.md'])
   })
 
+  it('uploads the bundle a read_only attempt hands back and reports it as the change', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: {
+        constraints: { access_mode: 'read_only' },
+        workspace: {
+          workspace_id: 'ws_1',
+          repo: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        },
+      },
+    }))
+    const uploads: TaskArtifactRequest[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        const published = await context.publish()
+        return {
+          outcome: 'success',
+          summary: `changed ${String(published.changed_files.length)} file(s)`,
+        }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      artifacts: {
+        upload: async (request: TaskArtifactRequest) => {
+          uploads.push(request)
+          return 'art_bundle'
+        },
+      },
+      publisher: {
+        publish: async () => ({
+          changed_files: ['src/a.ts'],
+          head_commit: 'b2c3d4e',
+          pushed: false,
+          bundle: { path: join('.bundles', 'feature-tsk_1-b2c3d4e.bundle'), sha256: 'sha-bundle' },
+        }),
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(uploads).toHaveLength(1)
+    expect(uploads[0]?.kind).toBe('bundle')
+    expect(uploads[0]?.path).toBe(join('.bundles', 'feature-tsk_1-b2c3d4e.bundle'))
+    expect(uploads[0]?.meta).toMatchObject({ branch: 'feature/tsk_1', head_commit: 'b2c3d4e', sha256: 'sha-bundle' })
+    expect(platform.results[0]?.evidence).toMatchObject({
+      pushed: false,
+      patch_artifact_id: 'art_bundle',
+      head_commit: 'b2c3d4e',
+    })
+  })
+
   it('reports the session a runner names through the node', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment({

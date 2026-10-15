@@ -100,6 +100,8 @@ The other direction is `resource()` on the runner's context: the node downloads 
 
 `fetchMaterials` brings the files a task carries into the workspace before the run starts, under `.materials/`, named after the file the platform stated and reduced to a name that cannot leave the directory. The directory is added to the repository's local excludes like the task book, and the book names each file so the agent reads what the platform attached rather than a list of ids. A material the platform refuses, or one larger than the node fetches in one request, is reported as `blocked` — the protocol's outcome for missing information — because an attempt that works without its inputs would have to guess at them.
 
+A `read_only` task is the one mode where the node does not push: it commits the work as usual, then writes a git bundle of the work branch into `.bundles/` inside the workspace — kept out of the repository like the task book — and the node uploads it as the attempt's `bundle` artifact, reporting its id as the evidence's `patch_artifact_id` with `pushed: false`. The platform fetches the change out of that artifact, which is what its clone of the baseline is for.
+
 ### Source map
 
 | File | Role |
@@ -110,7 +112,7 @@ The other direction is `resource()` on the runner's context: the node downloads 
 | [`src/workspace.ts`](src/workspace.ts) | The coding workspaces: one directory per workspace, the sidecar state, and release-driven removal |
 | [`src/checkout.ts`](src/checkout.ts) | The code flow: fetch the cache, verify the dispatched base, reset the work branch |
 | [`src/git.ts`](src/git.ts) | The git boundary: argument-list spawning and redacted failures |
-| [`src/publish.ts`](src/publish.ts) | Handing work back: the pre-commit checks, the commit, and the push |
+| [`src/publish.ts`](src/publish.ts) | Handing work back: the pre-commit checks, the commit, the push, and the `read_only` bundle |
 | [`src/session.ts`](src/session.ts) | The session serving a workspace: what the node records and re-reports |
 | [`src/artifacts.ts`](src/artifacts.ts) | Uploading what an attempt produced: reads, the digest, and the size the node will transfer |
 | [`src/paths.ts`](src/paths.ts) | The one confinement rule for paths inside a coding workspace |
@@ -154,7 +156,7 @@ This limit defines the current package boundary. It is a current constraint, not
 
 - **The runner needs the CLI** — the node falls back to `dsh --profile headless`, so a node without the built or installed CLI reports every attempt as failed; a deployment that composes its own `mpsTaskRunner` provider replaces the fallback.
 - **Artifacts are one request each** — the node uploads up to the protocol's single-request ceiling and refuses more, because the chunked upload a larger file needs is not implemented.
-- **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
+- **A `read_only` bundle needs the baseline** — the bundle names the base commit as a prerequisite, so the receiver must already hold it; the node hands back the work branch only.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
 - **Materials arrive in one request each** — one over the protocol's single-request ceiling is refused because the chunked fetch is not implemented, and the attempt reports `blocked` rather than working without it.

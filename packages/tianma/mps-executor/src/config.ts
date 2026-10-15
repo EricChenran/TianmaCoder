@@ -274,7 +274,7 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
       lanes: [...(config.lanes ?? [])],
       tools: [...(config.tools ?? [])],
       os: platform(),
-      access_modes: ['read_write'],
+      access_modes: ['read_only', 'read_write'],
       max_artifact_bytes: DEFAULT_MAX_ARTIFACT_BYTES,
       supported_protocols: [EXEC_PROTOCOL_VERSION],
     },

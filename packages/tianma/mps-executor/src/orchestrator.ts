@@ -192,6 +192,8 @@ interface RunningAttempt {
   timedOut: boolean
   /** What the attempt published through the node, once it handed its work back. */
   published?: PublishedChanges | undefined
+  /** Artifact the platform stored the attempt's bundle under, in `read_only` mode. */
+  bundleArtifactId?: string | undefined
   renewTimer?: NodeJS.Timeout | undefined
   limitTimer?: NodeJS.Timeout | undefined
 }
@@ -480,6 +482,15 @@ export class TaskOrchestrator {
       signal: running.controller.signal,
     })
     running.published = published
+    if (published.bundle !== undefined) {
+      // The platform fetches the change from this artifact in `read_only` mode.
+      running.bundleArtifactId = await this.#uploadArtifact(running, workspace, 'bundle', published.bundle.path, {
+        branch: checkout.work_branch,
+        base_commit: checkout.base_commit,
+        head_commit: published.head_commit,
+        sha256: published.bundle.sha256,
+      })
+    }
     return published
   }
 
@@ -656,6 +667,7 @@ export class TaskOrchestrator {
       base_commit: repo?.base_commit ?? '',
       head_commit: published?.head_commit ?? repo?.base_commit ?? '',
       pushed: published?.pushed ?? false,
+      ...(running.bundleArtifactId === undefined ? {} : { patch_artifact_id: running.bundleArtifactId }),
     }
   }
 

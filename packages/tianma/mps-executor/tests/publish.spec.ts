@@ -20,6 +20,7 @@ import {
   publishChanges,
 } from '@tianma/dsh-mps-executor'
 import type { GitRunner } from '@tianma/dsh-mps-executor'
+import { sha256Of } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment } from '@tianma/dsh-mps-exec-core'
 
 /** Directories one test created, removed after it. */
@@ -246,19 +247,31 @@ describe('publishing an attempt', () => {
     expect(published.changed_files).toEqual(['../outside.ts'])
   })
 
-  it('refuses a task that asks for the access mode this node does not implement', async () => {
+  it('bundles a read_only attempt instead of pushing it', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
+    git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
+    git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
+    // The recording git writes nothing, so the bundle the publisher digests is here.
+    mkdirSync(join(workspace, '.bundles'), { recursive: true })
+    writeFileSync(join(workspace, '.bundles', 'feature-tsk_1-b2c3d4e.bundle'), 'bundle bytes', 'utf8')
 
-    await expect(publishChanges({
+    const published = await publishChanges({
       directory: workspace,
       checkout: CHECKOUT,
       policy: { access_mode: 'read_only' },
       identity: IDENTITY,
       taskId: 'tsk_1',
       git,
-    })).rejects.toThrow(/read_only/)
-    expect(git.calls).toEqual([])
+    })
+
+    expect(git.calls).toContain(
+      `bundle create ${join('.bundles', 'feature-tsk_1-b2c3d4e.bundle')} feature/tsk_1 --not a1b2c3d`,
+    )
+    expect(git.calls).not.toContain('push origin feature/tsk_1')
+    expect(published.pushed).toBe(false)
+    expect(published.bundle?.path).toBe(join('.bundles', 'feature-tsk_1-b2c3d4e.bundle'))
+    expect(published.bundle?.sha256).toBe(sha256Of(Buffer.from('bundle bytes')))
   })
 
   it('hands a runner the same publish step through the port', async () => {
@@ -317,6 +330,40 @@ describe('publishing against real repositories', () => {
     expect((await git.run(workspace, ['config', '--local', '--get', 'user.name']).catch(() => ({ stdout: '' }))).stdout).toBe('')
     const pushed = (await git.run(bare, ['rev-parse', 'feature/tsk_1'])).stdout.trim()
     expect(pushed).toBe(published.head_commit)
+  })
+
+  it('hands a read_only attempt back as a bundle the platform can fetch', async () => {
+    const git = cliGit()
+    const { workspace, bare } = await workspaceWithChange(git)
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    // The platform's own clone already holds the baseline; only the work is new.
+    await git.run(workspace, ['push', '--quiet', 'origin', `${base}:refs/heads/base`])
+    writeFileSync(join(workspace, 'readme.md'), 'base\nread_only 的改动\n', 'utf8')
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: { access_mode: 'read_only', summary: '只读模式交付' },
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    })
+
+    expect(published.pushed).toBe(false)
+    expect(published.changed_files).toEqual(['readme.md'])
+    // Nothing reached the remote, and the bundle is not part of the commit.
+    await expect(git.run(bare, ['rev-parse', 'feature/tsk_1'])).rejects.toThrow(/unknown revision|ambiguous argument/u)
+    const committed = (await git.run(workspace, ['show', '--name-only', '--format=', 'HEAD'])).stdout.trim().split('\n')
+    expect(committed).toEqual(['readme.md'])
+    expect(existsSync(join(workspace, '.git', 'info', 'exclude'))).toBe(true)
+    expect((await git.run(workspace, ['check-ignore', '.bundles/x.bundle'])).stdout.trim()).toBe('.bundles/x.bundle')
+
+    // A fresh clone of the remote can take the change out of the bundle.
+    const reader = temporary('mps-reader-')
+    await git.run(reader, ['clone', '--quiet', bare, '.'])
+    await git.run(reader, ['fetch', '--quiet', join(workspace, published.bundle?.path ?? ''), 'feature/tsk_1:refs/heads/handed-back'])
+    expect((await git.run(reader, ['log', '-1', '--format=%s', 'handed-back'])).stdout.trim()).toBe('只读模式交付')
+    expect((await git.run(reader, ['show', 'handed-back:readme.md'])).stdout).toBe('base\nread_only 的改动\n')
   })
 
   it('leaves no commit behind when a change carries a credential', async () => {

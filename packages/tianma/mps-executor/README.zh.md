@@ -100,6 +100,8 @@ kind: "package-reference"
 
 `fetchMaterials` 在运行开始前把任务携带的文件取进工作区，放在 `.materials/` 下，按平台给出的文件名命名并削减成无法离开该目录的名字。该目录与任务书一样被加进仓库本地排除清单，任务书也会列出每个文件，因此智能体读的是平台附上的原件，而不是一串 id。平台拒收的材料、或超过节点单请求可取回上限的材料，会让这次尝试报 `blocked`——协议为"缺信息"保留的结果——因为一个在没有输入的情况下硬做的尝试只能靠猜。
 
+`read_only` 是节点唯一不推送的模式：它照常提交，然后把工作分支打成 git bundle 写进工作区内的 `.bundles/`（与任务书一样不进仓库），再由节点把它作为该次尝试的 `bundle` 产物上传，并把其 id 作为证据里的 `patch_artifact_id`、同时报 `pushed: false`。平台从该产物里取回改动——这正是它那份基线克隆的用途。
+
 ### 源文件地图
 
 | 文件 | 职责 |
@@ -110,7 +112,7 @@ kind: "package-reference"
 | [`src/workspace.ts`](src/workspace.ts) | 编码工作区：每个工作区一个目录、旁挂状态与释放驱动的删除 |
 | [`src/checkout.ts`](src/checkout.ts) | 代码流转：fetch 缓存、校验派发基线、重置工作分支 |
 | [`src/git.ts`](src/git.ts) | git 边界：参数数组启动与经脱敏的失败信息 |
-| [`src/publish.ts`](src/publish.ts) | 交回成果：提交前自检、提交与推送 |
+| [`src/publish.ts`](src/publish.ts) | 交回成果：提交前自检、提交、推送与 `read_only` 的 bundle |
 | [`src/session.ts`](src/session.ts) | 工作区的会话：节点记录什么、重启后重新上报什么 |
 | [`src/artifacts.ts`](src/artifacts.ts) | 上传尝试产出：读取、摘要与节点愿意传输的大小 |
 | [`src/paths.ts`](src/paths.ts) | 编码工作区内路径约束的唯一归属 |
@@ -157,7 +159,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 - **材料一次请求取一份** —— 超过协议单请求上限的材料会被拒绝（分片反向拉取尚未实现），此时该尝试报 `blocked`，而不是在没有它的情况下继续做。
 - **日志是行而不是事件** —— 一次运行内部的进度只有打印出来才可见，因为节点跑的是 CLI profile 而不是流式 profile。
 - **产物一次请求一个** —— 节点最多上传协议单请求上限之内的文件，超过就拒绝，因为大文件所需的分片上传尚未实现。
-- **`read_only` 任务直接拒绝** —— 要求以 bundle 方式上行的任务会明确失败，而不是提交一份平台取不到的成果。
+- **`read_only` 的 bundle 需要基线** —— bundle 把基线提交记为前置条件，因此接收方必须已经持有它；节点只交回工作分支。
 - **git 取自 `PATH`** —— 节点从环境里启动 `git`；没有 git 的主机会把每一次编码尝试都报成失败。
 - **资源读数由外部提供** —— 由部署通过 `setResources` 上报；节点自身完全不探测 CPU、内存与磁盘。
 

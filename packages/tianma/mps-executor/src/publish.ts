@@ -8,16 +8,19 @@
  * @module @tianma/dsh-mps-executor/publish
  */
 
-import { readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { containsSecretPattern, taskPolicy } from '@tianma/dsh-mps-exec-core'
+import { containsSecretPattern, sha256Of, taskPolicy } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment, TaskPolicy } from '@tianma/dsh-mps-exec-core'
 import type { GitRunner } from './git.ts'
-import { resolveWithinWorkspace } from './paths.ts'
-import type { PublishedChanges, TaskCheckout } from './runner.ts'
+import { excludeFromRepository, resolveWithinWorkspace } from './paths.ts'
+import type { PublishedChanges, TaskBundle, TaskCheckout } from './runner.ts'
 
 /** Largest changed file the node scans for credentials. */
 export const PUBLISH_SCAN_MAX_BYTES = 1024 * 1024
+
+/** Directory inside the workspace where a `read_only` attempt leaves its bundle. */
+export const BUNDLE_DIRECTORY = '.bundles'
 
 /** The identity a node commits under, injected per command. */
 export interface GitIdentity {
@@ -182,9 +185,9 @@ export async function filesCarryingSecrets(directory: string, files: readonly st
  */
 export async function publishChanges(options: PublishChangesOptions): Promise<PublishedChanges> {
   const { directory, checkout, policy, identity, git, signal } = options
-  if (policy.access_mode === 'read_only') {
-    throw new Error('this node does not implement the read_only access mode, which hands work back as a bundle')
-  }
+  // A read_only task hands its work back as a bundle the platform fetches, so the node
+  // commits but never pushes.
+  const readOnly = policy.access_mode === 'read_only'
   assertBranchAllowed(checkout.work_branch, policy.branch_pattern)
   const files = await changedFiles(git, directory, checkout.base_commit, signal)
   const secrets = await filesCarryingSecrets(directory, files)
@@ -207,11 +210,48 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
     'commit', '--quiet', '-m', policy.summary ?? `task ${options.taskId}`,
   ], signal)
   const head = (await git.run(directory, ['rev-parse', 'HEAD'], signal)).stdout.trim()
+  if (readOnly) {
+    return {
+      changed_files: files,
+      head_commit: head,
+      pushed: false,
+      bundle: await writeBundle({ directory, branch: checkout.work_branch, base: checkout.base_commit, head, git, signal }),
+    }
+  }
   if (policy.push_required === false) {
     return { changed_files: files, head_commit: head, pushed: false }
   }
   await git.run(directory, ['push', 'origin', checkout.work_branch], signal)
   return { changed_files: files, head_commit: head, pushed: true }
+}
+
+/**
+ * Write the bundle one `read_only` attempt hands back: the commits it made, with the
+ * base the receiver already has as a prerequisite. The bundle is the node's own output,
+ * so it is written after the commit and kept out of the repository.
+ * @param options - the workspace, the branch, the base, the head, git, and cancellation.
+ * @returns the path relative to the workspace and the file's digest.
+ * @throws Error when git cannot write the bundle.
+ */
+async function writeBundle(options: {
+  directory: string
+  branch: string
+  base: string
+  head: string
+  git: GitRunner
+  signal?: AbortSignal | undefined
+}): Promise<TaskBundle> {
+  const name = `${options.branch.replace(/[^A-Za-z0-9._-]+/gu, '-')}-${options.head.slice(0, 12)}.bundle`
+  const path = join(BUNDLE_DIRECTORY, name)
+  await mkdir(join(options.directory, BUNDLE_DIRECTORY), { recursive: true })
+  await options.git.run(
+    options.directory,
+    // The positive side is the branch the platform will fetch; the base is a prerequisite.
+    ['bundle', 'create', path, options.branch, '--not', options.base],
+    options.signal,
+  )
+  excludeFromRepository(options.directory, `${BUNDLE_DIRECTORY}/`)
+  return { path, sha256: sha256Of(await readFile(join(options.directory, path))) }
 }
 
 /**

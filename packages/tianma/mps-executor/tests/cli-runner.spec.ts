@@ -287,6 +287,22 @@ describe('the CLI runner', () => {
     expect(result.summary).toBe('changed 2 file(s)')
   })
 
+  it('reports work handed back as a bundle', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment())
+    context.publishResult = {
+      changed_files: ['src/a.ts'],
+      head_commit: 'b2c3d4e',
+      pushed: false,
+      bundle: { path: '.bundles/feature-tsk_1-b2c3d4e.bundle', sha256: 'sha' },
+    }
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.summary).toBe('changed 1 file(s) and handed them back as a bundle')
+  })
+
   it('stops a run whose attempt was already cancelled', async () => {
     const workspace = temporary('mps-run-')
     const logs = temporary('mps-logs-')

@@ -17,7 +17,7 @@ import type { Readable } from 'node:stream'
 import { taskInstruction } from '@tianma/dsh-mps-exec-core'
 import { toError } from './report.ts'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
-import type { TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
+import type { PublishedChanges, TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
 import { fetchMaterials } from './materials.ts'
 import type { MaterialFile } from './materials.ts'
 import { TASK_BOOK_POINTER, writeTaskBook } from './task-book.ts'
@@ -142,7 +142,7 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       }
       return {
         outcome: 'success',
-        summary: `changed ${String(published.changed_files.length)} file(s)${published.pushed ? ' and pushed them' : ''}`,
+        summary: `changed ${String(published.changed_files.length)} file(s)${pushedNote(published)}`,
         notes,
       }
     },
@@ -172,6 +172,16 @@ export function stopRun(run: StoppableRun, graceMs: number): void {
   run.kill()
   const timer = setTimeout(() => { run.kill('SIGKILL') }, graceMs)
   timer.unref()
+}
+
+/**
+ * How one published attempt describes what it did with its work.
+ * @param published - what the attempt published.
+ * @returns the clause the summary appends.
+ */
+function pushedNote(published: PublishedChanges): string {
+  if (published.bundle !== undefined) return ' and handed them back as a bundle'
+  return published.pushed ? ' and pushed them' : ''
 }
 
 /** What one run settled as. */
