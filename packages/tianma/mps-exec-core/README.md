@@ -25,7 +25,7 @@ Speak the management platform's `exec/v1` protocol without a Cordis mount. One c
 
 Resolve the address a deployment points the node at, then hand the same host and port to the client that dials it:
 
-```ts
+```markdown
 const endpoint = resolvePlatformEndpoint({ host: '192.168.1.10', port: 8791, scheme: 'http' })
 // endpoint.origin → http://192.168.1.10:8791
 // endpoint.url('/register') → http://192.168.1.10:8791/exec/v1/register

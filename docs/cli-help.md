@@ -13,6 +13,7 @@ Run `pnpm run gen-cli-help` to regenerate; run `pnpm run verify-cli-help` to che
 - [`dsh plugin`](#dsh-plugin)
 - [`dsh acp`](#dsh-acp)
 - [`dsh headless`](#dsh-headless)
+- [`dsh mps-node`](#dsh-mps-node)
 - [`dsh sdk`](#dsh-sdk)
 - [`dsh sdk-minimal`](#dsh-sdk-minimal)
 - [`dsh web`](#dsh-web)
@@ -123,6 +124,32 @@ Examples:
   echo "run the tests" | dsh --profile headless   read the task from stdin
   dsh --profile headless --json "run the tests"   emit machine-readable run events
   dsh --profile headless --session-id session-… "continue"   resume an existing Session
+
+```
+
+<a id="dsh-mps-node"></a>
+## `dsh mps-node`
+
+Invocations: `dsh mps-node --help`, `dsh --profile mps-node --help`
+
+```text
+Usage: dsh mps-node [options]
+
+Run the Tianma MPS executor node: register this machine with the management
+platform and keep its heartbeat.
+
+Options:
+  -h, --help  show this help
+
+The platform address and this node's identity come from the environment:
+  MPS_PLATFORM_HOST       platform host, IPv4, or IPv6 address; required to start
+  MPS_PLATFORM_PORT       platform port (default 8791)
+  MPS_PLATFORM_SCHEME     http or https (default http)
+  MPS_PLATFORM_BASE_PATH  path prefix (default /exec/v1)
+  MPS_NODE_ID             node id the platform knows this machine by; required to start
+  MPS_NODE_SECRET         pre-shared secret; required to start
+  MPS_NODE_SLOTS          concurrent tasks (default 1)
+  MPS_NODE_WORKSPACE      workspace root the node reports (default: the process working directory)
 
 ```
 

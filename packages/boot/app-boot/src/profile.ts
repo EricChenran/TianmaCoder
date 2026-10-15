@@ -195,6 +195,11 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
   'sdk-minimal': {
     bundles: ['@deepseek-ai/dsh-sdk-minimal'],
   },
+  // The MPS executor node: the shared core plus the node bundle, which mounts
+  // the platform session plugin from its patch layer.
+  'mps-node': {
+    bundles: ['@deepseek-ai/dsh-base', '@tianma/dsh-mps-node-bundle'],
+  },
 }
 
 /** Installation-owned bundle tuples normalized to the shipped template. */

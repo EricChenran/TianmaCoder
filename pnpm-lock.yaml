@@ -481,6 +481,9 @@ importers:
       '@tianma/dsh-bundle':
         specifier: workspace:*
         version: link:../../packages/tianma/bundle
+      '@tianma/dsh-mps-node-bundle':
+        specifier: workspace:*
+        version: link:../../packages/tianma/mps-node-bundle
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -14664,9 +14667,15 @@ importers:
 
   packages/tianma/mps-executor:
     dependencies:
+      '@deepseek-ai/dsh-cmdline':
+        specifier: workspace:*
+        version: link:../../boot/cmdline
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -14674,6 +14683,12 @@ importers:
       '@tianma/dsh-mps-exec-core':
         specifier: workspace:*
         version: link:../mps-exec-core
+
+  packages/tianma/mps-node-bundle:
+    dependencies:
+      '@tianma/dsh-mps-executor':
+        specifier: workspace:*
+        version: link:../mps-executor
 
   packages/tianma/oa-account:
     dependencies:

@@ -36,6 +36,7 @@ kind: "package-group"
 | [`hooks-trust/`](hooks-trust/README.zh.md) | 第三方 workspace hook 的内容哈希信任账本 |
 | [`mps-exec-core/`](mps-exec-core/README.zh.md) | MPS 执行节点的 exec/v1 线上协议层：由配置的通信 IP 与端口解析地址、外壳、错误恢复、退避、脱敏、标识与节点客户端 |
 | [`mps-executor/`](mps-executor/README.zh.md) | MPS 执行节点插件：由 profile 配置行驱动的平台握手与心跳 |
+| [`mps-node-bundle/`](mps-node-bundle/README.zh.md) | 节点 profile bundle：在 dsh-base 之上挂载执行节点 |
 
 <a id="composition"></a>
 ## 组合

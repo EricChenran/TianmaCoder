@@ -1,0 +1,42 @@
+# The MPS executor-node bundle patch: applied after dsh-base in the node
+# profile's bundle list. The row below mounts the executor node and states the
+# management platform's communication address. The address and identity come
+# from the deployment's environment so one installation image serves every
+# node; any value can equally be written into this row instead.
+#
+# platformHost and nodeId have no fallback on purpose: a node that does not
+# know which platform it belongs to fails at load rather than registering
+# somewhere unintended.
+#
+# No permission row is restated here. dsh-base already composes workspace-write
+# with ask, the pairing its preset table admits, and a node composes no approval
+# answerer, so an action that needs approval is refused rather than parked for a
+# person who is not there.
+
+- insert:
+    # The application's own command line, so `dsh mps-node --help` prints this
+    # profile's usage and the environment a node needs.
+    - id: mps-executor-startup
+      name: '@tianma/dsh-mps-executor/startup'
+
+    - id: mps-executor
+      name: '@tianma/dsh-mps-executor'
+      config:
+        # The address and identity a deployment states in the environment; the
+        # placeholders below only keep the profile loadable when none are set,
+        # and the node starts only once MPS_PLATFORM_HOST is present.
+        platformHost: !!js process.env.MPS_PLATFORM_HOST ?? '127.0.0.1'
+        platformPort: !!js Number(process.env.MPS_PLATFORM_PORT ?? 8791)
+        platformScheme: !!js process.env.MPS_PLATFORM_SCHEME ?? 'http'
+        platformBasePath: !!js process.env.MPS_PLATFORM_BASE_PATH ?? '/exec/v1'
+        nodeId: !!js process.env.MPS_NODE_ID ?? 'node-unconfigured'
+        nodeName: !!js process.env.MPS_NODE_NAME ?? ''
+        nodeHost: !!js process.env.MPS_NODE_HOST ?? ''
+        secretEnv: MPS_NODE_SECRET
+        workspaceRoot: !!js process.env.MPS_NODE_WORKSPACE ?? process.cwd()
+        slotsTotal: !!js Number(process.env.MPS_NODE_SLOTS ?? 1)
+        lanes: []
+        tools: []
+        agentVersion: !!js process.env.MPS_AGENT_VERSION ?? 'unknown'
+        labels: {}
+        autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)

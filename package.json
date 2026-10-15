@@ -213,7 +213,7 @@
     "verify-official-bundle-catalog": "tsx scripts/gen-official-bundle-catalog.ts --check",
     "verify-product-use": "tsx scripts/verify-product-use.ts",
     "verify:architecture": "tsx scripts/verify-architecture.ts",
-    "verify:profile-patches": "tsx scripts/verify-profile-patches.ts packages/bundle/base/cordis.patch.yml packages/bundle/web-app/cordis.patch.yml packages/bundle/web-app/presets/standard.patch.yml packages/bundle/web-app/presets/ptc.patch.yml packages/bundle/web-app/presets/minimal.patch.yml packages/bundle/web-app/presets/cordis.patch.yml packages/bundle/web-app/presets/department-tech.patch.yml packages/bundle/web-app/presets/department-business.patch.yml packages/tianma/bundle/cordis.patch.yml"
+    "verify:profile-patches": "tsx scripts/verify-profile-patches.ts packages/bundle/base/cordis.patch.yml packages/bundle/web-app/cordis.patch.yml packages/bundle/web-app/presets/standard.patch.yml packages/bundle/web-app/presets/ptc.patch.yml packages/bundle/web-app/presets/minimal.patch.yml packages/bundle/web-app/presets/cordis.patch.yml packages/bundle/web-app/presets/department-tech.patch.yml packages/bundle/web-app/presets/department-business.patch.yml packages/tianma/bundle/cordis.patch.yml packages/tianma/mps-node-bundle/cordis.patch.yml"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-hooks-claude-code": "workspace:*",

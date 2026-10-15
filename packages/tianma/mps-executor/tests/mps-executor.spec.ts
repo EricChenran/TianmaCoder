@@ -197,7 +197,7 @@ describe('node runtime', () => {
     const reports: ExecutorReport[] = []
     const instance = new MpsExecutorRuntime({
       settings: settingsFor(overrides),
-      secret: 's',
+      secret: () => 's',
       transport: queue.transport,
       now: () => new Date('2026-10-15T04:03:55.123Z'),
       report: (report) => { reports.push(report) },
@@ -398,10 +398,25 @@ describe('node runtime', () => {
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
       envelope(REGISTERED),
     ])
-    const bare = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    const bare = new MpsExecutorRuntime({ settings: settingsFor(), secret: () => 's', transport: queue.transport })
     await bare.bootstrap()
     expect(bare.state).toBe('online')
     expect(bare.token).toBe('tok')
+  })
+
+  it('reports a missing secret when the handshake needs it', async () => {
+    const queue = queueTransport([])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => { throw new Error('executor node secret is missing: set the MPS_NODE_SECRET environment variable') },
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+    await expect(node.bootstrap()).rejects.toThrow(/MPS_NODE_SECRET/)
+    expect(node.state).toBe('idle')
+    expect(node.lastError?.message).toMatch(/MPS_NODE_SECRET/)
+    expect(reports[0]?.level).toBe('error')
   })
 
   it('waits out the period when a heartbeat fails with a plain rejection', async () => {
@@ -416,7 +431,7 @@ describe('node runtime', () => {
     const reports: ExecutorReport[] = []
     const node = new MpsExecutorRuntime({
       settings: settingsFor(),
-      secret: 's',
+      secret: () => 's',
       transport: flaky,
       now: () => new Date(0),
       report: (report) => { reports.push(report) },
@@ -450,7 +465,7 @@ describe('plugin wiring', () => {
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
       envelope(REGISTERED),
     ])
-    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: () => 's', transport: queue.transport })
     autoStartNode(node)
     await vi.waitFor(() => { expect(node.state).toBe('online') })
     expect(node.token).toBe('tok')
@@ -459,7 +474,7 @@ describe('plugin wiring', () => {
 
   it('leaves the node unstarted when the handshake is refused', async () => {
     const queue = queueTransport([rejection('NODE_DISABLED')])
-    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: () => 's', transport: queue.transport })
     autoStartNode(node)
     await vi.waitFor(() => { expect(node.state).toBe('halted') })
     expect(node.token).toBeUndefined()
@@ -470,7 +485,7 @@ describe('plugin wiring', () => {
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
       envelope(REGISTERED),
     ])
-    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: 's', transport: queue.transport })
+    const node = new MpsExecutorRuntime({ settings: settingsFor(), secret: () => 's', transport: queue.transport })
     await node.bootstrap()
     const ctx = new Context()
     const stop = registerStopEffect(ctx, node)
@@ -499,25 +514,37 @@ describe('plugin wiring', () => {
     expect(node.client.endpoint.url('/register')).toBe('https://192.168.1.31:9443/exec/v1/register')
   })
 
-  it('starts the node on load when the configuration asks for it', async () => {
+  it('dials the configured platform host and port on load', async () => {
     vi.stubEnv(DEFAULT_SECRET_ENV, 's3cret')
     const answers = [
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-31' }),
       envelope(REGISTERED),
     ]
+    const urls: string[] = []
     let calls = 0
-    vi.stubGlobal('fetch', async () => {
+    vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+      urls.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
       const answer = answers[Math.min(calls, answers.length - 1)]
       calls += 1
       return new Response(answer?.text ?? '', { status: answer?.status ?? 200, headers: { 'content-type': 'application/json' } })
     })
     try {
       const ctx = new Context()
-      apply(ctx, { platformHost: '10.0.0.7', nodeId: 'node-31' })
+      apply(ctx, {
+        platformHost: '10.0.0.7',
+        platformPort: 9443,
+        platformScheme: 'https',
+        platformBasePath: '/custom',
+        nodeId: 'node-31',
+      })
       const node = ctx.get('mpsExecutor')
       if (node === undefined) throw new Error('the node service was not published')
       await vi.waitFor(() => { expect(node.state).toBe('online') })
       expect(node.token).toBe('tok')
+      expect(urls).toEqual([
+        'https://10.0.0.7:9443/custom/auth/token',
+        'https://10.0.0.7:9443/custom/register',
+      ])
     } finally {
       vi.unstubAllGlobals()
     }

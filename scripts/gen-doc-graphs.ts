@@ -124,6 +124,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Maintains the session density ratio and the rolling reported/estimated factor, corrects ctx.tokenMeter.measure, and persists the factor under the harness home. Registered by the Tianma token-meter-calibration package.',
   },
   {
+    key: 'mpsExecutor',
+    pkg: 'mps-executor',
+    title: 'Platform session of a Tianma MPS executor node',
+    mode: 'core',
+    consumers: [],
+    note: 'Authenticates with the pre-shared secret, registers this node with its capacity and capabilities, and heartbeats on the period the platform assigns. Registered by the Tianma MPS executor package.',
+  },
+  {
     key: 'cotTranslation',
     pkg: 'experimental-client-ui-cot-translation',
     title: 'Reasoning translation Remote',

@@ -52,6 +52,7 @@ export { REGION_BEGIN, REGION_END }
 export const SERVICE_PAGE: Record<string, string> = {
   translator: 'translation.md',
   cotTranslation: 'translation.md',
+  mpsExecutor: 'tianma.md',
   speechToText: 'voice-input.md',
   speechController: 'voice-input.md',
   otel: 'otel.md',
@@ -973,6 +974,11 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   TerminalFrame: 'Browser terminal stream frames are owned by packages/api/terminal-controller/README.md',
   TerminalRetentionFrame: 'Browser terminal window holds are owned by packages/api/terminal-controller/README.md',
   WebTerminalId: 'Browser terminal identity is owned by packages/api/terminal-controller/README.md',
+  ExecSlots: 'node slot capacity is owned by packages/tianma/mps-exec-core/README.md',
+  ExecRunningTask: 'reported running task is owned by packages/tianma/mps-exec-core/README.md',
+  ExecResources: 'reported resource readings are owned by packages/tianma/mps-exec-core/README.md',
+  ExecRegisterResult: 'registration answer is owned by packages/tianma/mps-exec-core/README.md',
+  ExecHeartbeatResult: 'heartbeat answer is owned by packages/tianma/mps-exec-core/README.md',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

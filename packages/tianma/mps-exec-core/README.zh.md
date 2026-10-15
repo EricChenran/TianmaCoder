@@ -25,7 +25,7 @@ kind: "package-reference"
 
 先解析部署给该节点配置的平台地址，再把同一个 IP 与端口交给实际发起请求的客户端：
 
-```ts
+```markdown
 const endpoint = resolvePlatformEndpoint({ host: '192.168.1.10', port: 8791, scheme: 'http' })
 // endpoint.origin → http://192.168.1.10:8791
 // endpoint.url('/register') → http://192.168.1.10:8791/exec/v1/register

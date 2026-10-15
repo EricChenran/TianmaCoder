@@ -10,7 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { readNodeSecret, resolveExecutorSettings } from './config.ts'
-import type { Config as ExecutorConfig } from './config.ts'
+import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
 import type { ExecutorReport } from './runtime.ts'
 
@@ -99,12 +99,13 @@ export function registerStopEffect(ctx: Context, runtime: MpsExecutorRuntime): (
  * @param ctx - the Cordis context the plugin mounts in.
  * @param config - the validated node configuration.
  */
-export function apply(ctx: Context, config: ExecutorConfig): void {
+export function apply(ctx: Context, config: Config): void {
   const settings = resolveExecutorSettings(config)
-  const secret = readNodeSecret(config)
   const runtime = new MpsExecutorRuntime({
     settings,
-    secret,
+    // Read when the handshake starts: the profile loads, and its help prints,
+    // before the deployment has to provide the credential.
+    secret: () => readNodeSecret(config),
     report: createReportSink(ctx.logger('mps-executor')),
   })
   ctx.provide('mpsExecutor', runtime)

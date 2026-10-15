@@ -46,8 +46,13 @@ export interface ExecutorReport {
 export interface ExecutorRuntimeOptions {
   /** The node's resolved settings. */
   settings: ExecutorSettings
-  /** The pre-shared secret. */
-  secret: string
+  /**
+   * Supplies the pre-shared secret. Called when the handshake starts, so a
+   * profile loads, prints help, and takes its configuration before the
+   * deployment has to provide a credential.
+   * @returns the secret.
+   */
+  secret: () => string
   /** Transport override; defaults to `fetch`. */
   transport?: ExecHttpTransport | undefined
   /** Current-time source; injectable for tests. */
@@ -71,7 +76,7 @@ export class MpsExecutorRuntime {
   /** The settings this runtime was resolved with. */
   readonly settings: ExecutorSettings
 
-  readonly #secret: string
+  readonly #secret: () => string
   readonly #now: () => Date
   readonly #report: (report: ExecutorReport) => void
   #state: NodeState = 'idle'
@@ -172,7 +177,7 @@ export class MpsExecutorRuntime {
   async bootstrap(signal?: AbortSignal): Promise<ExecRegisterResult> {
     try {
       const authenticated = await this.client.authToken({
-        secret: this.#secret,
+        secret: this.#secret(),
         protocol_version: EXEC_PROTOCOL_VERSION,
         agent_info: { name: 'tianmacoder', version: this.settings.agentVersion },
       }, signal)
