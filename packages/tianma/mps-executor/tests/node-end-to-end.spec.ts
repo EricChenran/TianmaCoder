@@ -1067,6 +1067,8 @@ describe('the node end to end', () => {
     const sessions = platform.at('/exec/v1/workspaces/ws_same/session').map(request => JSON.parse(request.body) as Record<string, unknown>)
     expect(sessions.length).toBeGreaterThanOrEqual(2)
     expect(new Set(sessions.map(session => String(session['session_ref']))).size).toBe(1)
+    // The report the platform shows the session and coding path from names both.
+    expect(sessions.every(session => String(session['coding_path']).includes('ws_same'))).toBe(true)
     // One coding directory serves both, and the node kept the record across them.
     const state = JSON.parse(readFileSync(join(workspaceRoot, 'coding', '.state.json'), 'utf8')) as Record<string, unknown>
     expect((state['workspaces'] as Record<string, unknown>[]).map(record => record['workspace_id'])).toEqual(['ws_same'])
