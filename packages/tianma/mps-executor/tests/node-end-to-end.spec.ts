@@ -433,6 +433,54 @@ describe('the node end to end', () => {
     expect(log).toContain('tool write')
   }, 120_000)
 
+  it('keeps a workspace the platform releases while that workspace is working', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_busy',
+      work_item_id: 'wi_busy',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '做一半时平台来释放工作区' },
+        workspace: {
+          workspace_id: 'ws_busy',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_busy' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    const coding = join(workspaceRoot, 'coding')
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['slow'] })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_busy/progress').length > 0)
+      // The platform unbinds the workspace while its attempt is still working in it: the
+      // tree must stay, or the attempt would lose the ground under it.
+      platform.order({ command: 'release_workspace', workspace_id: 'ws_busy', reason: '工作项关闭', issued_at: '2026-10-15T04:00:00Z' })
+      await new Promise(resolve => setTimeout(resolve, 2_500))
+      expect(existsSync(join(coding, 'ws_busy'))).toBe(true)
+
+      // The attempt is ended by the platform's own abort, and then the release takes effect.
+      platform.order({ command: 'abort', task_id: 'tsk_busy', reason: '不再需要', issued_at: '2026-10-15T04:00:00Z' })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_busy/result').length > 0)
+      platform.order({ command: 'release_workspace', workspace_id: 'ws_busy', reason: '工作项关闭', issued_at: '2026-10-15T04:05:00Z' })
+      await waitFor(() => !existsSync(join(coding, 'ws_busy')))
+    } finally {
+      await platform.close()
+    }
+  }, 120_000)
+
   it('never tells the platform a credential the attempt printed', async () => {
     const root = temporary('mps-e2e-')
     const workspaceRoot = join(root, 'node')

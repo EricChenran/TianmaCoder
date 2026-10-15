@@ -151,6 +151,8 @@ The runtime holds the node id once and the protocol client reports it on every r
 
 -----
 
+The platform's `release_workspace` is honoured for workspaces this node is not working in: a release that arrives while an attempt is still in a workspace is reported and kept, because deleting the tree would take the ground out from under that attempt. The platform can release it again once the attempt has settled.
+
 <a id="further-exploration"></a>
 ## Further Exploration
 

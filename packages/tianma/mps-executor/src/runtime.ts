@@ -489,6 +489,17 @@ export class MpsExecutorRuntime {
    * @param workspaceId - the workspace the platform released.
    */
   async #releaseWorkspace(workspaceId: string): Promise<void> {
+    // A workspace this node is working in is not a workspace to delete: the tree would go
+    // out from under a running attempt. The platform can release it again once that
+    // attempt has settled.
+    const serving = this.#workspaces.records.find(record => record.workspace_id === workspaceId)?.last_task_id
+    if (serving !== undefined && this.#tasks?.runningTaskIds().includes(serving) === true) {
+      this.#report({
+        level: 'warn',
+        message: `the platform released workspace ${workspaceId} while task ${serving} is still working in it; keeping it until that attempt settles`,
+      })
+      return
+    }
     try {
       const released = await this.#workspaces.release(workspaceId)
       if (!released) {
