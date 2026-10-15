@@ -20,6 +20,13 @@ for (const event of events) console.log(JSON.stringify(event))
 // A later task in the same workspace changes the same file again, which is what makes a
 // second attempt in one workspace a real change rather than a repeat of the first.
 const instruction = process.argv.at(-1) ?? ''
+// A task the platform may stop: the agent works on until something ends it. The pending
+// interval is what keeps the process alive while the await never settles.
+if (process.argv[2] === 'slow') {
+  console.log(JSON.stringify({ type: 'status', phase: 'turn_start', turn: 1 }))
+  setInterval(() => {}, 1_000)
+  await new Promise(() => {})
+}
 if (instruction.includes('第二次')) appendFileSync('feature.txt', 'second pass\n', 'utf8')
 else writeFileSync('feature.txt', 'batch download\n', 'utf8')
 writeFileSync('REPORT.md', '# 开发报告\n\n增加了批量下载。\n', 'utf8')

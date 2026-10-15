@@ -11,7 +11,7 @@
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -61,8 +61,19 @@ class PlatformStub {
   #server: Server | undefined
   #port = 0
 
+  #commands: Record<string, unknown>[] = []
+
   constructor(task: Record<string, unknown>) {
     this.#tasks = [task]
+  }
+
+  /**
+   * Order one command for the next heartbeat, which is how a platform stops an attempt or
+   * releases a workspace.
+   * @param command - the command the heartbeat carries down.
+   */
+  order(command: Record<string, unknown>): void {
+    this.#commands.push(command)
   }
 
   /**
@@ -110,7 +121,21 @@ class PlatformStub {
       contentType: request.headers['content-type'],
     })
     if (path === '/exec/v1/auth/token') return this.#envelope(response, { token: 'tok', expires_at: 'e', node_id: 'node-e2e' })
-    if (path === '/exec/v1/register') return this.#envelope(response, { registered: true })
+    if (path === '/exec/v1/register') {
+      // A short period keeps an instruction from waiting on the timer in a test.
+      return this.#envelope(response, { registered: true, heartbeat_interval_seconds: 1 })
+    }
+    if (path === '/exec/v1/heartbeat') {
+      const commands = this.#commands
+      this.#commands = []
+      return this.#envelope(response, {
+        node_status: 'online',
+        commands,
+        lease_notices: [],
+        config_revision: 1,
+        server_time: '2026-10-15T04:00:00Z',
+      })
+    }
     if (path === '/exec/v1/claim') {
       const next = this.#tasks.shift()
       if (next === undefined) {
@@ -162,7 +187,7 @@ async function repository(root: string): Promise<{ bare: string; base: string }>
  * @param options - the platform address, the workspace root, and the agent command.
  * @returns the composed context.
  */
-async function boot(options: { port: number; workspaceRoot: string; logs: string }): Promise<Context> {
+async function boot(options: { port: number; workspaceRoot: string; logs: string; agentArgs?: string[] }): Promise<Context> {
   const root = temporary('mps-e2e-config-')
   const configPath = join(root, 'cordis.yml')
   writeFileSync(configPath, [
@@ -178,6 +203,7 @@ async function boot(options: { port: number; workspaceRoot: string; logs: string
     '      command:',
     `        - '${process.execPath.replace(/\\/gu, '/')}'`,
     `        - '${join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'node-agent.mjs').replace(/\\/gu, '/')}'`,
+    ...(options.agentArgs ?? []).map(argument => `        - '${argument}'`),
     `      logsDirectory: '${options.logs.replace(/\\/gu, '/')}'`,
     '      jsonEvents: true',
     '',
@@ -293,6 +319,95 @@ describe('the node end to end', () => {
     const log = platform.at('/exec/v1/tasks/tsk_e2e/log').map(request => request.body).join('\n')
     expect(log).toContain('已增加批量下载')
     expect(log).toContain('tool write')
+  }, 120_000)
+
+  it('stops an attempt the platform aborts, and says it was cancelled', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_abort',
+      work_item_id: 'wi_abort',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '做一半就被叫停' },
+        workspace: {
+          workspace_id: 'ws_abort',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_abort' },
+        },
+        constraints: { must_stay_in_workspace: false },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['slow'] })
+      // The attempt is running and will not end on its own; the platform stops it.
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_abort/progress').length > 0)
+      platform.order({ command: 'abort', task_id: 'tsk_abort', reason: '需求方要求暂停', issued_at: '2026-10-15T04:00:00Z' })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_abort/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    // The attempt was stopped rather than left running, acknowledged, and reported as
+    // cancelled: a run the platform ended did not fail.
+    expect(platform.at('/exec/v1/tasks/tsk_abort/abort-ack')).toHaveLength(1)
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_abort/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'cancelled' })
+  }, 120_000)
+
+  it('releases the workspace the platform releases, and keeps its record clean', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_release',
+      work_item_id: 'wi_release',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '做完就被释放' },
+        workspace: {
+          workspace_id: 'ws_release',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_release' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    const port = await platform.listen()
+    const coding = join(workspaceRoot, 'coding')
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_release/result').length > 0)
+      expect(existsSync(join(coding, 'ws_release'))).toBe(true)
+
+      // The platform unbinds the workspace; cleanup is its instruction, never the node's.
+      platform.order({ command: 'release_workspace', workspace_id: 'ws_release', reason: '工作项关闭', issued_at: '2026-10-15T04:00:00Z' })
+      await waitFor(() => !existsSync(join(coding, 'ws_release')))
+    } finally {
+      await platform.close()
+    }
+
+    const state = JSON.parse(readFileSync(join(coding, '.state.json'), 'utf8')) as Record<string, unknown>
+    expect(state['workspaces']).toEqual([])
   }, 120_000)
 
   it('returns a second task in the same workspace to the same session', async () => {
