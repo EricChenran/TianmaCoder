@@ -59,7 +59,7 @@ export interface CliRunnerOptions {
 }
 
 /** One line the run produced, kept for the raw log. */
-interface RunLine {
+export interface RunLine {
   stream: 'stdout' | 'stderr'
   line: ExecLogLine
 }
@@ -129,15 +129,14 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         }])
       }
       let answer: string | undefined
-      const args = [
-        ...prefix,
-        ...(jsonEvents ? ['--json'] : []),
-        ...(session === undefined ? [] : ['--session-id', session]),
-        `${instruction}\n\n${TASK_BOOK_POINTER}`,
-      ]
-      const outcome = await runProcess({
+      const attempt = async (withSession: boolean): Promise<RunOutcome> => await runProcess({
         bin,
-        args,
+        args: [
+          ...prefix,
+          ...(jsonEvents ? ['--json'] : []),
+          ...(withSession && session !== undefined ? ['--session-id', session] : []),
+          `${instruction}\n\n${TASK_BOOK_POINTER}`,
+        ],
         directory,
         env: options.env,
         signal: context.signal,
@@ -162,6 +161,18 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
           await context.reportLog(stream, reported)
         },
       })
+      let outcome = await attempt(true)
+      if (hint !== undefined && sessionIsGone(outcome, lines)) {
+        // The platform named a session this CLI no longer holds, which is what a wiped
+        // profile looks like: start a new one, report it, and let the platform follow.
+        await context.reportLog('runner', [{
+          at: now().toISOString(),
+          level: 'warn',
+          text: `session ${hint} is gone; starting a new one`,
+        }])
+        session = undefined
+        outcome = await attempt(false)
+      }
 
       const rawLog = join(options.logsDirectory, `${context.task.task_id}-${String(context.task.attempt)}.log`)
       writeRawLog(rawLog, lines, outcome)
@@ -459,6 +470,17 @@ export function readRunEvent(text: string): RunEvent | undefined {
  */
 function stringOf(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/**
+ * Whether a run failed because the CLI does not hold the session it was asked to adopt.
+ * @param outcome - what the run settled as.
+ * @param lines - everything the run printed.
+ * @returns true when the session is gone rather than the work having failed.
+ */
+export function sessionIsGone(outcome: RunOutcome, lines: readonly RunLine[]): boolean {
+  if (outcome.code === 0 || outcome.code === null) return false
+  return lines.some(entry => /does not exist; omit --session-id/u.test(entry.line.text))
 }
 
 /** What one run settled as. */

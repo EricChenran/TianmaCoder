@@ -12,6 +12,7 @@ import { describe, expect, it, afterEach } from 'vitest'
 import {
   exitCodeOf,
   readRunEvent,
+  sessionIsGone,
   runFailureSummary,
   shellFor,
   stopPlan,
@@ -20,6 +21,7 @@ import {
 } from '@tianma/dsh-mps-executor'
 import type { PublishedChanges, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
 import type { ExecLogLine, ExecResource, ExecTaskAssignment, TaskProgress } from '@tianma/dsh-mps-exec-core'
+import type { RunLine } from '@tianma/dsh-mps-executor'
 
 /** Directories one test created, removed after it. */
 const created: string[] = []
@@ -371,6 +373,45 @@ describe('the CLI runner', () => {
     // A line that is not an event is the answer of a CLI without the flag.
     expect(readRunEvent('已增加批量下载')).toBeUndefined()
     expect(readRunEvent('[1,2]')).toBeUndefined()
+  })
+
+  it('starts a new session when the one the platform named is gone', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      limits: { session_hint: { previous_session_ref: 'dsh-session-gone' } },
+    }))
+    const runner = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'session-gone'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      jsonEvents: true,
+    })
+
+    const result = await runner.run(context)
+
+    expect(result.outcome).toBe('success')
+    // The first run was asked for the platform's session, the second started a new one.
+    expect(reported(context)).toContain('stdout:args=session-gone --json --session-id dsh-session-gone ' + INSTRUCTION)
+    expect(reported(context)).toContain('stdout:args=session-gone --json ' + INSTRUCTION)
+    expect(reported(context)).toContain('runner:session dsh-session-gone is gone; starting a new one')
+    // Both sessions are reported: the platform learns the one it named is gone.
+    expect(context.sessions).toEqual(['dsh-session-gone', 'dsh-session-fresh'])
+    expect(result.notes).toContain('answer: 新会话完成')
+  })
+
+  it('reads whether a failure was a session the CLI does not hold', () => {
+    const line = (text: string): RunLine => ({
+      stream: 'stderr',
+      line: { at: '2026-10-15T04:03:55.123Z', level: 'warn', text },
+    })
+    const gone = 'dsh: session "dsh-session-gone" does not exist; omit --session-id to start a new Session'
+
+    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line(gone)])).toBe(true)
+    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line('build failed')])).toBe(false)
+    expect(sessionIsGone({ kind: 'exited', code: 0 }, [line(gone)])).toBe(false)
+    expect(sessionIsGone({ kind: 'exited', code: null }, [line(gone)])).toBe(false)
   })
 
   it('reports a run that exited non-zero with the line it failed on', async () => {

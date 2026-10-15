@@ -20,7 +20,15 @@ if (mode === 'fail') {
   process.exit(3)
 }
 
-if (mode === 'json') {
+if (mode === 'session-gone') {
+  const asked = process.argv.find(value => value.startsWith('--session-id'))
+  if (asked !== undefined) {
+    console.error(`dsh: session "${asked.slice('--session-id'.length + 1)}" does not exist; omit --session-id to start a new Session`)
+    process.exit(1)
+  }
+  console.log(JSON.stringify({ type: 'session', sessionId: 'dsh-session-fresh' }))
+  console.log(JSON.stringify({ type: 'final', text: '新会话完成' }))
+} else if (mode === 'json') {
   // The event stream the headless profile writes under --json, as the CLI documents it.
   const events = [
     { type: 'session', sessionId: 'dsh-session-01H8Z', cwd: process.cwd() },

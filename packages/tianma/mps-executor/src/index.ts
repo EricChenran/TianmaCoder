@@ -67,12 +67,13 @@ export {
   stopPlan,
   exitCodeOf,
   readRunEvent,
+  sessionIsGone,
   runFailureSummary,
   shellFor,
   stopRun,
   tianmaCliRunner,
 } from './cli-runner.ts'
-export type { RunEvent, StoppableRun, StopPlan } from './cli-runner.ts'
+export type { RunEvent, RunLine, StoppableRun, StopPlan } from './cli-runner.ts'
 export { DEFAULT_CLI_COMMAND } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export {
