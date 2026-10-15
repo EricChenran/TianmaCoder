@@ -7,7 +7,7 @@
  * @module @tianma/dsh-mps-executor/paths
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative } from 'node:path'
 
@@ -20,6 +20,22 @@ import { dirname, isAbsolute, join, relative } from 'node:path'
 export function isInside(root: string, target: string): boolean {
   const offset = relative(root, target)
   return offset !== '' && !offset.startsWith('..') && !isAbsolute(offset)
+}
+
+/**
+ * Keep one of the node's own files out of the repository's index. The entry goes into
+ * `.git/info/exclude`, which is local to the clone: a workspace that is not a
+ * repository needs none, because there is no index to keep it out of.
+ * @param directory - the workspace directory.
+ * @param entry - the workspace-relative entry to exclude.
+ */
+export function excludeFromRepository(directory: string, entry: string): void {
+  const exclude = join(directory, '.git', 'info', 'exclude')
+  if (!existsSync(exclude)) return
+  const current = readFileSync(exclude, 'utf8')
+  if (current.split(/\r?\n/u).includes(entry)) return
+  const separator = current === '' || current.endsWith('\n') ? '' : '\n'
+  writeFileSync(exclude, `${current}${separator}${entry}\n`, 'utf8')
 }
 
 /**

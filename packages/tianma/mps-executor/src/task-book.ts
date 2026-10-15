@@ -9,7 +9,7 @@
  * @module @tianma/dsh-mps-executor/task-book
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   taskInstruction,
@@ -19,6 +19,9 @@ import {
   taskWorkspaceId,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment, TaskRepository } from '@tianma/dsh-mps-exec-core'
+import type { MaterialFile } from './materials.ts'
+import { taskMaterials } from './materials.ts'
+import { excludeFromRepository } from './paths.ts'
 
 /** File name of the task book inside the coding workspace. */
 export const TASK_BOOK_FILE = 'PROMPT.md'
@@ -74,7 +77,7 @@ interface BookFacts {
  * @param assignment - the assignment a claim returned.
  * @returns the book as markdown.
  */
-export function taskBook(assignment: ExecTaskAssignment): string {
+export function taskBook(assignment: ExecTaskAssignment, materials: MaterialFile[] = []): string {
   const facts = bookFacts(assignment)
   const lines: string[] = [
     `# 任务书 ${assignment.task_id}（第 ${String(assignment.attempt)}/${String(assignment.max_attempts)} 次尝试）`,
@@ -84,7 +87,7 @@ export function taskBook(assignment: ExecTaskAssignment): string {
   section(lines, '工作区', workspaceLines(facts))
   section(lines, '约束', constraintLines(facts))
   section(lines, '交付要求', deliveryLines(facts))
-  section(lines, '材料', facts.materials.map(id => `- ${id}`))
+  section(lines, '材料', materialLines(facts, materials))
   section(lines, '聊天记录', transcriptLines(facts))
   section(lines, '最近完成的任务', facts.recentTasks.map(task =>
     `- ${task.task_id}（${task.title}）：${task.outcome}${task.summary === '' ? '' : ` —— ${task.summary}`}`))
@@ -94,29 +97,19 @@ export function taskBook(assignment: ExecTaskAssignment): string {
 
 /**
  * Write one attempt's task book into its workspace and keep it out of the repository.
- * @param options - the workspace directory and the assignment.
+ * @param options - the workspace directory, the assignment, and the materials already
+ * brought in.
  * @returns the path of the file written.
  */
-export function writeTaskBook(options: { directory: string; assignment: ExecTaskAssignment }): string {
+export function writeTaskBook(options: {
+  directory: string
+  assignment: ExecTaskAssignment
+  materials?: MaterialFile[] | undefined
+}): string {
   const path = join(options.directory, TASK_BOOK_FILE)
-  writeFileSync(path, taskBook(options.assignment), 'utf8')
-  excludeFromRepository(options.directory)
+  writeFileSync(path, taskBook(options.assignment, options.materials), 'utf8')
+  excludeFromRepository(options.directory, TASK_BOOK_FILE)
   return path
-}
-
-/**
- * Add the book to the repository's local excludes, so the commit the node makes never
- * carries the node's own input. A workspace that is not a repository needs none: there
- * is no index to keep it out of.
- * @param directory - the workspace directory.
- */
-function excludeFromRepository(directory: string): void {
-  const exclude = join(directory, '.git', 'info', 'exclude')
-  if (!existsSync(exclude)) return
-  const current = readFileSync(exclude, 'utf8')
-  if (current.split(/\r?\n/u).includes(TASK_BOOK_FILE)) return
-  const separator = current === '' || current.endsWith('\n') ? '' : '\n'
-  writeFileSync(exclude, `${current}${separator}${TASK_BOOK_FILE}\n`, 'utf8')
 }
 
 /**
@@ -147,6 +140,22 @@ function workspaceLines(facts: BookFacts): string[] {
   if (repository?.work_branch !== undefined) lines.push(`- 工作分支：${repository.work_branch}`)
   if (facts.accessMode !== undefined) lines.push(`- 访问模式：${facts.accessMode}`)
   return lines
+}
+
+/**
+ * The lines listing the materials, naming the file each was written to when the node
+ * brought it in.
+ * @param facts - what the payload states.
+ * @param materials - the materials written, if any.
+ * @returns the lines.
+ */
+function materialLines(facts: BookFacts, materials: MaterialFile[]): string[] {
+  const written = new Map(materials.map(material => [material.artifact_id, material.path]))
+  return facts.materials.map((id) => {
+    const path = written.get(id)
+    // The book is read as text, so its paths read the same on every host.
+    return path === undefined ? `- ${id}` : `- ${path.replace(/\\/gu, '/')}（${id}）`
+  })
 }
 
 /**
@@ -234,7 +243,7 @@ function bookFacts(assignment: ExecTaskAssignment): BookFacts {
     e2eCommand: text(deliverables['e2e_command']),
     reportFilename: text(deliverables['report_filename']),
     minScreenshots: count(deliverables['min_screenshots']),
-    materials: materialIds(context, transcript),
+    materials: taskMaterials(payload),
     rulesVersion: text(context['rules_version']),
     rules: strings(context['rules_inline']),
     transcriptFrom: text(transcript['window_from']),
@@ -243,24 +252,6 @@ function bookFacts(assignment: ExecTaskAssignment): BookFacts {
     recentTasks: list(context['recent_tasks']).map(readRecentTask),
     runtimeSeconds: limits === undefined ? undefined : limits / 1000,
   }
-}
-
-/**
- * The materials this task carries: the context's own list plus what its messages
- * reference, deduplicated in the order the payload states them.
- * @param context - the payload's context block.
- * @param transcript - the chat transcript block.
- * @returns the artifact ids.
- */
-function materialIds(context: Record<string, unknown>, transcript: Record<string, unknown>): string[] {
-  const ids = strings(context['resources'])
-  for (const message of list(transcript['messages'])) {
-    for (const attachment of list(record(message)['resources'])) {
-      const id = text(record(attachment)['artifact_id'])
-      if (id !== undefined) ids.push(id)
-    }
-  }
-  return [...new Set(ids)]
 }
 
 /**

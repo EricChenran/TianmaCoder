@@ -15,8 +15,11 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { taskInstruction } from '@tianma/dsh-mps-exec-core'
+import { toError } from './report.ts'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
 import type { TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
+import { fetchMaterials } from './materials.ts'
+import type { MaterialFile } from './materials.ts'
 import { TASK_BOOK_POINTER, writeTaskBook } from './task-book.ts'
 
 /** How long a run is given to stop before the node kills it. */
@@ -73,15 +76,34 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       const instruction = taskInstruction(context.task.payload)
       if (instruction === undefined) throw new Error('this task carries no instruction to run')
 
+      // The materials come in first: the book names the file each was written to, and an
+      // attempt that cannot read what the platform attached is one that would have to
+      // guess, which is what `blocked` is for.
+      let materials: MaterialFile[] = []
+      try {
+        materials = await fetchMaterials({
+          directory,
+          assignment: context.task,
+          source: { resource: async (artifactId: string) => await context.resource(artifactId) },
+          signal: context.signal,
+        })
+      } catch (error) {
+        return {
+          outcome: 'blocked',
+          summary: `could not bring in the task's materials: ${toError(error).message}`,
+        }
+      }
       // The instruction is the prompt; everything else the attempt needs — constraints,
-      // delivery requirements, materials, the chat it came from — is the task book.
-      const book = writeTaskBook({ directory, assignment: context.task })
+      // delivery requirements, the chat it came from, the rules — is the task book.
+      const book = writeTaskBook({ directory, assignment: context.task, materials })
       const lines: RunLine[] = []
       await context.reportProgress({ progress: 10, stage: 'coding', message: 'the agent is working' })
       await context.reportLog('runner', [{
         at: now().toISOString(),
         level: 'info',
-        text: `task book: ${book}`,
+        text: materials.length === 0
+          ? `task book: ${book}`
+          : `task book: ${book}（材料 ${String(materials.length)} 份）`,
       }])
       const outcome = await runProcess({
         bin,

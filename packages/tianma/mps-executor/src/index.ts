@@ -63,6 +63,8 @@ export {
 } from './publish.ts'
 export { RUNNER_STOP_GRACE_MS, runFailureSummary, stopRun, tianmaCliRunner } from './cli-runner.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
+export { MATERIALS_DIRECTORY, fetchMaterials, materialFileName, taskMaterials } from './materials.ts'
+export type { FetchMaterialsOptions, MaterialFile, MaterialSource } from './materials.ts'
 export type { CliRunnerOptions } from './cli-runner.ts'
 export type {
   CheckoutPublisherOptions,
@@ -81,7 +83,7 @@ export type {
   TaskArtifactRequest,
   TaskArtifactUploader,
 } from './artifacts.ts'
-export { isInside, resolveWithinWorkspace } from './paths.ts'
+export { excludeFromRepository, isInside, resolveWithinWorkspace } from './paths.ts'
 export type {
   CheckoutSessionReporterOptions,
   RestoredSessionReport,

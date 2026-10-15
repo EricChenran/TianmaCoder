@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, afterEach } from 'vitest'
 import { runFailureSummary, stopRun, tianmaCliRunner } from '@tianma/dsh-mps-executor'
 import type { PublishedChanges, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
-import type { ExecLogLine, ExecTaskAssignment, TaskProgress } from '@tianma/dsh-mps-exec-core'
+import type { ExecLogLine, ExecResource, ExecTaskAssignment, TaskProgress } from '@tianma/dsh-mps-exec-core'
 
 /** Directories one test created, removed after it. */
 const created: string[] = []
@@ -47,6 +47,10 @@ class RecordingContext implements TaskRunContext {
   publishError: Error | undefined
   readonly controller = new AbortController()
   readonly checkout = undefined
+  /** Materials the platform answers with, by artifact id. */
+  readonly materials = new Map<string, Uint8Array>()
+  /** Failure the platform answers a material request with. */
+  materialError: Error | undefined
 
   constructor(readonly workspaceDirectory: string | undefined, readonly task: ExecTaskAssignment) {}
 
@@ -62,8 +66,11 @@ class RecordingContext implements TaskRunContext {
     this.logs.push({ stream, lines })
   }
 
-  async resource(): Promise<never> {
-    throw new Error('this attempt downloads no material')
+  async resource(artifactId: string): Promise<ExecResource> {
+    if (this.materialError !== undefined) throw this.materialError
+    const bytes = this.materials.get(artifactId)
+    if (bytes === undefined) throw new Error('this attempt downloads no material')
+    return { bytes, sha256: `sha-of-${artifactId}` }
   }
 
   async uploadArtifact(): Promise<string> {
@@ -165,6 +172,48 @@ describe('the CLI runner', () => {
     expect(reported(context)).toContain(`stdout:instruction=${INSTRUCTION}`)
     expect(reported(context).some(line => line.includes('PROMPT.md'))).toBe(true)
     expect(reported(context)).toContain(`runner:task book: ${join(workspace, 'PROMPT.md')}`)
+  })
+
+  it('brings the task materials in and names them in the book', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      context: {
+        resources: ['art_1'],
+        chat_transcript: { messages: [{ resources: [{ artifact_id: 'art_2', file_name: '需求说明.pdf' }] }] },
+      },
+    }))
+    context.materials.set('art_1', new TextEncoder().encode('材料一'))
+    context.materials.set('art_2', new TextEncoder().encode('材料二'))
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('success')
+    expect(readFileSync(join(workspace, '.materials', 'art_1'), 'utf8')).toBe('材料一')
+    expect(readFileSync(join(workspace, '.materials', 'art_2_需求说明.pdf'), 'utf8')).toBe('材料二')
+    const book = readFileSync(join(workspace, 'PROMPT.md'), 'utf8')
+    expect(book).toContain('- .materials/art_1（art_1）')
+    expect(book).toContain('- .materials/art_2_需求说明.pdf（art_2）')
+    expect(reported(context).some(line => line.includes('材料 2 份'))).toBe(true)
+  })
+
+  it('reports a task whose materials cannot be brought in', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      context: { resources: ['art_9'] },
+    }))
+    context.materialError = new Error('RESOURCE_NOT_IN_SCOPE: not in scope')
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    // Missing inputs are what `blocked` is for: the run never starts.
+    expect(result.outcome).toBe('blocked')
+    expect(result.summary).toBe("could not bring in the task's materials: RESOURCE_NOT_IN_SCOPE: not in scope")
+    expect(reported(context).some(line => line.startsWith('stdout:cwd='))).toBe(false)
+    expect(context.published).toBe(0)
   })
 
   it('reports a run that exited non-zero with the line it failed on', async () => {

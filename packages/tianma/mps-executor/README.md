@@ -98,6 +98,8 @@ The other direction is `resource()` on the runner's context: the node downloads 
 
 `writeTaskBook` gives the attempt everything the payload carries that the agent needs and the prompt cannot hold: the constraints, the delivery requirements, the materials the task references, the chat it came from, the workspace's recent tasks, and the rules — written as `PROMPT.md` in the workspace. The prompt stays the instruction plus a pointer, so a long transcript or rule set never has to fit in one argument. The book is the node's own input, so the node adds it to the repository's local excludes as it writes it: everything else in the workspace is what the commit hands back, and the node's own file is not part of the delivered change.
 
+`fetchMaterials` brings the files a task carries into the workspace before the run starts, under `.materials/`, named after the file the platform stated and reduced to a name that cannot leave the directory. The directory is added to the repository's local excludes like the task book, and the book names each file so the agent reads what the platform attached rather than a list of ids. A material the platform refuses, or one larger than the node fetches in one request, is reported as `blocked` — the protocol's outcome for missing information — because an attempt that works without its inputs would have to guess at them.
+
 ### Source map
 
 | File | Role |
@@ -114,6 +116,7 @@ The other direction is `resource()` on the runner's context: the node downloads 
 | [`src/paths.ts`](src/paths.ts) | The one confinement rule for paths inside a coding workspace |
 | [`src/cli-runner.ts`](src/cli-runner.ts) | The runner: one CLI process per attempt, its logs, its stop, and its result |
 | [`src/task-book.ts`](src/task-book.ts) | The task book: what the payload states, rendered for the agent |
+| [`src/materials.ts`](src/materials.ts) | The materials a task carries, brought into the workspace before the run |
 | [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
 | [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
 | [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
@@ -154,7 +157,7 @@ This limit defines the current package boundary. It is a current constraint, not
 - **`read_only` tasks are refused** — a task that asks for the bundle access mode fails loudly instead of committing work the platform cannot fetch.
 - **Git comes from `PATH`** — the node spawns `git` from the environment; a host without it reports every coding attempt as failed.
 - **The book states what the payload states** — a section is rendered only when the platform sends it, and the node neither summarises the chat nor orders the work the platform left implicit.
-- **Materials are not placed in the workspace** — a runner can read them through `resource()`, but the node does not fetch them into the workspace before a run.
+- **Materials arrive in one request each** — one over the protocol's single-request ceiling is refused because the chunked fetch is not implemented, and the attempt reports `blocked` rather than working without it.
 - **Logs are lines, not events** — progress inside a run is not visible until it prints, because the node runs the CLI profile rather than the streaming one.
 - **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 

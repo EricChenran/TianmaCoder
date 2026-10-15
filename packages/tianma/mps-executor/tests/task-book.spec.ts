@@ -139,6 +139,16 @@ describe('the task book', () => {
     expect(book.endsWith('\n')).toBe(true)
   })
 
+  it('names the file each material was written to', () => {
+    const book = taskBook(assignment(FULL), [
+      { artifact_id: 'art_ctx', path: '.materials/art_ctx', sha256: 's1' },
+      { artifact_id: 'art_pdf', file_name: '需求说明.pdf', path: '.materials/art_pdf_需求说明.pdf', sha256: 's2' },
+    ])
+
+    expect(book).toContain('- .materials/art_ctx（art_ctx）')
+    expect(book).toContain('- .materials/art_pdf_需求说明.pdf（art_pdf）')
+  })
+
   it('leaves out every section the payload says nothing about', () => {
     const book = taskBook(assignment({ spec: { raw_instruction: '只做这一件事' } }))
 
