@@ -540,6 +540,71 @@ describe('the node end to end', () => {
     }
   }, 120_000)
 
+  it('runs the evidence commands a task asks for, and uploads what they produced', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({
+      workspaceRoot,
+      logs,
+      workspaceId: 'ws_evidence',
+      taskId: 'tsk_evidence',
+      base,
+      bare,
+      extra: {
+        deliverables: {
+          push_required: true,
+          require_build: true,
+          build_command: 'node --version',
+          require_report: true,
+          report_filename: 'REPORT.md',
+        },
+      },
+    })
+
+    // The gate reads the build's own outcome and can open its output and the report; the
+    // node uploads both, which is what the platform's gates open by id.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_evidence/result')[0]?.body ?? '{}') as Record<string, unknown>
+    const evidence = result['evidence'] as Record<string, unknown>
+    const build = evidence['build'] as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+    expect(build).toMatchObject({ command: 'node --version', exit_code: 0 })
+    expect(String(build['log_artifact_id'])).toMatch(/^art-/u)
+    expect(String(evidence['report_artifact_id'])).toMatch(/^art-/u)
+    expect(platform.at('/exec/v1/tasks/tsk_evidence/artifacts')).toHaveLength(2)
+  }, 120_000)
+
+  it('refuses to report a delivery whose required build failed', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = await runOneTask({
+      workspaceRoot,
+      logs,
+      workspaceId: 'ws_broken',
+      taskId: 'tsk_broken',
+      base,
+      bare,
+      extra: {
+        // A command that fails without quoting, because the node runs what the payload
+        // states through the host's own shell.
+        deliverables: { push_required: true, require_build: true, build_command: 'exit 3' },
+      },
+    })
+
+    // A build the platform requires that fails is reported as a failure with its exit
+    // code, because the gate reads this and a delivery without it is one it cannot accept.
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_broken/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'failed' })
+    // What a failed delivery carries is the actionable point, exit code included.
+    expect(String(result['summary'])).toContain('build evidence')
+    expect(String(result['summary'])).toContain('exit code 3')
+  }, 120_000)
+
   it('uploads the screenshots an attempt declared, and reports them as evidence', async () => {
     const root = temporary('mps-e2e-')
     const workspaceRoot = join(root, 'node')
@@ -873,8 +938,10 @@ describe('the node end to end', () => {
     const port = await platform.listen()
     try {
       context = await boot({ port, workspaceRoot, logs, agentArgs: ['chatty'] })
-      // The attempt is under way and the platform has taken its first lines.
-      await waitFor(() => platform.at('/exec/v1/tasks/tsk_outage/log').length > 0)
+      // The attempt is under way. Progress is the anchor rather than the first log line: it
+      // lands before the agent runs, so the outage cannot drift onto the moment the attempt
+      // settles and take the result with it.
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_outage/progress').length > 0)
 
       // The platform goes away for a few seconds: the agent keeps working, the node keeps
       // its lines, and its heartbeat keeps failing until the platform is back.
