@@ -71,7 +71,12 @@ class FakePlatform implements TaskPlatformClient {
     return { bytes: new TextEncoder().encode(`# ${artifactId}\n`), sha256: 'sha-of-material' }
   }
 
-  async claim(body: ExecClaimRequest): Promise<ExecTaskAssignment | undefined> {    this.claims.push(body)
+  /** Runs while a claim is being answered, so a test can change the world mid-poll. */
+  claimHook: (() => void) | undefined
+
+  async claim(body: ExecClaimRequest): Promise<ExecTaskAssignment | undefined> {
+    this.claims.push(body)
+    this.claimHook?.()
     if (this.claimError !== undefined) throw this.claimError
     return this.assignments.shift()
   }
@@ -275,6 +280,29 @@ describe('task lifecycle', () => {
     // The node recorded the session beside its workspace first, so the report can wait.
     expect(reports.some(report => report.message.includes('the session report for tsk_1 did not reach the platform'))).toBe(true)
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
+  })
+
+  it('names a task it has no room for instead of starting or silently dropping it', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    // Room when the claim was made, none by the time the work arrives: a claim waits a long
+    // poll, and the disk can fill while it does.
+    let room = true
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      canClaim: () => room,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+    // The room is gone between the precondition and the answer.
+    platform.claimHook = () => { room = false }
+
+    await expect(orchestrator.claimOnce()).resolves.toBe(false)
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(0)
+    expect(reports.some(report => report.message.includes('no room for it; leaving it to its lease'))).toBe(true)
   })
 
   it('keeps claiming when a spool cannot be offered', async () => {

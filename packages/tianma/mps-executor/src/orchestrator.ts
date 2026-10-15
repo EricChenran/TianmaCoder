@@ -349,6 +349,17 @@ export class TaskOrchestrator {
       max_wait_seconds: this.#claimLongPollSeconds(),
     })
     if (assignment === undefined) return false
+    // A claim can wait a long poll, and the room this node had when it asked can be gone by
+    // the time the work arrives. Starting it would run an attempt the disk cannot hold;
+    // dropping it in silence would leave the platform waiting on a task nobody is doing.
+    // It is named and left to its lease, which is what redispatching is for.
+    if (this.#canClaim?.() === false) {
+      this.#report({
+        level: 'warn',
+        message: `the platform dispatched ${assignment.task_id} while this node had no room for it; leaving it to its lease rather than starting it`,
+      })
+      return false
+    }
     this.#startAttempt(assignment)
     return true
   }
