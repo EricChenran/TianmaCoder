@@ -29,6 +29,13 @@ export const DEFAULT_SECRET_ENV = 'MPS_NODE_SECRET'
  */
 export const DEFAULT_DISK_MIN_GB = 5
 
+/**
+ * How long a stopping node lets its running attempts finish before it ends them, in
+ * seconds. Sixty is the grace the plan names, and sits well inside the lease a platform
+ * grants, so a stop still reports each attempt's outcome instead of costing a lease timeout.
+ */
+export const DEFAULT_SHUTDOWN_GRACE_SECONDS = 60
+
 /** Heartbeat period the node starts with before the platform overrides it. */
 export const DEFAULT_HEARTBEAT_SECONDS = 10
 
@@ -111,6 +118,7 @@ export interface Config {
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   diskMinGb?: number
+  shutdownGraceSeconds?: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds?: number
   /** Claim long-poll budget in seconds. */
@@ -156,6 +164,7 @@ export const Config: z<Config> = z.object({
   }).default({ command: [], logsDirectory: '', dshHome: '', jsonEvents: false }),
   slotsTotal: z.number().step(1).min(1).default(1),
   diskMinGb: z.number().min(0).default(DEFAULT_DISK_MIN_GB),
+  shutdownGraceSeconds: z.number().min(0).default(DEFAULT_SHUTDOWN_GRACE_SECONDS),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
   leaseRenewSeconds: z.number().step(1).min(1).max(3600).default(DEFAULT_LEASE_RENEW_SECONDS),
@@ -208,6 +217,8 @@ export interface ExecutorSettings {
   slotsTotal: number
   /** Free disk space below which the node stops claiming work; see {@link DEFAULT_DISK_MIN_GB}. */
   diskMinGb: number
+  /** How long a stopping node lets running attempts finish; see {@link DEFAULT_SHUTDOWN_GRACE_SECONDS}. */
+  shutdownGraceSeconds: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds: number
   /** Claim long-poll budget in seconds. */
@@ -290,6 +301,7 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     cliRunner: resolveCliRunner(config.cliRunner, workspaceRoot),
     slotsTotal: config.slotsTotal ?? 1,
     diskMinGb: config.diskMinGb ?? DEFAULT_DISK_MIN_GB,
+    shutdownGraceSeconds: config.shutdownGraceSeconds ?? DEFAULT_SHUTDOWN_GRACE_SECONDS,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,
     leaseRenewSeconds: config.leaseRenewSeconds ?? DEFAULT_LEASE_RENEW_SECONDS,

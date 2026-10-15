@@ -254,6 +254,16 @@ describe('node runtime', () => {
     return { runtime: instance, calls: queue.calls, reports }
   }
 
+  it('stops without announcing anything when it never came online', async () => {
+    const { runtime: node, calls } = runtime([])
+
+    await node.shutdown()
+
+    // There is no drain to announce and no attempt to end, so nothing is sent at all.
+    expect(calls).toEqual([])
+    expect(node.state).toBe('idle')
+  })
+
   it('starts idle with its capacity free', () => {
     const { runtime: node } = runtime([], { slotsTotal: 2 })
     expect(node.state).toBe('idle')
@@ -539,7 +549,8 @@ describe('plugin wiring', () => {
     const stop = registerStopEffect(ctx, node)
     node.start()
     expect(node.state).toBe('online')
-    stop()
+    // Stopping drains first, which is what the disposer waits for.
+    await stop()
     expect(node.state).toBe('authenticated')
   })
 

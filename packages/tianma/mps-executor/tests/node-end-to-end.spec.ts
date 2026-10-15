@@ -318,6 +318,7 @@ async function boot(options: {
     "    secretEnv: 'MPS_E2E_SECRET'",
     `    workspaceRoot: '${options.workspaceRoot.replace(/\\/gu, '/')}'`,
     '    autoStart: true',
+    '    shutdownGraceSeconds: 1',
     '    cliRunner:',
     '      command:',
     ...(options.command ?? [
@@ -537,6 +538,50 @@ describe('the node end to end', () => {
     } finally {
       await platform.close()
     }
+  }, 120_000)
+
+  it('drains and ends what is still running when the node stops', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_stop',
+      work_item_id: 'wi_stop',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '节点停机时这次尝试还在跑' },
+        workspace: {
+          workspace_id: 'ws_stop',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_stop' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['slow'] })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_stop/progress').length > 0)
+      // The profile stops: the node says it is draining, gives the attempt its grace, and
+      // ends what is left so the platform is told instead of left waiting for a lease.
+      await context.fiber.dispose()
+    } finally {
+      await platform.close()
+    }
+
+    expect(platform.at('/exec/v1/drain').length).toBeGreaterThan(0)
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_stop/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'cancelled' })
+    expect(platform.at('/exec/v1/tasks/tsk_stop/abort-ack')).toHaveLength(1)
   }, 120_000)
 
   it('never tells the platform a credential the attempt printed', async () => {

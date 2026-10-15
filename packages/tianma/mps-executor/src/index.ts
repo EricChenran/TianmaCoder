@@ -83,7 +83,7 @@ export {
   tianmaCliRunner,
 } from './cli-runner.ts'
 export type { RunEvent, RunLine, StoppableRun, StopPlan } from './cli-runner.ts'
-export { DEFAULT_CLI_COMMAND } from './config.ts'
+export { DEFAULT_CLI_COMMAND, DEFAULT_DISK_MIN_GB, DEFAULT_SHUTDOWN_GRACE_SECONDS } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export {
   EVIDENCE_DIRECTORY,
@@ -198,8 +198,10 @@ export function autoStartNode(runtime: MpsExecutorRuntime): void {
  * @param runtime - the runtime to stop.
  * @returns the stop function the effect disposes with.
  */
-export function registerStopEffect(ctx: Context, runtime: MpsExecutorRuntime): () => void {
-  const stop = (): void => { runtime.stop() }
+export function registerStopEffect(ctx: Context, runtime: MpsExecutorRuntime): () => Promise<void> {
+  // The profile's own shutdown is what a SIGTERM or a stopped app becomes, and it has to
+  // drain: an attempt killed with the process leaves the platform waiting for a lease.
+  const stop = async (): Promise<void> => { await runtime.shutdown() }
   ctx.effect(() => stop)
   return stop
 }

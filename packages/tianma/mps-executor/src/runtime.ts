@@ -601,6 +601,44 @@ export class MpsExecutorRuntime {
   }
 
   /**
+   * Stop the way the protocol says to: announce the drain so the platform sends nothing
+   * new, let the attempts already running finish, and end those still running once the
+   * grace is over — an attempt this node ends reports `cancelled`, where an attempt lost
+   * with the process leaves the platform waiting for a lease to expire before it is redone.
+   * @param graceMs - how long running attempts may take to finish; the configured grace by default.
+   */
+  async shutdown(graceMs?: number): Promise<void> {
+    const grace = graceMs ?? this.settings.shutdownGraceSeconds * 1000
+    if (this.#state === 'online') {
+      await this.#announce('drain', 'this node is stopping')
+    }
+    // No new work: the platform stops dispatching to a draining node, which is what the
+    // announcement is for. The heartbeat keeps going, because attempts still running have
+    // leases to renew while they finish.
+    const quiet = this.#tasks?.drain()
+    if (quiet !== undefined) await Promise.race([quiet, this.#delay(grace)])
+    const running = this.#tasks?.runningTaskIds() ?? []
+    if (running.length > 0) {
+      this.#report({
+        level: 'warn',
+        message: `node ${this.settings.nodeId} is stopping with ${String(running.length)} attempt(s) still running; ending them after ${String(Math.round(grace / 1000))}s`,
+      })
+    }
+    for (const taskId of running) this.#tasks?.abort(taskId, 'the node is shutting down')
+    // Ended attempts still submit their outcome, which is the point of ending them here.
+    await this.#tasks?.drain()
+    this.stop()
+  }
+
+  /**
+   * Wait one interval.
+   * @param ms - how long.
+   */
+  async #delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  /**
    * Send one heartbeat for the timer, applying the recovery its failure requires:
    * a halt-level code stops the node, an expired token triggers a fresh handshake,
    * and anything else waits for the next period.
