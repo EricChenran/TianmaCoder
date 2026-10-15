@@ -26,6 +26,7 @@ import type {
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
 import { cliGit } from './git.ts'
+import { checkoutPublisher } from './publish.ts'
 import { TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
@@ -128,11 +129,16 @@ export class MpsExecutorRuntime {
    * @returns the orchestrator.
    */
   #createOrchestrator(runner: TaskRunner): TaskOrchestrator {
+    const git = cliGit()
     return new TaskOrchestrator({
       client: this.client,
       settings: this.settings,
       runner,
-      workspaces: checkoutAllocator({ store: this.#workspaces, git: cliGit() }),
+      workspaces: checkoutAllocator({ store: this.#workspaces, git }),
+      publisher: checkoutPublisher({
+        git,
+        identity: { name: this.settings.gitUserName, email: this.settings.gitUserEmail },
+      }),
       report: this.#report,
       now: this.#now,
       hooks: {

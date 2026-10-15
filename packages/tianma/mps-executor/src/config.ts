@@ -39,6 +39,12 @@ export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 /** Largest artifact the node uploads without chunking, in bytes. */
 export const DEFAULT_MAX_ARTIFACT_BYTES = 500 * 1024 * 1024
 
+/** `user.name` a node commits under until a deployment names its robot. */
+export const DEFAULT_GIT_USER_NAME = 'tianma-mps-node'
+
+/** `user.email` a node commits under until a deployment names its robot. */
+export const DEFAULT_GIT_USER_EMAIL = 'mps-node@localhost'
+
 /** Agent version reported before the deployment states the built CLI version. */
 export const UNKNOWN_AGENT_VERSION = 'unknown'
 
@@ -64,6 +70,10 @@ export interface Config {
   workspaceRoot?: string
   /** Directory the node keeps its coding workspaces under; defaults to `coding` inside the workspace root. */
   codingRoot?: string
+  /** `user.name` the node commits under; the host's global git configuration is never touched. */
+  gitUserName?: string
+  /** `user.email` the node commits under. */
+  gitUserEmail?: string
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   /** Heartbeat period in seconds. */
@@ -100,6 +110,8 @@ export const Config: z<Config> = z.object({
   secretEnv: z.string().default(DEFAULT_SECRET_ENV),
   workspaceRoot: z.string().default(''),
   codingRoot: z.string().default(''),
+  gitUserName: z.string().default(DEFAULT_GIT_USER_NAME),
+  gitUserEmail: z.string().default(DEFAULT_GIT_USER_EMAIL),
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
@@ -127,6 +139,10 @@ export interface ExecutorSettings {
   workspaceRoot: string
   /** Directory the node keeps its coding workspaces under. */
   codingRoot: string
+  /** `user.name` injected into every commit the node makes. */
+  gitUserName: string
+  /** `user.email` injected into every commit the node makes. */
+  gitUserEmail: string
   /** Concurrent task capacity. */
   slotsTotal: number
   /** Heartbeat period in seconds. */
@@ -178,6 +194,8 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     codingRoot: config.codingRoot === undefined || config.codingRoot.trim() === ''
       ? join(workspaceRoot, 'coding')
       : config.codingRoot.trim(),
+    gitUserName: config.gitUserName ?? DEFAULT_GIT_USER_NAME,
+    gitUserEmail: config.gitUserEmail ?? DEFAULT_GIT_USER_EMAIL,
     slotsTotal: config.slotsTotal ?? 1,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,

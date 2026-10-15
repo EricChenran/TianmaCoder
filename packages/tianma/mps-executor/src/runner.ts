@@ -57,6 +57,16 @@ export interface TaskWorkspaceAllocator {
   prepare(assignment: ExecTaskAssignment): Promise<TaskWorkspace | undefined>
 }
 
+/** What an attempt handed back through {@link TaskRunContext.publish}. */
+export interface PublishedChanges {
+  /** Paths the attempt changed, relative to the workspace. */
+  changed_files: string[]
+  /** Commit the work branch now points at. */
+  head_commit: string
+  /** Whether the work branch was pushed. */
+  pushed: boolean
+}
+
 /** What a runner is given for one attempt. */
 export interface TaskRunContext {
   /** The attempt's assignment, including the payload the platform sent. */
@@ -71,6 +81,13 @@ export interface TaskRunContext {
    * no repository. The runner works on this branch and pushes it.
    */
   checkout: TaskCheckout | undefined
+  /**
+   * Hand this attempt's work back: the node commits the changes under its robot
+   * identity and pushes the work branch, after checking that every change stays
+   * inside the workspace and carries no credential.
+   * @returns the changed paths, the commit, and whether the branch was pushed.
+   */
+  publish(): Promise<PublishedChanges>
   /**
    * Cancellation for this attempt. It is aborted when the platform withdraws the
    * task, when an abort command arrives, when the runtime ceiling passes, or when

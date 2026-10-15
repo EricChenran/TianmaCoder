@@ -29,6 +29,7 @@ import {
   retryAfterDelayMs,
   strongerOutcome,
   taskAttemptDelayMs,
+  taskPolicy,
   taskRepository,
   taskRuntimeLimitMs,
   taskWorkspaceId,
@@ -673,5 +674,51 @@ describe('task vocabulary', () => {
     expect(taskRepository({ workspace: { repo: 'https://example.invalid/r.git' } })).toBeUndefined()
     expect(taskRepository({ workspace: {} })).toBeUndefined()
     expect(taskRepository({})).toBeUndefined()
+  })
+
+  it('reads the constraints and delivery promises a payload states', () => {
+    const policy = taskPolicy({
+      summary: '增加批量下载',
+      workspace: { access_mode: 'read_write' },
+      constraints: {
+        must_stay_in_workspace: true,
+        forbidden_paths: ['src/secrets', 7],
+        branch_pattern: '^feature/.+',
+      },
+      deliverables: { push_required: true },
+    })
+
+    expect(policy).toEqual({
+      access_mode: 'read_write',
+      must_stay_in_workspace: true,
+      forbidden_paths: ['src/secrets'],
+      branch_pattern: '^feature/.+',
+      push_required: true,
+      summary: '增加批量下载',
+    })
+  })
+
+  it('states nothing a payload does not state', () => {
+    expect(taskPolicy({})).toEqual({
+      access_mode: undefined,
+      must_stay_in_workspace: false,
+      forbidden_paths: undefined,
+      branch_pattern: undefined,
+      push_required: undefined,
+      summary: undefined,
+    })
+    expect(taskPolicy({
+      workspace: { access_mode: 'read_only' },
+      constraints: { forbidden_paths: 'src/secrets', branch_pattern: '' },
+      deliverables: 'none',
+    })).toEqual({
+      access_mode: 'read_only',
+      must_stay_in_workspace: false,
+      forbidden_paths: undefined,
+      branch_pattern: undefined,
+      push_required: undefined,
+      summary: undefined,
+    })
+    expect(taskPolicy({ workspace: { access_mode: 'other_mode' } }).access_mode).toBeUndefined()
   })
 })

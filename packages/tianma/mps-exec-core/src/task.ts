@@ -140,3 +140,65 @@ export function taskRepository(payload: Record<string, unknown>): TaskRepository
     work_branch: field('work_branch'),
   }
 }
+
+/** How a node may hand its work back: pushing itself, or producing a bundle. */
+export type ExecAccessMode = 'read_write' | 'read_only'
+
+/** What a task's payload asks of the node before it hands work back. */
+export interface TaskPolicy {
+  /** Whether the node pushes the work branch itself or produces a bundle. */
+  access_mode?: ExecAccessMode | undefined
+  /** Whether the node must check that every change stays inside its workspace. */
+  must_stay_in_workspace?: boolean | undefined
+  /** Path patterns the task forbids. */
+  forbidden_paths?: string[] | undefined
+  /** Pattern the work branch name must match. */
+  branch_pattern?: string | undefined
+  /** Whether the platform requires the work branch pushed. */
+  push_required?: boolean | undefined
+  /** The task's own summary, which names the commit. */
+  summary?: string | undefined
+}
+
+/**
+ * Read the constraints and delivery promises a payload states, which the node
+ * applies itself before it hands work back.
+ * @param payload - the payload a claim returned.
+ * @returns the fields the payload states.
+ */
+export function taskPolicy(payload: Record<string, unknown>): TaskPolicy {
+  const constraints = payload['constraints']
+  const deliverables = payload['deliverables']
+  const workspace = payload['workspace']
+  const mode = isRecord(workspace) ? workspace['access_mode'] : undefined
+  return {
+    access_mode: mode === 'read_write' || mode === 'read_only' ? mode : undefined,
+    must_stay_in_workspace: payloadField(payload, 'constraints', 'must_stay_in_workspace') === true,
+    forbidden_paths: isRecord(constraints) ? stringList(constraints['forbidden_paths']) : undefined,
+    branch_pattern: stringField(constraints, 'branch_pattern'),
+    push_required: isRecord(deliverables) ? deliverables['push_required'] === true : undefined,
+    summary: stringField(payload, 'summary'),
+  }
+}
+
+/**
+ * Read one non-empty string field of a record.
+ * @param source - the record, or undefined.
+ * @param name - the field name.
+ * @returns the value, or undefined when the field is missing or not a non-empty string.
+ */
+function stringField(source: unknown, name: string): string | undefined {
+  if (!isRecord(source)) return undefined
+  const value = source[name]
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/**
+ * Read a list of non-empty strings.
+ * @param value - the field's value.
+ * @returns the strings, or undefined when the field is not a list.
+ */
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+}

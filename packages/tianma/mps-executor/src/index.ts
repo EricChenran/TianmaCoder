@@ -18,6 +18,8 @@ import type { TaskRunner } from './runner.ts'
 export {
   Config,
   DEFAULT_CLAIM_LONG_POLL_SECONDS,
+  DEFAULT_GIT_USER_EMAIL,
+  DEFAULT_GIT_USER_NAME,
   DEFAULT_HEARTBEAT_SECONDS,
   DEFAULT_LEASE_RENEW_SECONDS,
   DEFAULT_MAX_ARTIFACT_BYTES,
@@ -35,11 +37,36 @@ export type { ExecutorSettings } from './config.ts'
 export { LOG_BATCH_MAX_LINES, LOG_LINE_MAX_BYTES, TaskOrchestrator, boundLogLine } from './orchestrator.ts'
 export type { TaskOrchestratorHooks, TaskOrchestratorOptions, TaskPlatformClient } from './orchestrator.ts'
 export { toError } from './report.ts'
-export type { TaskCheckout, TaskRunContext, TaskRunResult, TaskRunner, TaskRunnerSource, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
+export type {
+  PublishedChanges,
+  TaskCheckout,
+  TaskRunContext,
+  TaskRunResult,
+  TaskRunner,
+  TaskRunnerSource,
+  TaskWorkspace,
+  TaskWorkspaceAllocator,
+} from './runner.ts'
 export { GitError, cliGit } from './git.ts'
 export type { GitOutput, GitRunner } from './git.ts'
 export { checkoutAllocator, prepareCheckout } from './checkout.ts'
 export type { CheckoutAllocatorOptions, PrepareCheckoutOptions } from './checkout.ts'
+export {
+  PUBLISH_SCAN_MAX_BYTES,
+  assertBranchAllowed,
+  assertChangesInside,
+  changedFiles,
+  checkoutPublisher,
+  filesCarryingSecrets,
+  publishChanges,
+} from './publish.ts'
+export type {
+  CheckoutPublisherOptions,
+  GitIdentity,
+  PublishChangesOptions,
+  TaskPublisher,
+  TaskPublishRequest,
+} from './publish.ts'
 export { WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, WorkspaceStore } from './workspace.ts'
 export type { WorkspaceRecord, WorkspaceStoreOptions } from './workspace.ts'
 // The runtime's transport option is an exec-core type, so a caller that injects a

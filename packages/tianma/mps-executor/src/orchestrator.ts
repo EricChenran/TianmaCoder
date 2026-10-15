@@ -36,7 +36,9 @@ import type {
 import type { ExecutorSettings } from './config.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
-import type { TaskRunResult, TaskRunner, TaskWorkspaceAllocator } from './runner.ts'
+import type { TaskRunResult, TaskRunner, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
+import type { PublishedChanges } from './runner.ts'
+import type { TaskPublisher } from './publish.ts'
 
 /** The protocol calls the task lifecycle makes. */
 export interface TaskPlatformClient {
@@ -143,6 +145,11 @@ export interface TaskOrchestratorOptions {
    * its runner decides and the context names no directory.
    */
   workspaces?: TaskWorkspaceAllocator | undefined
+  /**
+   * Hands one attempt's work back. Without one, a runner's `publish()` reports that
+   * the attempt has nothing to publish.
+   */
+  publisher?: TaskPublisher | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -161,6 +168,8 @@ interface RunningAttempt {
   aborted: boolean
   /** The runtime ceiling passed, so the outcome carries a failure. */
   timedOut: boolean
+  /** What the attempt published through the node, once it handed its work back. */
+  published?: PublishedChanges | undefined
   renewTimer?: NodeJS.Timeout | undefined
   limitTimer?: NodeJS.Timeout | undefined
 }
@@ -184,6 +193,7 @@ export class TaskOrchestrator {
   readonly #settings: ExecutorSettings
   readonly #runner: TaskRunner
   readonly #workspaces: TaskWorkspaceAllocator | undefined
+  readonly #publisher: TaskPublisher | undefined
   readonly #hooks: TaskOrchestratorHooks
   readonly #report: (report: ExecutorReport) => void
   readonly #now: () => Date
@@ -201,6 +211,7 @@ export class TaskOrchestrator {
     this.#settings = options.settings
     this.#runner = options.runner
     this.#workspaces = options.workspaces
+    this.#publisher = options.publisher
     this.#hooks = options.hooks
     this.#report = options.report ?? (() => {})
     this.#now = options.now ?? (() => new Date())
@@ -400,6 +411,7 @@ export class TaskOrchestrator {
             task: running.assignment,
             workspaceDirectory: workspace?.directory,
             checkout: workspace?.checkout,
+            publish: async () => await this.#publish(running, workspace),
             signal: running.controller.signal,
             reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
             reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
@@ -417,6 +429,28 @@ export class TaskOrchestrator {
     } finally {
       this.#settle(running)
     }
+  }
+
+  /**
+   * Hand this attempt's work back, remembering what it published so the result's
+   * evidence reports the node's own facts.
+   * @param running - the attempt.
+   * @param workspace - the workspace the attempt was prepared with.
+   * @returns the changed paths, the commit, and whether the branch was pushed.
+   */
+  async #publish(running: RunningAttempt, workspace: TaskWorkspace | undefined): Promise<PublishedChanges> {
+    const checkout = workspace?.checkout
+    if (this.#publisher === undefined || workspace === undefined || checkout === undefined) {
+      throw new Error('this attempt has no prepared checkout to publish')
+    }
+    const published = await this.#publisher.publish({
+      assignment: running.assignment,
+      directory: workspace.directory,
+      checkout,
+      signal: running.controller.signal,
+    })
+    running.published = published
+    return published
   }
 
   async #progress(running: RunningAttempt, progress: TaskProgress): Promise<void> {
@@ -484,7 +518,9 @@ export class TaskOrchestrator {
       started_at: formatRfc3339(startedAt),
       finished_at: formatRfc3339(this.#now()),
       summary: result.summary,
-      evidence: result.evidence ?? this.#defaultEvidence(running),
+      evidence: running.published === undefined
+        ? (result.evidence ?? this.#defaultEvidence(running))
+        : this.#defaultEvidence(running),
       ...(result.notes === undefined ? {} : { notes: result.notes }),
     }
     for (let attempt = 1; attempt <= RESULT_SUBMIT_ATTEMPTS; attempt += 1) {
@@ -520,12 +556,13 @@ export class TaskOrchestrator {
    */
   #defaultEvidence(running: RunningAttempt): ExecResultEvidence {
     const repo = taskRepository(running.assignment.payload)
+    const published = running.published
     return {
-      changed_files: [],
+      changed_files: published?.changed_files ?? [],
       branch: repo?.work_branch ?? '',
       base_commit: repo?.base_commit ?? '',
-      head_commit: repo?.base_commit ?? '',
-      pushed: false,
+      head_commit: published?.head_commit ?? repo?.base_commit ?? '',
+      pushed: published?.pushed ?? false,
     }
   }
 

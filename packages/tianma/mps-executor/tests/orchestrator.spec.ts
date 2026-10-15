@@ -31,6 +31,7 @@ import type {
   TaskCheckout,
   TaskOrchestratorHooks,
   TaskPlatformClient,
+  TaskPublishRequest,
   TaskRunContext,
   TaskRunResult,
   TaskRunner,
@@ -798,6 +799,97 @@ describe('task lifecycle', () => {
 
     expect(seen).toEqual([undefined])
     expect(platform.results[0]?.evidence?.branch).toBe('')
+  })
+
+  it('publishes through the node and reports what it published', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      payload: {
+        limits: { max_runtime_seconds: 60 },
+        workspace: { workspace_id: 'ws_1', repo: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' } },
+      },
+    }))
+    const requests: TaskPublishRequest[] = []
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        const published = await context.publish()
+        return { outcome: 'success', summary: `pushed ${String(published.pushed)}` }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      publisher: {
+        publish: async (request) => {
+          requests.push(request)
+          return { changed_files: ['src/a.ts'], head_commit: 'b2c3d4e', pushed: true }
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ directory: join('coding', 'ws_1'), checkout: { work_branch: 'feature/tsk_1' } })
+    expect(requests[0]?.assignment.task_id).toBe('tsk_1')
+    expect(platform.results[0]?.summary).toBe('pushed true')
+    expect(platform.results[0]?.evidence).toEqual({
+      changed_files: ['src/a.ts'],
+      branch: 'feature/tsk_1',
+      base_commit: 'a1b2c3d',
+      head_commit: 'b2c3d4e',
+      pushed: true,
+    })
+  })
+
+  it('reports an attempt that has nothing to publish', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.publish()
+        return { outcome: 'success', summary: 'never reached' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary: 'the attempt threw: this attempt has no prepared checkout to publish',
+    })
+  })
+
+  it('keeps the evidence a runner reports when nothing was published', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({
+        outcome: 'success',
+        summary: 'done',
+        evidence: {
+          changed_files: ['artifacts/report.md'],
+          branch: 'feature/tsk_1',
+          base_commit: 'a1b2c3d',
+          head_commit: 'a1b2c3d',
+          pushed: false,
+        },
+      })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.evidence?.changed_files).toEqual(['artifacts/report.md'])
   })
 
   it('keeps two attempts running at once within the slot budget', async () => {
