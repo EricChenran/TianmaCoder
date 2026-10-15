@@ -132,6 +132,8 @@ class PlatformStub {
   #materials = new Map<string, { bytes: Buffer; digest: string }>()
   /** Whether this platform still lets a node continue the task it leases. */
   leaseContinues = true
+  /** Pieces this platform says it already holds, which is what a resumed upload is. */
+  uploadedChunks: number[] = []
 
   constructor(task: Record<string, unknown>) {
     this.#tasks = [task]
@@ -266,7 +268,7 @@ class PlatformStub {
     }
     // The chunked upload the protocol requires above its single-request ceiling.
     if (path.endsWith('/artifacts/init')) {
-      return this.#envelope(response, { upload_id: 'up_e2e', uploaded_chunks: [] })
+      return this.#envelope(response, { upload_id: 'up_e2e', uploaded_chunks: this.uploadedChunks })
     }
     if (path.endsWith('/chunk')) return this.#envelope(response, null)
     if (path.endsWith('/complete')) return this.#envelope(response, null)
@@ -949,6 +951,54 @@ describe('the node end to end', () => {
     )
     expect(platform.at('/exec/v1/tasks/tsk_big/artifacts/up_e2e/complete')).toHaveLength(1)
     const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_big/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(String((result['evidence'] as Record<string, unknown>)['report_artifact_id'])).toMatch(/^art-/u)
+  }, 180_000)
+
+  it('sends only the pieces a resumed upload is missing', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_resume_upload',
+      work_item_id: 'wi_resume_upload',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '大产物传到一半断过' },
+        workspace: {
+          workspace_id: 'ws_resume_upload',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_resume_upload' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true, require_report: true, report_filename: 'BIG.md' },
+      },
+    })
+    // The platform says it already holds the first five pieces of the same upload.
+    platform.uploadedChunks = [0, 1, 2, 3, 4]
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs, agentArgs: ['bigreport'] })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_resume_upload/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    // Only what is missing goes: asking for the pieces it has would be sending a third of a
+    // gigabyte twice, and skipping a missing one would corrupt the artifact.
+    const chunks = platform.at('/exec/v1/tasks/tsk_resume_upload/artifacts/up_e2e/chunk')
+    expect(chunks.map(request => String(request.body).split(' ')[1])).toEqual(
+      ['5', '6', '7', '8', '9', '10', '11', '12'],
+    )
+    expect(platform.at('/exec/v1/tasks/tsk_resume_upload/artifacts/up_e2e/complete')).toHaveLength(1)
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_resume_upload/result')[0]?.body ?? '{}') as Record<string, unknown>
     expect(String((result['evidence'] as Record<string, unknown>)['report_artifact_id'])).toMatch(/^art-/u)
   }, 180_000)
 
