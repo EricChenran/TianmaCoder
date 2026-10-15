@@ -27,7 +27,11 @@ import {
   requestRetryDelayMs,
   resolvePlatformEndpoint,
   retryAfterDelayMs,
+  strongerOutcome,
   taskAttemptDelayMs,
+  taskRepository,
+  taskRuntimeLimitMs,
+  taskWorkspaceId,
   ulid,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'
@@ -616,5 +620,58 @@ describe('protocol client', () => {
     const { client: instance, calls } = client([ok(null)], '')
     await instance.drain('maintenance')
     expect(calls[0]?.request.headers.authorization).toBeUndefined()
+  })
+})
+
+describe('task vocabulary', () => {
+  const payload = {
+    limits: { max_runtime_seconds: 10_800 },
+    workspace: {
+      workspace_id: 'ws_1',
+      repo: { url: 'https://example.invalid/r.git', base_branch: 'main', base_commit: 'a1b2c3d', work_branch: 'feature/x' },
+    },
+  }
+
+  it('resolves two outcomes by the protocol precedence', () => {
+    expect(strongerOutcome('success', 'failed')).toBe('failed')
+    expect(strongerOutcome('failed', 'success')).toBe('failed')
+    expect(strongerOutcome('failed', 'blocked')).toBe('blocked')
+    expect(strongerOutcome('blocked', 'blocked')).toBe('blocked')
+    expect(strongerOutcome('blocked', 'cancelled')).toBe('cancelled')
+    expect(strongerOutcome('cancelled', 'success')).toBe('cancelled')
+    expect(strongerOutcome('success', 'success')).toBe('success')
+  })
+
+  it('reads the runtime ceiling a payload states', () => {
+    expect(taskRuntimeLimitMs(payload)).toBe(10_800_000)
+    expect(taskRuntimeLimitMs({})).toBeUndefined()
+    expect(taskRuntimeLimitMs({ limits: { max_runtime_seconds: 0 } })).toBeUndefined()
+    expect(taskRuntimeLimitMs({ limits: { max_runtime_seconds: Number.NaN } })).toBeUndefined()
+    expect(taskRuntimeLimitMs({ limits: 'ten hours' })).toBeUndefined()
+  })
+
+  it('reads the workspace id a payload states', () => {
+    expect(taskWorkspaceId(payload)).toBe('ws_1')
+    expect(taskWorkspaceId({ workspace: {} })).toBeUndefined()
+    expect(taskWorkspaceId({ workspace: { workspace_id: '' } })).toBeUndefined()
+    expect(taskWorkspaceId({})).toBeUndefined()
+  })
+
+  it('reads the repository a payload states', () => {
+    expect(taskRepository(payload)).toEqual({
+      url: 'https://example.invalid/r.git',
+      base_branch: 'main',
+      base_commit: 'a1b2c3d',
+      work_branch: 'feature/x',
+    })
+    expect(taskRepository({ workspace: { repo: { url: '' } } })).toEqual({
+      url: undefined,
+      base_branch: undefined,
+      base_commit: undefined,
+      work_branch: undefined,
+    })
+    expect(taskRepository({ workspace: { repo: 'https://example.invalid/r.git' } })).toBeUndefined()
+    expect(taskRepository({ workspace: {} })).toBeUndefined()
+    expect(taskRepository({})).toBeUndefined()
   })
 })

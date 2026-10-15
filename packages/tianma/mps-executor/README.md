@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Run one Tianma MPS executor node inside a dsh profile. The plugin reads the management platform's communication address — the host or IP and the port — from its profile row, reads the pre-shared secret from an environment variable, exchanges that secret for a bearer token, registers this machine's identity, capacity, and capabilities, and keeps the heartbeat that carries running tasks, slot capacity, and resource readings up to the platform while bringing commands back down. The node is the profile's application, so the process is `dsh --profile <node profile>` rather than a second binary beside the harness.
+Run one Tianma MPS executor node inside a dsh profile. The plugin reads the platform's communication address (host and port) from its profile row, reads the pre-shared secret from an environment variable, exchanges it for a bearer token, and registers this machine's identity, capacity, and capabilities. It keeps the heartbeat that carries running tasks and resource readings up while bringing commands down, and, with a runner composed, claims work within its slots, holds each lease, applies the abort and runtime-ceiling rules, and submits the outcome the attempt reached.
 
 ## Table of Contents
 
@@ -55,6 +55,8 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `slotsTotal` | `1` | Concurrent tasks the node accepts |
 | `heartbeatSeconds` | `10` | Heartbeat period, until the platform assigns another |
 | `claimLongPollSeconds` | `25` | Claim long-poll budget |
+| `leaseRenewSeconds` | `30` | Lease renewal period, until a claim states the platform's own |
+| `taskRuntimeSeconds` | `10800` | Runtime ceiling for one attempt, until the task payload states its own |
 | `requestTimeoutMs` | `15000` | Budget for one ordinary request |
 | `lanes` / `tools` | empty | Capability promise the node registers |
 | `agentVersion` | `unknown` | Agent version reported |
@@ -69,20 +71,27 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 
 `resolveExecutorSettings` turns the row configuration into one resolved set: it validates the address through `@tianma/dsh-mps-exec-core`, falls back to this machine's host name and the process working directory, and builds the capability promise. `readNodeSecret` reads the environment variable and fails loudly when it is unset or blank, so a node never registers with an empty credential.
 
-`MpsExecutorRuntime` owns the platform session: `bootstrap()` exchanges the secret for a token and registers, adopting the heartbeat period the platform returns rather than keeping a hardcoded one; `heartbeatOnce()` reports running tasks, slots, resources, and node time, which renews the leases of every task it names; `start()` and `stop()` own the timer, and the timer holds a reference so the hosting process stays alive while the node is online. A heartbeat failure applies the recovery its code demands: `halt-node` stops the node and its timer, `reauthenticate` clears the token and re-runs the handshake, and anything else waits for the next period with a warning.
+`MpsExecutorRuntime` owns the platform session: `bootstrap()` exchanges the secret for a token and registers, adopting the heartbeat period the platform returns rather than keeping a hardcoded one; `heartbeatOnce()` reports running tasks, slots, resources, and node time, which renews the leases of every task it names; `start()` and `stop()` own the timer, and the timer holds a reference so the hosting process stays alive while the node is online. A heartbeat failure applies the recovery its code demands: `halt-node` stops the node and its timer, `reauthenticate` clears the token and re-runs the handshake, and anything else waits for the next period with a warning. The commands a heartbeat brings down are applied here: `abort` cancels the named attempt, and a command this node does not implement is reported rather than dropped.
+
+`TaskOrchestrator` owns the task lifecycle. It claims while a slot is free, reports each claimed task to the platform's running-task list, hands the attempt to the runner, and submits the outcome the attempt reached. The rules the platform cannot apply for the node live here: the renewal period and runtime ceiling a claim or payload states, the stop when a renewal answers `should_continue: false` (the attempt is discarded and no result is submitted, because that result would describe work the platform already reassigned), the `cancelled` outcome an abort forces, redaction and byte-bounding of submitted log lines, and result submission that retries while the platform's answer allows it. A node without a composed runner holds its session and claims nothing; the runner is looked up as `ctx.mpsTaskRunner` when claiming starts, so a runner mounted by any other row is found. The `TaskRunner` seam is the only way work runs: a runner receives the assignment, a cancellation signal, and reporting channels, and never talks to the platform or decides its own slots.
 
 ### Source map
 
 | File | Role |
 |---|---|
 | [`src/config.ts`](src/config.ts) | The configuration schema, the resolved settings, and the secret read |
-| [`src/runtime.ts`](src/runtime.ts) | The platform session: handshake, heartbeat, timer, failure recovery |
-| [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, stop effect |
-| [`tests/mps-executor.spec.ts`](tests/mps-executor.spec.ts) | Address configuration, settings resolution, secret reading, handshake, heartbeat, recovery, and plugin mounting |
+| [`src/runtime.ts`](src/runtime.ts) | The platform session: handshake, heartbeat, commands, timer, failure recovery |
+| [`src/orchestrator.ts`](src/orchestrator.ts) | The task lifecycle: claim, lease, runtime ceiling, abort, logs, and result submission |
+| [`src/runner.ts`](src/runner.ts) | The `TaskRunner` seam and the context and outcome an attempt exchanges |
+| [`src/report.ts`](src/report.ts) | The operator event and the error normalization every failure path uses |
+| [`src/index.ts`](src/index.ts) | The Cordis plugin: report sink, auto-start, service publication, runner lookup, stop effect |
+| [`src/startup.ts`](src/startup.ts) | The node profile's command line and the environment it documents |
+| [`tests/mps-executor.spec.ts`](tests/mps-executor.spec.ts) | Address configuration, settings resolution, secret reading, handshake, heartbeat, commands, recovery, claiming through a composed runner, and plugin mounting |
+| [`tests/orchestrator.spec.ts`](tests/orchestrator.spec.ts) | Claiming, leases, the runtime ceiling, aborts, log bounding, and result submission |
 
 ### Invariant ownership
 
-The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site.
+The runtime holds the node id once and the protocol client reports it on every request, so a caller cannot submit a task-scoped call under another node's identity. The heartbeat period comes from either configuration or the platform's registration answer, never from a constant at the send site. Which tasks run and how far they got has one home, the runtime's running-task list, and the orchestrator only reports transitions into it.
 
 </details>
 
@@ -96,7 +105,7 @@ The runtime holds the node id once and the protocol client reports it on every r
 
 ## Model Experience
 
-None, as the node runtime transports exec/v1 protocol traffic for the management platform and registers no prompt, tool, or Session event of its own.
+None, as the node transports exec/v1 protocol traffic and hands each claimed attempt to a runner, so whatever a runner shows a model belongs to that runner's package.
 
 #### KV Cache effect
 
@@ -108,7 +117,9 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 
 This limit defines the current package boundary. It is a current constraint, not a task backlog.
 
-- **Platform session only** — the plugin authenticates, registers, and heartbeats; it does not claim tasks, prepare coding workspaces, run the agent, or submit results, and the capability lists it registers are configuration rather than probe results.
+- **No runner is shipped** — the node claims and runs work only when a runner is composed; without one it holds its session, reports that, and claims nothing, because there is no way to do the work.
+- **No coding workspace yet** — an attempt runs wherever its runner puts it; preparing and keeping a persistent per-workspace checkout, and reporting that workspace's session, are not implemented.
+- **Resource readings are supplied** — a deployment reports them through `setResources`; the node probes CPU, memory, and disk itself not at all.
 
 <a id="dev-note"></a>
 ### Dev Note

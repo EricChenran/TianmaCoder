@@ -2,8 +2,9 @@
  * The node runtime: it authenticates with the pre-shared secret, registers this
  * node's identity and capacity, and keeps the heartbeat that carries running
  * tasks, slot capacity, and resource readings up to the management platform
- * while bringing commands back down. It owns the platform session's state and the
- * heartbeat timer; task execution is not part of it.
+ * while bringing commands back down. It owns the platform session's state, the
+ * heartbeat timer, and the running-task list a heartbeat reports; when a runner is
+ * composed it also owns the task orchestrator that fills that list.
  * @module @tianma/dsh-mps-executor/runtime
  */
 
@@ -14,6 +15,7 @@ import {
   formatRfc3339,
 } from '@tianma/dsh-mps-exec-core'
 import type {
+  ExecCommand,
   ExecHeartbeatResult,
   ExecHttpTransport,
   ExecRegisterResult,
@@ -22,6 +24,12 @@ import type {
   ExecSlots,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecutorSettings } from './config.ts'
+import { TaskOrchestrator } from './orchestrator.ts'
+import { toError } from './report.ts'
+import type { ExecutorReport } from './report.ts'
+import type { TaskRunner, TaskRunnerSource } from './runner.ts'
+
+export type { ExecutorReport } from './report.ts'
 
 /** Where this node stands in its relationship with the management platform. */
 export type NodeState =
@@ -34,14 +42,6 @@ export type NodeState =
   /** Stopped by a failure only operators can clear. */
   | 'halted'
 
-/** One operator-visible event the runtime reports. */
-export interface ExecutorReport {
-  /** Severity. */
-  level: 'info' | 'warn' | 'error'
-  /** Message text. */
-  message: string
-}
-
 /** Options for {@link MpsExecutorRuntime}. */
 export interface ExecutorRuntimeOptions {
   /** The node's resolved settings. */
@@ -53,17 +53,18 @@ export interface ExecutorRuntimeOptions {
    * @returns the secret.
    */
   secret: () => string
+  /**
+   * Resolves the runner this node executes with. Read when the node starts
+   * claiming; without one the node keeps its platform session and claims nothing,
+   * because there is no way to do the work.
+   */
+  runner?: TaskRunnerSource | undefined
   /** Transport override; defaults to `fetch`. */
   transport?: ExecHttpTransport | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
   /** Operator-visible event sink; defaults to discarding events. */
   report?: ((report: ExecutorReport) => void) | undefined
-}
-
-/** Coerce an unknown rejection into an error. */
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
 }
 
 /**
@@ -84,11 +85,14 @@ export class MpsExecutorRuntime {
   #heartbeatSeconds: number
   #timer: ReturnType<typeof setInterval> | undefined
   #runningTasks: ExecRunningTask[] = []
+  readonly #taskProgress = new Map<string, { progress: number; stage: string }>()
   #resources: ExecResources = { cpu_percent: 0, mem_percent: 0, disk_free_gb: 0 }
   #lastError: Error | undefined
+  #tasks: TaskOrchestrator | undefined
+  #runnerSource: TaskRunnerSource | undefined
 
   /**
-   * @param options - the resolved settings, the secret, and the optional transport, clock, and report sink.
+   * @param options - the resolved settings, the secret, and the optional runner, transport, clock, and report sink.
    */
   constructor(options: ExecutorRuntimeOptions) {
     this.settings = options.settings
@@ -102,6 +106,34 @@ export class MpsExecutorRuntime {
       transport: options.transport,
       token: () => this.#token,
       requestTimeoutMs: options.settings.requestTimeoutMs,
+    })
+    if (options.runner !== undefined) {
+      this.#runnerSource = options.runner
+    }
+  }
+
+  /**
+   * Build the task orchestrator over one runner, wiring its transitions into the
+   * running-task list a heartbeat reports.
+   * @param runner - the runner that executes claimed attempts.
+   * @returns the orchestrator.
+   */
+  #createOrchestrator(runner: TaskRunner): TaskOrchestrator {
+    return new TaskOrchestrator({
+      client: this.client,
+      settings: this.settings,
+      runner,
+      report: this.#report,
+      now: this.#now,
+      hooks: {
+        taskStarted: (task) => { this.#runningTasks = [...this.#runningTasks, task] },
+        taskProgress: (taskId, progress, stage) => { this.#taskProgress.set(taskId, { progress, stage }) },
+        taskFinished: (taskId) => {
+          this.#runningTasks = this.#runningTasks.filter(task => task.task_id !== taskId)
+          this.#taskProgress.delete(taskId)
+        },
+        availableSlots: () => this.availableSlots(),
+      },
     })
   }
 
@@ -120,14 +152,19 @@ export class MpsExecutorRuntime {
     return this.#lastError
   }
 
-  /** The tasks this node reports as running. */
+  /** The tasks this node reports as running, each carrying its latest progress. */
   get runningTasks(): readonly ExecRunningTask[] {
-    return this.#runningTasks
+    return this.#runningTasks.map(task => ({ ...task, ...this.#taskProgress.get(task.task_id) }))
   }
 
   /** The heartbeat period in force, as the platform most recently assigned it. */
   get heartbeatSeconds(): number {
     return this.#heartbeatSeconds
+  }
+
+  /** The task orchestrator, present only when a runner is composed. */
+  get tasks(): TaskOrchestrator | undefined {
+    return this.#tasks
   }
 
   /**
@@ -223,26 +260,69 @@ export class MpsExecutorRuntime {
     if (this.#token === undefined) {
       throw new Error('executor runtime must authenticate before it can heartbeat')
     }
-    return await this.client.heartbeat({
+    const heartbeat = await this.client.heartbeat({
       running_tasks: [...this.#runningTasks],
       slots: this.slots(),
       resources: this.#resources,
       node_time: formatRfc3339(this.#now()),
       agent_version: this.settings.agentVersion,
     }, signal)
+    this.#applyCommands(heartbeat.commands)
+    return heartbeat
   }
 
   /**
-   * Start the heartbeat timer. The timer holds a reference, so the hosting process
-   * stays alive while the node is online.
+   * Apply this period's commands. Only the commands this node implements are acted
+   * on; the rest are reported, so a platform instruction never disappears silently.
+   * @param commands - the commands the heartbeat brought down.
    */
-  start(): void {
-    if (this.#timer !== undefined) return
-    this.#timer = setInterval(() => { this.#tick() }, this.#heartbeatSeconds * 1000)
+  #applyCommands(commands: readonly ExecCommand[]): void {
+    for (const command of commands) {
+      if (command.command === 'abort' && command.task_id !== undefined) {
+        if (this.#tasks?.abort(command.task_id, command.reason) !== true) {
+          this.#report({
+            level: 'warn',
+            message: `the platform aborted task ${command.task_id}, which is not running here`,
+          })
+        }
+        continue
+      }
+      this.#report({
+        level: 'warn',
+        message: `ignoring the ${command.command} command: this node does not implement it yet`,
+      })
+    }
   }
 
-  /** Stop the heartbeat timer. */
+  /**
+   * Start the heartbeat timer and, when a runner is composed, start claiming work.
+   * The timer holds a reference, so the hosting process stays alive while the node
+   * is online.
+   */
+  start(): void {
+    if (this.#timer === undefined) {
+      this.#timer = setInterval(() => { this.#tick() }, this.#heartbeatSeconds * 1000)
+    }
+    if (this.#tasks === undefined && this.#runnerSource !== undefined) {
+      const runner = this.#runnerSource()
+      if (runner === undefined) {
+        this.#report({
+          level: 'warn',
+          message: `node ${this.settings.nodeId} has no task runner composed; it holds its platform session without claiming work`,
+        })
+      } else {
+        this.#tasks = this.#createOrchestrator(runner)
+      }
+    }
+    this.#tasks?.start()
+  }
+
+  /**
+   * Stop the heartbeat timer and cancel the running attempts. Each attempt still
+   * submits its outcome; {@link TaskOrchestrator.drain} waits for that.
+   */
   stop(): void {
+    this.#tasks?.stop()
     if (this.#timer === undefined) return
     clearInterval(this.#timer)
     this.#timer = undefined

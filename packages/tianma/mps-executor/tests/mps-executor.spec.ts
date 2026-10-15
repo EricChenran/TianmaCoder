@@ -19,7 +19,7 @@ import {
   registerStopEffect,
   resolveExecutorSettings,
 } from '@tianma/dsh-mps-executor'
-import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport, ExecutorReport } from '@tianma/dsh-mps-executor'
+import type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport, ExecutorReport, TaskRunContext, TaskRunResult } from '@tianma/dsh-mps-executor'
 import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
 
 /** One recorded call of the fake transport. */
@@ -548,5 +548,132 @@ describe('plugin wiring', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('task claiming through the runtime', () => {
+  /** One claim answer carrying a task the node can run. */
+  const CLAIMED = {
+    task: {
+      task_id: 'tsk_1',
+      work_item_id: 'wi_1',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2026-10-15T04:16:00.123+08:00',
+      lease_renew_seconds: 30,
+      payload: { limits: { max_runtime_seconds: 60 } },
+    },
+  }
+
+  it('claims through a composed runner and reports it to the platform', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(CLAIMED),
+      envelope(null),
+      envelope({ task_id: 'tsk_1', accepted: true, already_final: false, work_item_state: 'done', next: 'verify' }),
+    ])
+    const reports: ExecutorReport[] = []
+    let finish: (() => void) | undefined
+    const runner = {
+      async run(context: TaskRunContext): Promise<TaskRunResult> {
+        await context.reportProgress({ progress: 30, stage: 'coding', message: '3/10' })
+        await new Promise<void>((resolve) => { finish = resolve })
+        return { outcome: 'success', summary: 'done' }
+      },
+    }
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      runner: () => runner,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    node.start()
+    expect(node.tasks).toBeDefined()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(node.runningTasks).toHaveLength(1)
+    expect(node.slots()).toEqual({ total: 1, running: 1, available: 0 })
+
+    finish?.()
+    await node.tasks?.drain()
+    expect(node.runningTasks).toEqual([])
+    expect(node.availableSlots()).toBe(1)
+    expect(reports.some(report => report.level === 'error')).toBe(false)
+
+    const bodies = queue.calls.map(call => call.request.body ?? '')
+    expect(bodies.some(body => body.includes('"progress":30') && body.includes('"stage":"coding"'))).toBe(true)
+    expect(bodies.some(body => body.includes('"outcome":"success"'))).toBe(true)
+    node.stop()
+    expect(node.tasks?.claiming).toBe(false)
+  })
+
+  it('applies an abort command and reports commands it does not implement', async () => {
+    vi.useFakeTimers()
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(CLAIMED),
+      envelope({
+        ...HEARTBEAT,
+        commands: [
+          { command: 'abort', task_id: 'tsk_1', reason: '需求撤销' },
+          { command: 'abort', task_id: 'tsk_other' },
+          { command: 'release_workspace', workspace_id: 'ws_1' },
+        ],
+      }),
+      envelope(null),
+      envelope({ task_id: 'tsk_1', accepted: true, already_final: false, work_item_state: 'cancelled', next: 'none' }),
+    ])
+    const reports: ExecutorReport[] = []
+    const runner = {
+      async run(context: TaskRunContext): Promise<TaskRunResult> {
+        await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }) })
+        return { outcome: 'success', summary: 'kept going' }
+      },
+    }
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      runner: () => runner,
+      report: (report) => { reports.push(report) },
+    })
+
+    await node.bootstrap()
+    node.start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(node.runningTasks).toHaveLength(1)
+
+    await node.heartbeatOnce()
+    expect(reports.some(report => report.message.includes('aborted by the platform'))).toBe(true)
+    expect(reports.some(report => report.message.includes('is not running here'))).toBe(true)
+    expect(reports.some(report => report.message.includes('does not implement it yet'))).toBe(true)
+
+    await node.tasks?.drain()
+    expect(node.runningTasks).toEqual([])
+    node.stop()
+  })
+
+  it('holds its session when no runner is composed', () => {
+    const queue = queueTransport([])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      runner: () => undefined,
+      report: (report) => { reports.push(report) },
+    })
+
+    node.start()
+    expect(node.tasks).toBeUndefined()
+    expect(reports.some(report => report.message.includes('no task runner composed'))).toBe(true)
+    node.stop()
   })
 })

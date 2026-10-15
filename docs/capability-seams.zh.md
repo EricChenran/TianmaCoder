@@ -15,6 +15,7 @@ flowchart LR
   svc_tianmaTokenCalibration["ctx.tianmaTokenCalibration<br/>CJK-aware correction of the token-meter pressure measurement"]
   pkg_mps_executor["mps-executor"]
   svc_mpsExecutor["ctx.mpsExecutor<br/>Platform session of a Tianma MPS executor node"]
+  svc_mpsTaskRunner["ctx.mpsTaskRunner<br/>Execution seam of a Tianma MPS executor node"]
   pkg_experimental_client_ui_cot_translation["experimental-client-ui-cot-translation"]
   svc_cotTranslation["ctx.cotTranslation<br/>Reasoning translation Remote"]
   pkg_experimental_translator["experimental-translator"]
@@ -380,6 +381,7 @@ flowchart LR
   pkg_mcp_resources --> svc_mcpResources
   pkg_message_feedback --> svc_messageFeedback
   pkg_mps_executor --> svc_mpsExecutor
+  pkg_mps_executor --> svc_mpsTaskRunner
   pkg_oa_account --> svc_oaAccount
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
@@ -616,6 +618,7 @@ flowchart LR
 | `ctx.tianmaHookTrust` | `core` | `hooks-trust` | - | - | - | Ledger of hook command approvals: unchanged hashes pass, any change re-opens review, denials persist. Registered by the Tianma hooks-trust package. |
 | `ctx.tianmaTokenCalibration` | `core` | `token-meter-calibration` | - | - | - | Maintains the session density ratio and the rolling reported/estimated factor, corrects ctx.tokenMeter.measure, and persists the factor under the harness home. Registered by the Tianma token-meter-calibration package. |
 | `ctx.mpsExecutor` | `core` | `mps-executor` | - | - | - | Authenticates with the pre-shared secret, registers this node with its capacity and capabilities, and heartbeats on the period the platform assigns. Registered by the Tianma MPS executor package. |
+| `ctx.mpsTaskRunner` | `core` | `mps-executor` | - | - | - | Executes one claimed attempt and reports the outcome it reached, without platform access or slot decisions of its own. Consumed by the node task orchestrator and provided by whichever runner plugin a deployment composes. |
 | `ctx.cotTranslation` | `service` | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | - | - | 为展开的思考内容提供有界的 Session 翻译请求，不改变模型可见历史。 |
 | `ctx.translator` | `service` | [`experimental-translator`](../packages/experimental/translator) | - | [`experimental-client-ui-cot-translation`](../packages/experimental/client-ui-cot-translation) | - | 解析 Google 或 Bing 请求，并可选保留统一的实验性 Session 记录。 |
 | `ctx.hmr` | `core` | [`hmr`](../packages/boot/hmr) | - | [`app-boot`](../packages/boot/app-boot) | - | 负责模块和精确配置监听；应用修改共用其队列，自动重载等待应用文件锁。 |

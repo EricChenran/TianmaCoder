@@ -26,6 +26,12 @@ export const DEFAULT_HEARTBEAT_SECONDS = 10
 /** Claim long-poll budget the node starts with before the platform overrides it. */
 export const DEFAULT_CLAIM_LONG_POLL_SECONDS = 25
 
+/** Lease renewal period used until a claim states the platform's own. */
+export const DEFAULT_LEASE_RENEW_SECONDS = 30
+
+/** Runtime ceiling for one attempt, used when the task payload states none. */
+export const DEFAULT_TASK_RUNTIME_SECONDS = 3 * 60 * 60
+
 /** Budget for one ordinary platform request. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 
@@ -61,6 +67,10 @@ export interface Config {
   heartbeatSeconds?: number
   /** Claim long-poll budget in seconds. */
   claimLongPollSeconds?: number
+  /** Lease renewal period in seconds, used until a claim states the platform's own. */
+  leaseRenewSeconds?: number
+  /** Runtime ceiling in seconds for one attempt, used when the task payload states none. */
+  taskRuntimeSeconds?: number
   /** Budget for one ordinary platform request in milliseconds. */
   requestTimeoutMs?: number
   /** Work kinds this node accepts. */
@@ -89,6 +99,8 @@ export const Config: z<Config> = z.object({
   slotsTotal: z.number().step(1).min(1).default(1),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
+  leaseRenewSeconds: z.number().step(1).min(1).max(3600).default(DEFAULT_LEASE_RENEW_SECONDS),
+  taskRuntimeSeconds: z.number().step(1).min(1).default(DEFAULT_TASK_RUNTIME_SECONDS),
   requestTimeoutMs: z.number().step(1).min(1000).default(DEFAULT_REQUEST_TIMEOUT_MS),
   lanes: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
@@ -115,6 +127,10 @@ export interface ExecutorSettings {
   heartbeatSeconds: number
   /** Claim long-poll budget in seconds. */
   claimLongPollSeconds: number
+  /** Lease renewal period in seconds, before a claim states the platform's own. */
+  leaseRenewSeconds: number
+  /** Runtime ceiling in seconds for one attempt, before a payload states its own. */
+  taskRuntimeSeconds: number
   /** Budget for one ordinary request. */
   requestTimeoutMs: number
   /** Capability promise the node registers. */
@@ -156,6 +172,8 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     slotsTotal: config.slotsTotal ?? 1,
     heartbeatSeconds: config.heartbeatSeconds ?? DEFAULT_HEARTBEAT_SECONDS,
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,
+    leaseRenewSeconds: config.leaseRenewSeconds ?? DEFAULT_LEASE_RENEW_SECONDS,
+    taskRuntimeSeconds: config.taskRuntimeSeconds ?? DEFAULT_TASK_RUNTIME_SECONDS,
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     capabilities: {
       lanes: [...(config.lanes ?? [])],

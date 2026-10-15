@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在一个 dsh profile 里运行一个天码 MPS 执行节点。插件从自身的 profile 配置行读取管理平台的通信地址——主机或 IP 与端口——从环境变量读取预共享密钥，用密钥换取 Bearer 令牌，注册本机的身份、容量与能力，并维持心跳：上行携带运行中的任务、槽位容量与资源读数，下行带回平台指令。节点就是该 profile 的应用本体，因此进程是 `dsh --profile <节点 profile>`，而不是挂在宿主旁边的另一个可执行文件。
+在一个 dsh profile 里运行一个天码 MPS 执行节点。插件从配置行读取平台的通信地址（主机与端口），从环境变量读取预共享密钥，用密钥换取 Bearer 令牌，并注册本机的身份、容量与能力。它维持心跳：上行携带运行中的任务与资源读数，下行带回平台指令；在组合了运行器时，它还会在自己的槽位内认领任务、维持租约、执行中止与运行时限规则，并提交本次尝试达成的结果。
 
 ## 目录
 
@@ -55,6 +55,8 @@ kind: "package-reference"
 | `slotsTotal` | `1` | 节点接受的并发任务数 |
 | `heartbeatSeconds` | `10` | 心跳周期，直到平台另行指定 |
 | `claimLongPollSeconds` | `25` | 认领长轮询预算 |
+| `leaseRenewSeconds` | `30` | 租约续期周期，直到某次认领给出平台自己的取值 |
+| `taskRuntimeSeconds` | `10800` | 单次尝试的运行时限，直到任务载荷给出自己的取值 |
 | `requestTimeoutMs` | `15000` | 单个普通请求的预算 |
 | `lanes` / `tools` | 空 | 节点注册的能力承诺 |
 | `agentVersion` | `unknown` | 上报的 Agent 版本 |
@@ -69,20 +71,27 @@ kind: "package-reference"
 
 `resolveExecutorSettings` 把行配置变成一份已解析的设置：它通过 `@tianma/dsh-mps-exec-core` 校验地址，回退到本机主机名与进程工作目录，并构造能力承诺。`readNodeSecret` 读取该环境变量，在未设置或为空时显式失败，因此节点绝不会带着空凭据注册。
 
-`MpsExecutorRuntime` 持有平台会话：`bootstrap()` 用密钥换取令牌并完成注册，采用平台返回的心跳周期而不是保留硬编码值；`heartbeatOnce()` 上报运行中的任务、槽位、资源与节点时间，并因此续租它列出的每个任务；`start()` 与 `stop()` 持有定时器，而该定时器本身持有引用，使宿主进程在节点在线期间保持存活。心跳失败会按错误码施加对应恢复动作：`halt-node` 停止节点与定时器，`reauthenticate` 清除令牌并重跑握手，其余情况只记一条告警并等待下一个周期。
+`MpsExecutorRuntime` 持有平台会话：`bootstrap()` 用密钥换取令牌并完成注册，采用平台返回的心跳周期而不是保留硬编码值；`heartbeatOnce()` 上报运行中的任务、槽位、资源与节点时间，并因此续租它列出的每个任务；`start()` 与 `stop()` 持有定时器，而该定时器本身持有引用，使宿主进程在节点在线期间保持存活。心跳失败会按错误码施加对应恢复动作：`halt-node` 停止节点与定时器，`reauthenticate` 清除令牌并重跑握手，其余情况只记一条告警并等待下一个周期。心跳带回的指令在此处施加：`abort` 取消被点名的尝试，而本节点尚未实现的指令会被上报而不是被丢弃。
+
+`TaskOrchestrator` 持有任务生命周期：在有空闲槽位时认领，把每个已认领任务上报进平台的运行中任务列表，把尝试交给运行器，并提交该尝试达成的结果。平台无法替节点施加的规则都在这里：认领或载荷给出的续期周期与运行时限、某次续期返回 `should_continue: false` 时的停止（该尝试被丢弃且不提交结果，因为那份结果描述的是平台已重新派发的活）、中止强制产生的 `cancelled` 结果、提交日志行的脱敏与按字节限长，以及在平台应答允许时持续重试的结果提交。没有组合运行器的节点只保持会话、不认领任何任务；运行器在开始认领时按 `ctx.mpsTaskRunner` 查找，因此由其他行挂载的运行器同样能被找到。`TaskRunner` 是任务得以执行的唯一入口：运行器收到任务、取消信号与上报通道，从不直接与平台通信，也不自行决定槽位。
 
 ### 源文件地图
 
 | 文件 | 职责 |
 |---|---|
 | [`src/config.ts`](src/config.ts) | 配置 schema、已解析设置与密钥读取 |
-| [`src/runtime.ts`](src/runtime.ts) | 平台会话：握手、心跳、定时器、失败恢复 |
-| [`src/index.ts`](src/index.ts) | Cordis 插件：报告出口、自动启动、服务发布、停止副作用 |
-| [`tests/mps-executor.spec.ts`](tests/mps-executor.spec.ts) | 地址配置、设置解析、密钥读取、握手、心跳、恢复与插件挂载 |
+| [`src/runtime.ts`](src/runtime.ts) | 平台会话：握手、心跳、指令、定时器、失败恢复 |
+| [`src/orchestrator.ts`](src/orchestrator.ts) | 任务生命周期：认领、租约、运行时限、中止、日志与结果提交 |
+| [`src/runner.ts`](src/runner.ts) | `TaskRunner` 接缝，以及一次尝试交换的上下文与结果 |
+| [`src/report.ts`](src/report.ts) | 运维事件与所有失败路径共用的错误归一化 |
+| [`src/index.ts`](src/index.ts) | Cordis 插件：报告出口、自动启动、服务发布、运行器查找、停止副作用 |
+| [`src/startup.ts`](src/startup.ts) | 节点 profile 的命令行与它记录的环境变量 |
+| [`tests/mps-executor.spec.ts`](tests/mps-executor.spec.ts) | 地址配置、设置解析、密钥读取、握手、心跳、指令、恢复、经组合运行器认领任务与插件挂载 |
+| [`tests/orchestrator.spec.ts`](tests/orchestrator.spec.ts) | 认领、租约、运行时限、中止、日志限长与结果提交 |
 
 ### 不变量归属
 
-运行时只持有一次节点 ID，协议客户端在每个请求上上报它，因此调用方无法以其他节点的身份提交任务级调用。心跳周期来自配置或平台的注册应答，绝不来自发送处的常量。
+运行时只持有一次节点 ID，协议客户端在每个请求上上报它，因此调用方无法以其他节点的身份提交任务级调用。心跳周期来自配置或平台的注册应答，绝不来自发送处的常量。哪些任务在跑、跑到哪一步只有一处归属——运行时的运行中任务列表——编排器只负责把状态变化汇报进去。
 
 </details>
 
@@ -96,7 +105,7 @@ kind: "package-reference"
 
 ## Model Experience
 
-None, as the node runtime transports exec/v1 protocol traffic for the management platform and registers no prompt, tool, or Session event of its own.
+None, as the node transports exec/v1 protocol traffic and hands each claimed attempt to a runner, so whatever a runner shows a model belongs to that runner’s package.
 
 #### KV Cache effect
 
@@ -108,7 +117,9 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 
 以下限制界定了本包当前的边界，是当前约束而非任务清单。
 
-- **仅覆盖平台会话** —— 插件负责认证、注册与心跳；它不认领任务、不准备编码工作区、不运行 Agent、也不提交结果，且它注册的能力列表来自配置而非探测结果。
+- **未随包交付运行器** —— 只有在组合了运行器时节点才会认领并执行任务；没有运行器时它只保持会话、上报这一事实并且什么都不认领，因为没有执行任务的途径。
+- **尚无编码工作区** —— 一次尝试在运行器安置它的地方执行；准备并保活按工作区持久化的检出、以及上报该工作区的会话，都尚未实现。
+- **资源读数由外部提供** —— 由部署通过 `setResources` 上报；节点自身完全不探测 CPU、内存与磁盘。
 
 <a id="dev-note"></a>
 ### 开发备注

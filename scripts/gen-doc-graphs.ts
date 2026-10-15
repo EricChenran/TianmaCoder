@@ -132,6 +132,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Authenticates with the pre-shared secret, registers this node with its capacity and capabilities, and heartbeats on the period the platform assigns. Registered by the Tianma MPS executor package.',
   },
   {
+    key: 'mpsTaskRunner',
+    pkg: 'mps-executor',
+    title: 'Execution seam of a Tianma MPS executor node',
+    mode: 'core',
+    consumers: [],
+    note: 'Executes one claimed attempt and reports the outcome it reached, without platform access or slot decisions of its own. Consumed by the node task orchestrator and provided by whichever runner plugin a deployment composes.',
+  },
+  {
     key: 'cotTranslation',
     pkg: 'experimental-client-ui-cot-translation',
     title: 'Reasoning translation Remote',

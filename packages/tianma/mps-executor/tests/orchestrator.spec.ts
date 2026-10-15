@@ -1,0 +1,721 @@
+/**
+ * The task lifecycle over a recording platform: what the node claims, what it does
+ * when the platform withdraws a lease or aborts a task, how it bounds the attempt
+ * with the runtime ceiling, and how it gets the outcome across.
+ */
+
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import { ExecResponseError, recoveryForCode } from '@tianma/dsh-mps-exec-core'
+import type {
+  ExecAbortAckRequest,
+  ExecClaimRequest,
+  ExecLeaseResult,
+  ExecLogRequest,
+  ExecProgressRequest,
+  ExecResultRequest,
+  ExecResultResponse,
+  ExecRunningTask,
+  ExecTaskAssignment,
+} from '@tianma/dsh-mps-exec-core'
+import {
+  LOG_BATCH_MAX_LINES,
+  LOG_LINE_MAX_BYTES,
+  TaskOrchestrator,
+  boundLogLine,
+  resolveExecutorSettings,
+} from '@tianma/dsh-mps-executor'
+import type {
+  ExecutorReport,
+  ExecutorSettings,
+  TaskOrchestratorHooks,
+  TaskPlatformClient,
+  TaskRunContext,
+  TaskRunResult,
+  TaskRunner,
+} from '@tianma/dsh-mps-executor'
+
+afterEach(() => { vi.useRealTimers() })
+
+/** A platform that records what it was asked and answers from scripted queues. */
+class FakePlatform implements TaskPlatformClient {
+  readonly claims: ExecClaimRequest[] = []
+  readonly leases: string[] = []
+  readonly progresses: ExecProgressRequest[] = []
+  readonly logs: ExecLogRequest[] = []
+  readonly results: ExecResultRequest[] = []
+  readonly abortAcks: ExecAbortAckRequest[] = []
+  readonly assignments: (ExecTaskAssignment | undefined)[] = []
+  readonly leaseAnswers: (ExecLeaseResult | Error)[] = []
+  readonly resultAnswers: (ExecResultResponse | Error)[] = []
+  claimError: Error | undefined
+  /** Held lease answers, released by the test that gates them. */
+  leaseGate: Promise<void> | undefined
+  /** Failure the platform answers an abort acknowledgement with. */
+  abortAckError: Error | undefined
+
+  async claim(body: ExecClaimRequest): Promise<ExecTaskAssignment | undefined> {
+    this.claims.push(body)
+    if (this.claimError !== undefined) throw this.claimError
+    return this.assignments.shift()
+  }
+
+  async lease(taskId: string): Promise<ExecLeaseResult> {
+    this.leases.push(taskId)
+    await this.leaseGate
+    const answer = this.leaseAnswers.shift()
+    if (answer instanceof Error) throw answer
+    return answer ?? { lease_expire_at: '2026-10-15T04:16:00.123+08:00', should_continue: true }
+  }
+
+  async progress(_taskId: string, body: ExecProgressRequest): Promise<void> {
+    this.progresses.push(body)
+  }
+
+  async log(_taskId: string, body: ExecLogRequest): Promise<void> {
+    this.logs.push(body)
+  }
+
+  async result(_taskId: string, body: ExecResultRequest): Promise<ExecResultResponse> {
+    this.results.push(body)
+    const answer = this.resultAnswers.shift()
+    if (answer instanceof Error) throw answer
+    return answer ?? {
+      task_id: 'tsk_1',
+      accepted: true,
+      already_final: false,
+      work_item_state: 'done',
+      next: 'verify',
+    }
+  }
+
+  async abortAck(_taskId: string, body: ExecAbortAckRequest): Promise<void> {
+    this.abortAcks.push(body)
+    if (this.abortAckError !== undefined) throw this.abortAckError
+  }
+}
+
+/** The node-side hooks one test observed. */
+class FakeHooks implements TaskOrchestratorHooks {
+  readonly started: ExecRunningTask[] = []
+  readonly progresses: [string, number, string][] = []
+  readonly finished: string[] = []
+  slots = 1
+
+  taskStarted(task: ExecRunningTask): void {
+    this.started.push(task)
+  }
+
+  taskProgress(taskId: string, progress: number, stage: string): void {
+    this.progresses.push([taskId, progress, stage])
+  }
+
+  taskFinished(taskId: string): void {
+    this.finished.push(taskId)
+  }
+
+  availableSlots(): number {
+    return this.slots
+  }
+}
+
+/** A task payload shaped as the protocol's example is. */
+function assignment(overrides: Partial<ExecTaskAssignment> = {}): ExecTaskAssignment {
+  return {
+    task_id: 'tsk_1',
+    work_item_id: 'wi_1',
+    attempt: 1,
+    max_attempts: 3,
+    kind: 'coding',
+    priority: 400,
+    lease_expire_at: '2026-10-15T04:16:00.123+08:00',
+    lease_renew_seconds: 30,
+    payload: {
+      limits: { max_runtime_seconds: 60 },
+      workspace: { workspace_id: 'ws_1', repo: { base_commit: 'a1b2c3d', work_branch: 'feature/x' } },
+    },
+    ...overrides,
+  }
+}
+
+/** One node's resolved settings. */
+function settings(): ExecutorSettings {
+  return resolveExecutorSettings({ platformHost: '10.0.0.7', nodeId: 'node-1' }, 'test-host')
+}
+
+/** A runner that runs the given body. */
+function runnerOf(run: (context: TaskRunContext) => Promise<TaskRunResult>): TaskRunner {
+  return { run }
+}
+
+/** A runner that waits for its attempt to be cancelled and reports what it was told to. */
+function waitingRunner(result: (context: TaskRunContext) => TaskRunResult): TaskRunner {
+  return runnerOf(async (context) => {
+    await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }) })
+    return result(context)
+  })
+}
+
+/** One orchestrator over a recording platform. */
+function orchestratorWith(options: {
+  platform: FakePlatform
+  runner: TaskRunner
+  hooks?: FakeHooks
+  reports?: ExecutorReport[]
+  settings?: ExecutorSettings
+}): { orchestrator: TaskOrchestrator; hooks: FakeHooks; reports: ExecutorReport[] } {
+  const hooks = options.hooks ?? new FakeHooks()
+  const reports = options.reports ?? []
+  const orchestrator = new TaskOrchestrator({
+    client: options.platform,
+    settings: options.settings ?? settings(),
+    runner: options.runner,
+    hooks,
+    report: (report) => { reports.push(report) },
+    now: () => new Date('2026-10-15T04:03:55.123Z'),
+  })
+  return { orchestrator, hooks, reports }
+}
+
+describe('task lifecycle', () => {
+  it('runs a claimed task and submits the outcome it reached', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator, hooks } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: '批量下载做好，构建通过' })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.claims).toEqual([{
+      available_slots: 1,
+      capabilities: { lanes: [], tools: [] },
+      max_wait_seconds: settings().claimLongPollSeconds,
+    }])
+    expect(hooks.started).toEqual([{
+      task_id: 'tsk_1',
+      attempt: 1,
+      started_at: '2026-10-15T12:03:55.123+08:00',
+      progress: 0,
+      stage: 'preparing',
+    }])
+    expect(platform.results).toEqual([{
+      attempt: 1,
+      outcome: 'success',
+      started_at: '2026-10-15T12:03:55.123+08:00',
+      finished_at: '2026-10-15T12:03:55.123+08:00',
+      summary: '批量下载做好，构建通过',
+      evidence: {
+        changed_files: [],
+        branch: 'feature/x',
+        base_commit: 'a1b2c3d',
+        head_commit: 'a1b2c3d',
+        pushed: false,
+      },
+    }])
+    expect(hooks.finished).toEqual(['tsk_1'])
+    expect(orchestrator.runningTaskIds()).toEqual([])
+  })
+
+  it('claims nothing while every slot is busy', async () => {
+    const platform = new FakePlatform()
+    const hooks = new FakeHooks()
+    hooks.slots = 0
+    const { orchestrator } = orchestratorWith({
+      platform,
+      hooks,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: '' })),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(false)
+    expect(platform.claims).toEqual([])
+  })
+
+  it('treats an empty long poll as no work', async () => {
+    const platform = new FakePlatform()
+    const hooks = new FakeHooks()
+    const { orchestrator } = orchestratorWith({
+      platform,
+      hooks,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: '' })),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(false)
+    expect(hooks.started).toEqual([])
+  })
+
+  it('carries a runner outcome and its notes and evidence through', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({
+        outcome: 'blocked',
+        summary: '缺少需求说明',
+        notes: '需要客户补充截图',
+        evidence: {
+          changed_files: ['src/a.ts'],
+          branch: 'feature/x',
+          base_commit: 'a1b2c3d',
+          head_commit: 'e4f5a6b',
+          pushed: true,
+        },
+      })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'blocked',
+      notes: '需要客户补充截图',
+      evidence: { changed_files: ['src/a.ts'], pushed: true },
+    })
+  })
+
+  it('aborts a running task and acknowledges it, reporting cancelled', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    let observed: TaskRunContext | undefined
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        observed = context
+        await new Promise<void>((resolve) => { context.signal.addEventListener('abort', () => { resolve() }) })
+        return { outcome: 'success', summary: 'finished before noticing' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    expect(orchestrator.abort('tsk_1', '管理员中止')).toBe(true)
+    expect(observed?.signal.aborted).toBe(true)
+    expect(orchestrator.abort('tsk_missing')).toBe(false)
+    await orchestrator.drain()
+
+    expect(platform.abortAcks).toEqual([{
+      attempt: 1,
+      aborted_at: '2026-10-15T12:03:55.123+08:00',
+      note: 'the runner settled after the abort command',
+    }])
+    expect(platform.results[0]?.outcome).toBe('cancelled')
+    expect(reports.some(report => report.message.includes('aborted by the platform'))).toBe(true)
+    expect(orchestrator.runningTaskIds()).toEqual([])
+  })
+
+  it('discards an attempt whose lease the platform withdrew', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ lease_renew_seconds: 10 }))
+    platform.leaseAnswers.push({ lease_expire_at: '2026-10-15T04:16:00.123+08:00', should_continue: false })
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'success', summary: 'late work' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(10_000)
+    await orchestrator.drain()
+
+    expect(platform.results).toEqual([])
+    expect(platform.logs).toHaveLength(1)
+    expect(platform.logs[0]?.stream).toBe('stderr')
+    expect(platform.logs[0]?.lines[0]?.text).toContain("withdrew this task's lease")
+    expect(reports.some(report => report.message.includes('no longer leased'))).toBe(true)
+    expect(orchestrator.runningTaskIds()).toEqual([])
+  })
+
+  it('stops an attempt at the runtime ceiling the payload states', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ payload: { limits: { max_runtime_seconds: 5 } } }))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'success', summary: 'kept going' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(5_000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('failed')
+    expect(reports.some(report => report.message.includes('runtime ceiling'))).toBe(true)
+  })
+
+  it('renews the lease on the claimed period and survives a failed renewal', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ lease_renew_seconds: 10 }))
+    platform.leaseAnswers.push(new Error('network down'))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'blocked', summary: 'stopped' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(platform.leases).toEqual(['tsk_1'])
+    expect(reports.some(report => report.message.includes('lease renewal failed'))).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(platform.leases).toEqual(['tsk_1', 'tsk_1'])
+
+    orchestrator.stop()
+    await orchestrator.drain()
+    expect(platform.results[0]?.outcome).toBe('blocked')
+  })
+
+  it('does not renew a lease when the claim states no renewal period', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ lease_renew_seconds: 0, payload: { limits: { max_runtime_seconds: 3600 } } }))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'failed', summary: 'gave up' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(platform.leases).toEqual([])
+    orchestrator.stop()
+    await orchestrator.drain()
+    expect(platform.results[0]?.outcome).toBe('failed')
+    expect(reports).toEqual([])
+  })
+
+  it('reports a failed attempt when the runner throws', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => { throw new Error('the worktree is gone') }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary: 'the attempt threw: the worktree is gone',
+    })
+  })
+
+  it('reports progress through the node and the platform', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator, hooks } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.reportProgress({ progress: 45, stage: 'coding', message: '3/7 个文件', eta_seconds: 600 })
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(hooks.progresses).toEqual([['tsk_1', 45, 'coding']])
+    expect(platform.progresses).toEqual([{
+      attempt: 1,
+      progress: 45,
+      stage: 'coding',
+      message: '3/7 个文件',
+      eta_seconds: 600,
+    }])
+  })
+
+  it('redacts, bounds, and batches submitted log lines', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const long = 'x'.repeat(LOG_LINE_MAX_BYTES + 10)
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        const lines = Array.from({ length: LOG_BATCH_MAX_LINES + 1 }, (_value, index) => ({
+          at: '2026-10-15T12:03:55.123+08:00',
+          level: 'info',
+          text: `line ${String(index)}`,
+        }))
+        lines[0] = { at: '2026-10-15T12:03:55.123+08:00', level: 'info', text: 'api_key=abc123' }
+        lines[1] = { at: '2026-10-15T12:03:55.123+08:00', level: 'info', text: long }
+        await context.reportLog('stdout', lines)
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.logs).toHaveLength(2)
+    expect(platform.logs[0]?.lines).toHaveLength(LOG_BATCH_MAX_LINES)
+    expect(platform.logs[1]?.lines).toHaveLength(1)
+    expect(platform.logs[0]?.lines[0]?.text).toBe('api_key=[REDACTED]')
+    expect(platform.logs[0]?.lines[1]?.text).toHaveLength(LOG_LINE_MAX_BYTES)
+    expect(platform.logs[0]?.truncated).toBe(true)
+    expect(platform.logs[1]?.truncated).toBe(false)
+    expect(platform.logs[0]?.batch_id).not.toBe(platform.logs[1]?.batch_id)
+    expect(platform.logs[0]?.batch_id.startsWith('log-')).toBe(true)
+  })
+
+  it('submits no batch for an empty log submission', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async (context) => {
+        await context.reportLog('stdout', [])
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.logs).toEqual([])
+  })
+
+  it('retries result submission while the platform answer allows it', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.resultAnswers.push(new ExecResponseError('gateway is busy', { code: 'RATE_LIMITED', httpStatus: 429, requestId: 'r1' }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(60_000)
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(2)
+  })
+
+  it('stops retrying when the platform refuses the result for good', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    expect(recoveryForCode('TASK_NOT_FOUND')).not.toBe('retry')
+    platform.resultAnswers.push(new ExecResponseError('no such task', { code: 'TASK_NOT_FOUND', httpStatus: 404, requestId: 'r1' }))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(1)
+    expect(reports.some(report => report.level === 'error' && report.message.includes('refused'))).toBe(true)
+  })
+
+  it('reports a result it could not submit at all', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const retryable = new ExecResponseError('gateway is busy', { code: 'RATE_LIMITED', httpStatus: 429, requestId: 'r1' })
+    for (let attempt = 0; attempt < 6; attempt += 1) platform.resultAnswers.push(retryable)
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'failed', summary: 'gave up' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(120_000)
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(5)
+    expect(reports.some(report => report.level === 'error' && report.message.includes('after 5 attempts'))).toBe(true)
+    expect(orchestrator.runningTaskIds()).toEqual([])
+  })
+
+  it('runs with the defaults the caller did not state', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const hooks = new FakeHooks()
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: waitingRunner(() => ({ outcome: 'success', summary: 'done' })),
+      hooks,
+    })
+
+    await orchestrator.claimOnce()
+    expect(orchestrator.abort('tsk_1')).toBe(true)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('cancelled')
+    expect(hooks.finished).toEqual(['tsk_1'])
+  })
+
+  it('applies its own runtime ceiling when the payload states none', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ payload: {} }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(2000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('success')
+  })
+
+  it('ignores a lease answer that arrives after the attempt settled', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ lease_renew_seconds: 10 }))
+    platform.leaseAnswers.push(
+      { lease_expire_at: '2026-10-15T04:16:00.123+08:00', should_continue: false },
+      { lease_expire_at: '2026-10-15T04:16:00.123+08:00', should_continue: false },
+    )
+    let releaseLease: (() => void) | undefined
+    let settleAttempt: (() => void) | undefined
+    platform.leaseGate = new Promise<void>((resolve) => { releaseLease = resolve })
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => {
+        await new Promise<void>((resolve) => { settleAttempt = resolve })
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(platform.leases).toEqual(['tsk_1', 'tsk_1'])
+    settleAttempt?.()
+    await orchestrator.drain()
+    releaseLease?.()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(platform.results).toHaveLength(1)
+    expect(platform.logs).toHaveLength(1)
+  })
+
+  it('reports an abort acknowledgement it could not deliver', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.abortAckError = new Error('connection reset')
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'success', summary: 'late work' })),
+    })
+
+    await orchestrator.claimOnce()
+    orchestrator.abort('tsk_1', '管理员中止')
+    await orchestrator.drain()
+
+    expect(reports.some(report => report.message.includes('abort acknowledgement failed'))).toBe(true)
+    expect(platform.results[0]?.outcome).toBe('cancelled')
+  })
+
+  it('retries a result submission that failed without an envelope code', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.resultAnswers.push(new Error('socket closed'))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(60_000)
+    await orchestrator.drain()
+
+    expect(platform.results).toHaveLength(2)
+  })
+
+  it('keeps claiming while it runs and stops when asked', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator, hooks, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    orchestrator.start()
+    orchestrator.start()
+    expect(orchestrator.claiming).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(hooks.started).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(platform.claims.length).toBeGreaterThan(1)
+
+    platform.claimError = new Error('connection reset')
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(reports.some(report => report.message.includes('claim failed: connection reset'))).toBe(true)
+
+    platform.claimError = undefined
+    orchestrator.stop()
+    expect(orchestrator.claiming).toBe(false)
+    await orchestrator.drain()
+    const settled = platform.claims.length
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(platform.claims).toHaveLength(settled)
+  })
+
+  it('keeps two attempts running at once within the slot budget', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ task_id: 'tsk_1' }), assignment({ task_id: 'tsk_2' }))
+    const hooks = new FakeHooks()
+    hooks.slots = 2
+    const settle: (() => void)[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      hooks,
+      runner: runnerOf(async (context) => {
+        await new Promise<void>((resolve) => { settle.push(resolve) })
+        return { outcome: 'success', summary: context.task.task_id }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.claimOnce()
+    expect(orchestrator.runningTaskIds()).toEqual(['tsk_1', 'tsk_2'])
+
+    settle[0]?.()
+    settle[1]?.()
+    await orchestrator.drain()
+
+    expect(hooks.finished).toEqual(['tsk_1', 'tsk_2'])
+    expect(platform.results.map(result => result.summary)).toEqual(['tsk_1', 'tsk_2'])
+  })
+
+  it('waits for a slot to free without asking the platform', async () => {    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    const hooks = new FakeHooks()
+    hooks.slots = 0
+    const { orchestrator } = orchestratorWith({
+      platform,
+      hooks,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    orchestrator.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(platform.claims).toEqual([])
+    orchestrator.stop()
+    await orchestrator.drain()
+  })
+})
+
+describe('log line bounds', () => {
+  it('leaves a line within the limit untouched', () => {
+    expect(boundLogLine('短行')).toEqual({ text: '短行', truncated: false })
+    expect(boundLogLine('x'.repeat(LOG_LINE_MAX_BYTES))).toEqual({ text: 'x'.repeat(LOG_LINE_MAX_BYTES), truncated: false })
+  })
+
+  it('cuts an oversized line and keeps the result valid UTF-8', () => {
+    const line = '中'.repeat(LOG_LINE_MAX_BYTES)
+    const bounded = boundLogLine(line)
+    expect(bounded.truncated).toBe(true)
+    expect(Buffer.byteLength(bounded.text, 'utf8')).toBeLessThanOrEqual(LOG_LINE_MAX_BYTES)
+    expect(bounded.text.endsWith('\uFFFD')).toBe(false)
+    expect(bounded.text).toBe('中'.repeat(LOG_LINE_MAX_BYTES / 3))
+  })
+})

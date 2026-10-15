@@ -53,6 +53,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   translator: 'translation.md',
   cotTranslation: 'translation.md',
   mpsExecutor: 'tianma.md',
+  mpsTaskRunner: 'tianma.md',
   speechToText: 'voice-input.md',
   speechController: 'voice-input.md',
   otel: 'otel.md',
@@ -979,6 +980,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   ExecResources: 'reported resource readings are owned by packages/tianma/mps-exec-core/README.md',
   ExecRegisterResult: 'registration answer is owned by packages/tianma/mps-exec-core/README.md',
   ExecHeartbeatResult: 'heartbeat answer is owned by packages/tianma/mps-exec-core/README.md',
+  TaskRunContext: 'attempt context handed to a runner is owned by packages/tianma/mps-executor/README.md',
+  TaskRunResult: 'attempt outcome a runner reports is owned by packages/tianma/mps-executor/README.md',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

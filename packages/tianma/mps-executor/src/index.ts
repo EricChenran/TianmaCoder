@@ -13,14 +13,17 @@ import { readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
 import type { ExecutorReport } from './runtime.ts'
+import type { TaskRunner } from './runner.ts'
 
 export {
   Config,
   DEFAULT_CLAIM_LONG_POLL_SECONDS,
   DEFAULT_HEARTBEAT_SECONDS,
+  DEFAULT_LEASE_RENEW_SECONDS,
   DEFAULT_MAX_ARTIFACT_BYTES,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_SECRET_ENV,
+  DEFAULT_TASK_RUNTIME_SECONDS,
   UNKNOWN_AGENT_VERSION,
   readNodeSecret,
   resolveExecutorSettings,
@@ -29,6 +32,10 @@ export { MpsExecutorRuntime } from './runtime.ts'
 export type { ExecutorReport, NodeState } from './runtime.ts'
 export type { ExecutorRuntimeOptions } from './runtime.ts'
 export type { ExecutorSettings } from './config.ts'
+export { LOG_BATCH_MAX_LINES, LOG_LINE_MAX_BYTES, TaskOrchestrator, boundLogLine } from './orchestrator.ts'
+export type { TaskOrchestratorHooks, TaskOrchestratorOptions, TaskPlatformClient } from './orchestrator.ts'
+export { toError } from './report.ts'
+export type { TaskRunContext, TaskRunResult, TaskRunner, TaskRunnerSource } from './runner.ts'
 // The runtime's transport option is an exec-core type, so a caller that injects a
 // transport needs it reachable without depending on the wire package directly.
 export type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tianma/dsh-mps-exec-core'
@@ -36,10 +43,15 @@ export type { ExecHttpRequest, ExecHttpResponse, ExecHttpTransport } from '@tian
 /** Stable Cordis plugin name. */
 export const name = 'tianma-mps-executor'
 
+/** Cordis service key a composed task runner publishes under. */
+export const TASK_RUNNER_SERVICE = 'mpsTaskRunner'
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The executor node's platform session. */
     mpsExecutor: MpsExecutorRuntime
+    /** Executes this node's claimed attempts; published by whichever runner plugin is composed. */
+    mpsTaskRunner: TaskRunner
   }
 }
 
@@ -106,6 +118,9 @@ export function apply(ctx: Context, config: Config): void {
     // Read when the handshake starts: the profile loads, and its help prints,
     // before the deployment has to provide the credential.
     secret: () => readNodeSecret(config),
+    // Read when the node starts claiming, so a runner composed by any other row
+    // is found even when it mounts after this one.
+    runner: () => ctx.get(TASK_RUNNER_SERVICE),
     report: createReportSink(ctx.logger('mps-executor')),
   })
   ctx.provide('mpsExecutor', runtime)
