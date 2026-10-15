@@ -74,6 +74,18 @@ describe('asking the command line for the readout', () => {
     expect(text).not.toContain('super-secret-value')
     expect(exits).toEqual([0])
   })
+
+  it('reports a missing address through the launcher rather than hanging', () => {
+    // Found by running the real profile: a plain throw left the machine sitting there.
+    const exits: number[] = []
+    expect(() => {
+      // exitOverride is what the launcher installs: without it commander would end the
+      // process here instead of raising the error the launcher turns into an exit code.
+      nodeCommand((code) => { exits.push(code) })
+        .exitOverride()
+        .parse(['--show-config'], { from: 'user' })
+    }).toThrow(/MPS_PLATFORM_HOST is required/u)
+  })
 })
 
 describe('answering what this machine will dial', () => {

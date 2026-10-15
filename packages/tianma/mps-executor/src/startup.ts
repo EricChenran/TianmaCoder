@@ -12,6 +12,7 @@ import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
 import { EXECUTOR_ENV, executorConfigFromEnv, resolveExecutorSettings } from './config.ts'
+import { toError } from './report.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'mps-executor-startup'
@@ -73,11 +74,20 @@ export function nodeCommand(exit?: (code: number) => void): Command {
     .helpOption('-h, --help', 'show this help')
     .option('--show-config', 'print the resolved platform address and identity, then exit')
     .addHelpText('after', HELP_AFTER)
-    .action((options: { showConfig?: boolean }) => {
+    .action((options: { showConfig?: boolean }, command: Command) => {
       // The node is configured by its profile row; the readout below is the only command-line
       // input, and it decides nothing: it reports what the row would resolve.
       if (options.showConfig !== true) return
-      process.stdout.write(describeConfig())
+      let lines: string
+      try {
+        lines = describeConfig()
+      } catch (error: unknown) {
+        // A plain throw would leave the action and be swallowed before the launcher's exit
+        // path, leaving a misconfigured machine sitting there. This is how help reports.
+        command.error(toError(error).message)
+        return
+      }
+      process.stdout.write(lines)
       exit?.(0)
     })
 }
