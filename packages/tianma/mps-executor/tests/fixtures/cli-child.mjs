@@ -11,6 +11,12 @@ if (process.argv[2] === 'turns') {
   console.log(JSON.stringify({ type: 'final', text: 'done' }))
   process.exit(0)
 }
+// A run that prints more lines than a raw log cap keeps.
+if (mode === 'many') {
+  for (let index = 1; index <= 10; index += 1) console.log(`line ${String(index)}`)
+  process.exit(0)
+}
+
 const instruction = process.argv.at(-1)
 const args = process.argv.slice(2).join(' ')
 

@@ -30,6 +30,14 @@ export const DEFAULT_SECRET_ENV = 'MPS_NODE_SECRET'
 export const DEFAULT_DISK_MIN_GB = 5
 
 /**
+ * Lines the operator's copy of a run log keeps. Everything a run prints is reported to the
+ * platform as it arrives; this bounds only the copy the node keeps on disk, which a chatty
+ * run would otherwise grow without end. Both ends of the run are kept, which is where a
+ * failure is read from.
+ */
+export const DEFAULT_RAW_LOG_MAX_LINES = 5000
+
+/**
  * How long a stopping node lets its running attempts finish before it ends them, in
  * seconds. Sixty is the grace the plan names, and sits well inside the lease a platform
  * grants, so a stop still reports each attempt's outcome instead of costing a lease timeout.
@@ -118,6 +126,11 @@ export interface Config {
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
   diskMinGb?: number
+  /**
+   * Lines the operator's copy of a run log keeps. The platform receives every line either
+   * way; this is what the node keeps on disk.
+   */
+  rawLogMaxLines?: number
   shutdownGraceSeconds?: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds?: number
@@ -164,6 +177,7 @@ export const Config: z<Config> = z.object({
   }).default({ command: [], logsDirectory: '', dshHome: '', jsonEvents: false }),
   slotsTotal: z.number().step(1).min(1).default(1),
   diskMinGb: z.number().min(0).default(DEFAULT_DISK_MIN_GB),
+  rawLogMaxLines: z.number().step(1).min(0).default(DEFAULT_RAW_LOG_MAX_LINES),
   shutdownGraceSeconds: z.number().min(0).default(DEFAULT_SHUTDOWN_GRACE_SECONDS),
   heartbeatSeconds: z.number().step(1).min(1).default(DEFAULT_HEARTBEAT_SECONDS),
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),

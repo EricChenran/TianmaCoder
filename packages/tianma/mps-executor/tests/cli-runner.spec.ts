@@ -4,7 +4,7 @@
  * settles on request, so no model and no network are involved.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -147,6 +147,52 @@ function reported(context: RecordingContext): string[] {
 }
 
 describe('the CLI runner', () => {
+  it('keeps both ends of a long run and says what it dropped', async () => {
+    const logs = temporary('mps-logs-')
+    const workspace = temporary('mps-workspace-')
+    const context = new RecordingContext(workspace, assignment())
+    const run = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'many'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      rawLogMaxLines: 4,
+    })
+
+    const result = await run.run(context)
+    // Whatever attempt number the run settled on, it wrote one raw log for it.
+    const written = readdirSync(logs).filter(name => name.endsWith('.log'))
+    expect(written).toHaveLength(1)
+    const raw = readFileSync(join(logs, String(written[0])), 'utf8')
+
+    // The platform received every line; what the node keeps on disk has both ends, and says
+    // how much of the middle it did not keep, so a failure at either end is still readable.
+    expect(context.logs.flatMap(entry => entry.lines).filter(line => /^line \d+$/u.test(line.text))).toHaveLength(10)
+    expect(raw).toContain('# dropped 6 line(s) from the middle of this run')
+    expect(raw).toContain('line 1')
+    expect(raw).toContain('line 2')
+    expect(raw).toContain('line 9')
+    expect(raw).toContain('line 10')
+    expect(raw).not.toContain('line 5')
+    expect(result.outcome).toBe('success')
+
+    // A deployment can keep no raw lines at all; the run still reaches the platform whole.
+    const none = temporary('mps-logs-')
+    const bare = new RecordingContext(workspace, assignment())
+    const withoutLog = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'many'],
+      logsDirectory: none,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      rawLogMaxLines: 0,
+    })
+
+    await withoutLog.run(bare)
+
+    const kept = readFileSync(join(none, String(readdirSync(none)[0])), 'utf8')
+    expect(kept).toContain('# dropped 10 line(s) from the middle of this run')
+    expect(kept).not.toContain('line 1')
+    expect(bare.logs.flatMap(entry => entry.lines).filter(line => /^line \d+$/u.test(line.text))).toHaveLength(10)
+  })
+
   it('moves a run\'s progress with the turns it narrates, and stops short of the end', async () => {
     const logs = temporary('mps-logs-')
     const workspace = temporary('mps-workspace-')

@@ -11,6 +11,7 @@
  */
 
 import { spawn } from 'node:child_process'
+import { DEFAULT_RAW_LOG_MAX_LINES } from './config.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Readable } from 'node:stream'
@@ -31,6 +32,7 @@ export const RUNNER_STOP_GRACE_MS = 3000
 
 /** Most log lines one reported batch carries. */
 const LOG_BATCH_LINES = 200
+
 
 /**
  * How much of the run's own range one turn of an agent's work is worth, and the ceiling it
@@ -58,6 +60,12 @@ export interface CliRunnerOptions {
   env?: Record<string, string> | undefined
   /** How long to wait after asking a run to stop; defaults to {@link RUNNER_STOP_GRACE_MS}. */
   stopGraceMs?: number | undefined
+  /**
+   * Lines the raw log keeps; defaults to {@link DEFAULT_RAW_LOG_MAX_LINES}. The middle of a
+   * long run is dropped, keeping both the beginning and the end, which is where a failure
+   * is read from.
+   */
+  rawLogMaxLines?: number | undefined
   /**
    * Whether the run is asked for its event stream (`--json`) instead of its final answer
    * alone. It needs a CLI that has the flag, so a deployment states it.
@@ -119,6 +127,12 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       // of the repository before it does: everything else in the workspace is delivered.
       excludeFromRepository(directory, `${EVIDENCE_DIRECTORY}/`)
       const lines: RunLine[] = []
+      // The run's first lines and its most recent ones, with the count of what went between.
+      const rawLogMaxLines = options.rawLogMaxLines ?? DEFAULT_RAW_LOG_MAX_LINES
+      const keepFirst = rawLogMaxLines === 0 ? 0 : Math.ceil(rawLogMaxLines / 2)
+      const keepLast = rawLogMaxLines === 0 ? 0 : Math.floor(rawLogMaxLines / 2)
+      const keptTail: RunLine[] = []
+      let droppedLines = 0
       await context.reportProgress({ progress: 10, stage: 'coding', message: 'the agent is working' })
       await context.reportLog('runner', [{
         at: now().toISOString(),
@@ -175,7 +189,19 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
             }
             reported.push({ ...line, text: event.text })
           }
-          lines.push(...reported.map(line => ({ stream, line })))
+          for (const line of reported) {
+            // Only the raw log is bounded: everything printed is reported to the platform
+            // as it arrives, whatever the cap does to the copy kept here.
+            if (lines.length < keepFirst) {
+              lines.push({ stream, line })
+            } else if (keptTail.length < keepLast) {
+              keptTail.push({ stream, line })
+            } else if (keepLast > 0) {
+              keptTail.shift()
+              keptTail.push({ stream, line })
+            }
+            droppedLines += 1
+          }
           await context.reportLog(stream, reported)
         },
       })
@@ -193,7 +219,7 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
       }
 
       const rawLog = join(options.logsDirectory, `${context.task.task_id}-${String(context.task.attempt)}.log`)
-      writeRawLog(rawLog, lines, outcome)
+      writeRawLog(rawLog, [...lines, ...keptTail], outcome, Math.max(0, droppedLines - lines.length - keptTail.length))
       const notes = answer === undefined
         ? `raw log: ${rawLog}`
         : `raw log: ${rawLog}\nanswer: ${answer}`
@@ -617,8 +643,12 @@ export function runFailureSummary(code: number | null | undefined, lastStderr: s
  * @param lines - everything the run printed.
  * @param outcome - how the run settled.
  */
-function writeRawLog(path: string, lines: RunLine[], outcome: RunOutcome): void {
-  const header = `# ${path}\n# ended: ${outcome.kind} with code ${String(exitCodeOf(outcome))}`
+function writeRawLog(path: string, lines: RunLine[], outcome: RunOutcome, dropped = 0): void {
+  const header = [
+    `# ${path}`,
+    `# ended: ${outcome.kind} with code ${String(exitCodeOf(outcome))}`,
+    ...(dropped === 0 ? [] : [`# dropped ${String(dropped)} line(s) from the middle of this run`]),
+  ].join('\n')
   const body = lines.map(entry => `${entry.line.at} [${entry.stream}] ${entry.line.text}`).join('\n')
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${header}\n${body}\n`, 'utf8')

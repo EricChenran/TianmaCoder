@@ -61,6 +61,7 @@ kind: "package-reference"
 | `cliRunner.dshHome` | 继承环境 | 该次运行使用的 `DSH_HOME`，使节点的 profile 目录自成一份 |
 | `cliRunner.jsonEvents` | `false` | 向该次运行索取事件流：每一轮与每次工具调用都实时到达平台，节点也据此得知要上报的会话 |
 | `shutdownGraceSeconds` | `60` | 停机时留给在跑尝试的收尾时间，超时才逐槽中止 |
+| `rawLogMaxLines` | `5000` | 节点自己保留的运行日志行数上限；平台侧无论上限如何都会逐行收到 |
 | `diskMinGb` | `5` | 磁盘余量低于此值时暂停认领，直到重新有空间 |
 | `slotsTotal` | `1` | 节点接受的并发任务数 |
 | `heartbeatSeconds` | `10` | 心跳周期，直到平台另行指定 |
