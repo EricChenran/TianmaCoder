@@ -12,6 +12,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { tianmaCliRunner } from './cli-runner.ts'
 import { probeAgentVersion } from './capabilities.ts'
 import { resourceReader } from './resources.ts'
+import { appendNodeLog } from './node-log.ts'
 import { readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
@@ -39,6 +40,8 @@ export { cpuCounters, cpuPercent, resourceReader } from './resources.ts'
 export type { CpuCounters, ResourceReader, ResourceReaderOptions } from './resources.ts'
 export { DRAINING_MARKER, drainingMarker } from './draining.ts'
 export type { DrainingMarker } from './draining.ts'
+export { NODE_LOG_DIRECTORY, appendNodeLog } from './node-log.ts'
+export type { NodeLogRecord } from './node-log.ts'
 export { LOG_SPOOL_DIRECTORY, logSpool } from './log-spool.ts'
 export { RESULT_SPOOL_DIRECTORY, resultSpool } from './result-spool.ts'
 export type { ResultSpool, ResultSpoolOptions, SpooledResult } from './result-spool.ts'
@@ -241,7 +244,12 @@ export function apply(ctx: Context, config: Config): void {
     // the build that is really here rather than a value someone wrote down.
     probeAgentVersion: async () => await probeAgentVersion({ bin: settings.cliRunner.bin }),
     probeResources: resourceReader({ root: settings.codingRoot }).read,
-    report: createReportSink(ctx.logger('mps-executor')),
+    // Both sinks, always: the logger is what a host shows, and the file is what a
+    // deployment can read when the host shows nothing.
+    report: (report) => {
+      createReportSink(ctx.logger('mps-executor'))(report)
+      appendNodeLog(settings.codingRoot, report)
+    },
   })
   ctx.provide('mpsExecutor', runtime)
   registerStopEffect(ctx, runtime)
