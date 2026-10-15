@@ -93,7 +93,7 @@ export function resultSpool(options: ResultSpoolOptions): ResultSpool {
         const path = join(directory, file)
         const spooled = read(path)
         if (spooled === undefined) {
-          rmSync(path, { force: true })
+          rmSync(path, { force: true, recursive: true })
           continue
         }
         if (await options.holds(spooled.task_id, spooled.attempt) === false) {
@@ -103,7 +103,7 @@ export function resultSpool(options: ResultSpoolOptions): ResultSpool {
             level: 'warn',
             message: `dropping the spooled result for ${spooled.task_id}: the platform no longer leases attempt ${String(spooled.attempt)}`,
           })
-          rmSync(path, { force: true })
+          rmSync(path, { force: true, recursive: true })
           continue
         }
         try {
@@ -115,11 +115,11 @@ export function resultSpool(options: ResultSpoolOptions): ResultSpool {
               level: 'error',
               message: `dropped the spooled result for ${spooled.task_id}: the platform refused it (${error.message})`,
             })
-            rmSync(path, { force: true })
+            rmSync(path, { force: true, recursive: true })
           }
           continue
         }
-        rmSync(path, { force: true })
+        rmSync(path, { force: true, recursive: true })
       }
     },
   }

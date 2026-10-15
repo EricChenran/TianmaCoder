@@ -908,6 +908,56 @@ describe('the node end to end', () => {
     expect((result['evidence'] as Record<string, unknown>)['changed_files']).toEqual([])
   }, 120_000)
 
+  it('still delivers an outcome the platform was away for', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    const coding = join(workspaceRoot, 'coding')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    const platform = new PlatformStub({
+      task_id: 'tsk_settled',
+      work_item_id: 'wi_settled',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '结算时平台正好不可达' },
+        workspace: {
+          workspace_id: 'ws_settled',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_settled' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    const port = await platform.listen()
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      // Away before the attempt settles: the submission finds no platform at all.
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_settled/progress').length > 0)
+      await platform.close()
+      await new Promise(resolve => setTimeout(resolve, 3_000))
+      expect(platform.at('/exec/v1/tasks/tsk_settled/result')).toEqual([])
+
+      // Back, still leasing the attempt: the claim loop offers the kept outcome.
+      await platform.listen(port)
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_settled/result').length > 0)
+    } finally {
+      await platform.close()
+    }
+
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_settled/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+    // The kept outcome was handed over and let go rather than left behind.
+    expect(existsSync(join(coding, '.results', 'tsk_settled.json'))).toBe(false)
+  }, 120_000)
+
   it('keeps working through an outage, and loses none of the log', async () => {
     const root = temporary('mps-e2e-')
     const workspaceRoot = join(root, 'node')

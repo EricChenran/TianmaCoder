@@ -368,9 +368,18 @@ export class TaskOrchestrator {
         continue
       }
       // Offer anything the platform has not taken yet — a task's log, and the outcome of an
-      // attempt whose result the platform could not take when it settled.
-      await this.#spool.flush()
-      await this.#results.flush()
+      // attempt whose result the platform could not take when it settled. A spool this node
+      // cannot read is a warning: letting it end the loop would leave a node that looks
+      // online and claims nothing.
+      try {
+        await this.#spool.flush()
+        await this.#results.flush()
+      } catch (error: unknown) {
+        this.#report({
+          level: 'warn',
+          message: `could not offer what the platform has not taken yet: ${toError(error).message}`,
+        })
+      }
       if (this.#canClaim?.() === false) {
         // A node without room claims nothing; whoever knows why has already reported it.
         await this.#pause(SLOT_WAIT_MS)

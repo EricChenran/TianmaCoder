@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ExecResponseError, recoveryForCode } from '@tianma/dsh-mps-exec-core'
@@ -275,6 +275,36 @@ describe('task lifecycle', () => {
     // The node recorded the session beside its workspace first, so the report can wait.
     expect(reports.some(report => report.message.includes('the session report for tsk_1 did not reach the platform'))).toBe(true)
     expect(platform.results[0]).toMatchObject({ outcome: 'success' })
+  })
+
+  it('keeps claiming when a spool cannot be offered', async () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'mps-stuck-spool-'))
+    const codingRoot = join(root, 'coding')
+    const buffers = join(codingRoot, '.buffers')
+    mkdirSync(buffers, { recursive: true })
+    // A batch still to send, and something in the way of writing it back: the flush fails
+    // where it cannot help it, and the loop has to carry on claiming rather than leave a
+    // node that looks online and works on nothing.
+    writeFileSync(join(buffers, 'tsk_9.jsonl'), '{"batch_id":"b","stream":"stdout","lines":[{"at":"t","level":"info","text":"x"}],"truncated":false}\n', 'utf8')
+    mkdirSync(join(buffers, 'tsk_9.jsonl.writing'))
+    const platform = new FakePlatform()
+    platform.log = async () => { throw new Error('the platform is unreachable') }
+    const reports: ExecutorReport[] = []
+    const { orchestrator } = orchestratorWith({
+      platform,
+      reports,
+      settings: { ...settings(), codingRoot },
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    orchestrator.start()
+    await vi.advanceTimersByTimeAsync(10_000)
+    orchestrator.stop()
+    rmSync(root, { recursive: true, force: true })
+
+    expect(platform.claims.length).toBeGreaterThan(0)
+    expect(reports.some(report => report.message.includes('could not offer what the platform has not taken yet'))).toBe(true)
   })
 
   it('keeps an outcome the platform could not take, and a restarted node submits it', async () => {
