@@ -117,6 +117,7 @@ async function runOneTask(options: {
 /** One request the node made. */
 interface Recorded {
   path: string
+  method: string
   body: string
   contentType: string | undefined
 }
@@ -211,6 +212,7 @@ class PlatformStub {
     const index = /[?&]index=(\d+)/u.exec(request.url ?? '')?.[1] ?? '?'
     this.requests.push({
       path,
+      method: request.method ?? 'GET',
       body: path.endsWith('/chunk') ? `chunk ${index} ${String(body.byteLength)}` : body.toString('utf8'),
       contentType: request.headers['content-type'],
     })
@@ -874,7 +876,9 @@ describe('the node end to end', () => {
       await platform.close()
     }
 
-    expect(platform.at('/exec/v1/tasks/tsk_material/resources/art_material')).toHaveLength(1)
+    // The node asks the material's length first, then fetches it in one request.
+    const materialRequests = platform.at('/exec/v1/tasks/tsk_material/resources/art_material')
+    expect(materialRequests.map(request => request.method)).toEqual(['HEAD', 'GET'])
     expect(material).toBe('# 需求说明：按类型筛选\n')
     // The agent is pointed at it, which is how it reads the requirement at all.
     expect(taskBook).toContain('.materials')

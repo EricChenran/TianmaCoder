@@ -35,6 +35,7 @@ import type {
   TaskOutcome,
   TaskProgress,
 } from '@tianma/dsh-mps-exec-core'
+import { ArtifactTooLargeError } from './artifacts.ts'
 import type { ExecutorSettings } from './config.ts'
 import { logSpool } from './log-spool.ts'
 import type { LogSpool } from './log-spool.ts'
@@ -541,8 +542,8 @@ export class TaskOrchestrator {
             reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
             reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
           })
-      } catch (error) {
-        result = { outcome: 'failed', summary: `the attempt threw: ${toError(error).message}` }
+      } catch (error: unknown) {
+        result = { outcome: 'failed', summary: attemptFailureSummary(error) }
       }
       this.#clearTimers(running)
       if (running.superseded) return
@@ -841,4 +842,18 @@ export class TaskOrchestrator {
       this.#pauses.set(timer, resolve)
     })
   }
+}
+
+/**
+ * How an attempt that threw describes the outcome it reached. An artifact the platform
+ * will not store is a delivery that failed, so the summary names the file and its size
+ * rather than reading as an unexpected error; every other failure keeps its message.
+ * @param error - what the attempt threw.
+ * @returns the summary the result carries.
+ */
+function attemptFailureSummary(error: unknown): string {
+  if (error instanceof ArtifactTooLargeError) {
+    return `the attempt could not deliver ${error.path}: ${error.message}`
+  }
+  return `the attempt threw: ${toError(error).message}`
 }

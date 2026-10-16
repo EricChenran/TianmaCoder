@@ -10,9 +10,10 @@ import { describe, expect, it, afterEach } from 'vitest'
 import {
   ARTIFACT_CHUNK_SIZE_BYTES,
   ARTIFACT_CHUNK_THRESHOLD_BYTES,
+  ArtifactTooLargeError,
   clientArtifactUploader,
 } from '@tianma/dsh-mps-executor'
-import { sha256Of } from '@tianma/dsh-mps-exec-core'
+import { ExecResponseError, sha256Of } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecArtifactUpload,
   ExecArtifactUploadInit,
@@ -169,12 +170,35 @@ describe('artifact upload', () => {
     expect(platform.uploads).toEqual([])
   })
 
-  it('refuses a file over the node ceiling', async () => {
+  it('refuses a file over the node ceiling, stating its size and the ceiling', async () => {
     const { directory } = workspaceWithScreenshot()
     const uploader = clientArtifactUploader({ client: new RecordingPlatform(), maxBytes: 4 })
 
-    await expect(uploader.upload({ taskId: 'tsk_1', directory, kind: 'report', path: 'shots/detail.png' }))
-      .rejects.toThrow(/over the 4 bytes this node uploads/)
+    const refusal = await uploader.upload({ taskId: 'tsk_1', directory, kind: 'report', path: 'shots/detail.png' })
+      .then(() => undefined, (error: unknown) => error)
+
+    expect(refusal).toBeInstanceOf(ArtifactTooLargeError)
+    expect(refusal).toMatchObject({ path: 'shots/detail.png', sizeBytes: 14, ceilingBytes: 4 })
+    expect((refusal as Error).message).toBe('refusing to upload shots/detail.png: it is 14 bytes, over the 4 bytes this node uploads')
+  })
+
+  it('reports the platform\'s own ceiling as the same refusal', async () => {
+    const { directory } = workspaceWithScreenshot()
+    const platform = new RecordingPlatform()
+    // The platform applies its own ceiling and refuses what this node would have sent.
+    platform.failure = new ExecResponseError('ARTIFACT_TOO_LARGE: over the platform ceiling', {
+      code: 'ARTIFACT_TOO_LARGE',
+      httpStatus: 413,
+    })
+    const uploader = clientArtifactUploader({ client: platform, maxBytes: 1024 * 1024 })
+
+    const refusal = await uploader.upload({ taskId: 'tsk_1', directory, kind: 'report', path: 'shots/detail.png' })
+      .then(() => undefined, (error: unknown) => error)
+
+    expect(refusal).toBeInstanceOf(ArtifactTooLargeError)
+    expect(refusal).toMatchObject({ path: 'shots/detail.png', sizeBytes: 14, ceilingBytes: 1024 * 1024 })
+    expect((refusal as Error).message)
+      .toBe('the platform refused shots/detail.png at 14 bytes: ARTIFACT_TOO_LARGE: over the platform ceiling')
   })
 
   it('takes the smaller of the deployment limit and one request of bytes', async () => {

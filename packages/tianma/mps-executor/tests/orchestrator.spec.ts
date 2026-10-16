@@ -21,6 +21,7 @@ import type {
   ExecTaskAssignment,
 } from '@tianma/dsh-mps-exec-core'
 import {
+  ArtifactTooLargeError,
   LOG_BATCH_MAX_LINES,
   LOG_LINE_MAX_BYTES,
   TaskOrchestrator,
@@ -1520,6 +1521,44 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({
       outcome: 'failed',
       summary: 'the attempt threw: this attempt has no prepared workspace to upload from',
+    })
+  })
+
+  it('submits a failed result when an artifact is over the ceiling, naming its size', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const orchestrator = new TaskOrchestrator({
+      client: platform,
+      settings: settings(),
+      runner: runnerOf(async (context) => {
+        await context.uploadArtifact('report', 'report.md')
+        return { outcome: 'success', summary: 'never reached' }
+      }),
+      workspaces: {
+        prepare: async () => ({
+          directory: join('coding', 'ws_1'),
+          checkout: { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' },
+        }),
+      },
+      artifacts: {
+        upload: async () => {
+          throw new ArtifactTooLargeError(
+            'refusing to upload report.md: it is 600000000 bytes, over the 524288000 bytes this node uploads',
+            { path: 'report.md', sizeBytes: 600000000, ceilingBytes: 524288000 },
+          )
+        },
+      },
+      hooks: new FakeHooks(),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    // The platform hears this attempt's outcome rather than waiting for the lease to lapse.
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'failed',
+      summary:
+        'the attempt could not deliver report.md: refusing to upload report.md: it is 600000000 bytes, over the 524288000 bytes this node uploads',
     })
   })
 

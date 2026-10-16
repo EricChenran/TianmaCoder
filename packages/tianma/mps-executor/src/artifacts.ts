@@ -9,7 +9,7 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { artifactId, sha256Of } from '@tianma/dsh-mps-exec-core'
+import { ARTIFACT_CHUNK_SIZE_BYTES, ARTIFACT_CHUNK_THRESHOLD_BYTES, ExecResponseError, artifactId, sha256Of } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecArtifactKind,
   ExecArtifactUpload,
@@ -18,11 +18,36 @@ import type {
 } from '@tianma/dsh-mps-exec-core'
 import { resolveWithinWorkspace } from './paths.ts'
 
-/** Size above which the protocol requires a chunked upload instead of one request. */
-export const ARTIFACT_CHUNK_THRESHOLD_BYTES = 100 * 1024 * 1024
+// The threshold and the chunk size are protocol constants, and the download direction
+// obeys the same two: they are stated once in the wire package and re-exported here for
+// the consumers of this package.
+export { ARTIFACT_CHUNK_SIZE_BYTES, ARTIFACT_CHUNK_THRESHOLD_BYTES }
 
-/** Size of one chunk in a chunked upload, small enough for one request's budget. */
-export const ARTIFACT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024
+/**
+ * A file this attempt cannot hand over because it is over the ceiling that applies —
+ * said either by this node before it sends anything, or by the platform that refused it.
+ * An attempt that hits one of these has a delivery that failed, not a transfer to retry.
+ */
+export class ArtifactTooLargeError extends Error {
+  /** The file, relative to the workspace. */
+  readonly path: string
+  /** Its size in bytes. */
+  readonly sizeBytes: number
+  /** The ceiling it exceeded, as this node knows it. */
+  readonly ceilingBytes: number
+
+  /**
+   * @param message - what to say about the refusal.
+   * @param facts - the file, its size, and the ceiling that applies.
+   */
+  constructor(message: string, facts: { path: string; sizeBytes: number; ceilingBytes: number }) {
+    super(message)
+    this.name = 'ArtifactTooLargeError'
+    this.path = facts.path
+    this.sizeBytes = facts.sizeBytes
+    this.ceilingBytes = facts.ceilingBytes
+  }
+}
 
 /** The artifact calls the node makes. */
 export interface ArtifactPlatformClient {
@@ -164,34 +189,48 @@ export function clientArtifactUploader(options: ArtifactUploaderOptions): TaskAr
       // The node's own ceiling is the smaller of what the platform and this node declared;
       // above the protocol's threshold the upload has to be sent in chunks.
       if (details.size > options.maxBytes) {
-        throw new Error(
+        throw new ArtifactTooLargeError(
           `refusing to upload ${request.path}: it is ${String(details.size)} bytes, over the ${String(options.maxBytes)} bytes this node uploads`,
+          { path: request.path, sizeBytes: details.size, ceilingBytes: options.maxBytes },
         )
       }
       const bytes = await readFile(path)
       const artifact = artifactId()
       const sha256 = sha256Of(bytes)
       const meta = request.meta === undefined ? undefined : JSON.stringify(request.meta)
-      if (details.size > ARTIFACT_CHUNK_THRESHOLD_BYTES) {
-        await uploadInChunks(options.client, {
-          taskId: request.taskId,
-          artifact_id: artifact,
-          kind: request.kind,
-          bytes,
-          sha256,
-          meta,
-          signal: request.signal,
-        })
-        return artifact
+      try {
+        if (details.size > ARTIFACT_CHUNK_THRESHOLD_BYTES) {
+          await uploadInChunks(options.client, {
+            taskId: request.taskId,
+            artifact_id: artifact,
+            kind: request.kind,
+            bytes,
+            sha256,
+            meta,
+            signal: request.signal,
+          })
+        } else {
+          await options.client.uploadArtifact(request.taskId, {
+            artifact_id: artifact,
+            kind: request.kind,
+            filename: basename(path),
+            bytes,
+            sha256,
+            meta,
+          }, request.signal)
+        }
+      } catch (error: unknown) {
+        // The platform applies its own ceiling and can refuse what this node would have
+        // sent. That refusal is the same fact as the local one, so it reaches the attempt
+        // the same way: a delivery that failed, at the size it was refused at.
+        if (error instanceof ExecResponseError && error.code === 'ARTIFACT_TOO_LARGE') {
+          throw new ArtifactTooLargeError(
+            `the platform refused ${request.path} at ${String(details.size)} bytes: ${error.message}`,
+            { path: request.path, sizeBytes: details.size, ceilingBytes: options.maxBytes },
+          )
+        }
+        throw error
       }
-      await options.client.uploadArtifact(request.taskId, {
-        artifact_id: artifact,
-        kind: request.kind,
-        filename: basename(path),
-        bytes,
-        sha256,
-        meta,
-      }, request.signal)
       return artifact
     },
   }

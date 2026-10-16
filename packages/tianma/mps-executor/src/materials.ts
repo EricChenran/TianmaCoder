@@ -3,8 +3,8 @@
  *
  * The platform states which artifacts belong to a task and the node fetches them, so
  * an agent works from the files the platform attached instead of from a list of ids.
- * A material the node cannot fetch or hold is a reason to stop rather than to guess:
- * the attempt reports `blocked`, which is what the protocol reserves for missing
+ * A material the node cannot fetch is a reason to stop rather than to guess: the
+ * attempt reports `blocked`, which is what the protocol reserves for missing
  * information, and the platform raises a human confirm.
  * @module @tianma/dsh-mps-executor/materials
  */
@@ -12,7 +12,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { ExecResource, ExecTaskAssignment } from '@tianma/dsh-mps-exec-core'
-import { ARTIFACT_CHUNK_THRESHOLD_BYTES } from './artifacts.ts'
 import { excludeFromRepository } from './paths.ts'
 
 /** Directory the node keeps a task's materials in, inside its workspace. */
@@ -89,8 +88,7 @@ export function materialFileName(artifactId: string, fileName?: string | undefin
  * Bring one task's materials into its workspace.
  * @param options - the workspace, the assignment, and where materials come from.
  * @returns the materials written, in the order the payload states them.
- * @throws Error on a material the platform refuses, one larger than the node will
- * hold, or one whose name cannot be made safe.
+ * @throws Error on a material the platform refuses or one whose name cannot be made safe.
  */
 export async function fetchMaterials(options: FetchMaterialsOptions): Promise<MaterialFile[]> {
   const ids = taskMaterials(options.assignment.payload)
@@ -102,11 +100,6 @@ export async function fetchMaterials(options: FetchMaterialsOptions): Promise<Ma
   const written: MaterialFile[] = []
   for (const id of ids) {
     const resource = await options.source.resource(id, options.signal)
-    if (resource.bytes.byteLength > ARTIFACT_CHUNK_THRESHOLD_BYTES) {
-      throw new Error(
-        `material ${id} is ${String(resource.bytes.byteLength)} bytes, over the ${String(ARTIFACT_CHUNK_THRESHOLD_BYTES)} bytes this node fetches in one request`,
-      )
-    }
     const fileName = materialFileName(id, names.get(id))
     const path = join(MATERIALS_DIRECTORY, fileName)
     writeFileSync(join(options.directory, path), resource.bytes)

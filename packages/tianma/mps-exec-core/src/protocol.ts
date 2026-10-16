@@ -15,6 +15,15 @@ export const EXEC_PROTOCOL_HEADER = 'X-Exec-Protocol'
 /** The envelope code every successful response carries. */
 export const EXEC_OK_CODE = 'OK'
 
+/** Size above which the protocol requires a chunked transfer rather than one request. */
+export const ARTIFACT_CHUNK_THRESHOLD_BYTES = 100 * 1024 * 1024
+
+/**
+ * Size of one chunk in a chunked transfer, in either direction. Small enough for one
+ * request's budget, and the unit a resumed transfer is measured in.
+ */
+export const ARTIFACT_CHUNK_SIZE_BYTES = 8 * 1024 * 1024
+
 /** Every envelope code the protocol defines, including the success code. */
 export const EXEC_ERROR_CODES = [
   'OK',

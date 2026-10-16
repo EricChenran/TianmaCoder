@@ -7,6 +7,8 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  ARTIFACT_CHUNK_SIZE_BYTES,
+  ARTIFACT_CHUNK_THRESHOLD_BYTES,
   DEFAULT_PLATFORM_BASE_PATH,
   DEFAULT_PLATFORM_PORT,
   EXEC_PROTOCOL_HEADER,
@@ -397,12 +399,15 @@ describe('protocol client', () => {
    * Build a client over a scripted transport.
    * @param responses - the script.
    * @param token - the token the client reports.
+   * @param downloads - the download script: one response per call, or a function deriving it.
+   * @param options - client options the case under test needs.
    * @returns the client, its calls, and a setter for the token.
    */
   function client(
     responses: (ExecHttpResponse | ((request: ExecHttpRequest) => ExecHttpResponse))[],
     token?: string,
-    downloads: ExecBinaryResponse[] = [],
+    downloads: (ExecBinaryResponse | ((request: ExecHttpRequest) => ExecBinaryResponse))[] = [],
+    options: { resourceChunkBytes?: number } = {},
   ): { client: ExecClient; calls: RecordedCall[]; setToken: (value: string | undefined) => void } {
     const script = scripted(responses)
     let current = token
@@ -412,12 +417,13 @@ describe('protocol client', () => {
       nodeId: 'node-3f2a',
       transport: script.transport,
       token: () => current,
+      resourceChunkBytes: options.resourceChunkBytes,
       download: async (request) => {
         script.calls.push({ request })
-        const response = downloads[Math.min(downloaded, downloads.length - 1)]
+        const scriptedResponse = downloads[Math.min(downloaded, downloads.length - 1)]
         downloaded += 1
-        if (response === undefined) throw new Error('scripted download ran out of responses')
-        return response
+        if (scriptedResponse === undefined) throw new Error('scripted download ran out of responses')
+        return typeof scriptedResponse === 'function' ? scriptedResponse(request) : scriptedResponse
       },
     })
     return { client: instance, calls: script.calls, setToken: (value) => { current = value } }
@@ -432,6 +438,42 @@ describe('protocol client', () => {
    */
   function file(bytes: Uint8Array, sha256: string = sha256Of(bytes), status = 200): ExecBinaryResponse {
     return { status, headers: { 'x-artifact-sha256': sha256 }, bytes }
+  }
+
+  /**
+   * Build the answer to a `HEAD` size probe.
+   * @param bytes - the file the platform holds.
+   * @param sha256 - the digest the platform states, defaulting to the true one.
+   * @returns the response, stating the length and the digest the platform knows.
+   */
+  function sized(bytes: Uint8Array, sha256: string = sha256Of(bytes)): ExecBinaryResponse {
+    return {
+      status: 200,
+      headers: { 'content-length': String(bytes.byteLength), 'x-artifact-sha256': sha256 },
+      bytes: new Uint8Array(),
+    }
+  }
+
+  /**
+   * Build the answer to one ranged request.
+   * @param bytes - the file the platform holds.
+   * @param range - the `Range` header the request carried.
+   * @param sha256 - the digest the platform states, defaulting to the true one.
+   * @returns the range asked for, the whole file when no range was stated, or a 416.
+   */
+  function ranged(bytes: Uint8Array, range: string | undefined, sha256: string = sha256Of(bytes)): ExecBinaryResponse {
+    const parsed = /^bytes=(\d+)-(\d+)$/u.exec(range ?? '')
+    if (parsed === null) return file(bytes, sha256)
+    const start = Number(parsed[1])
+    const end = Number(parsed[2])
+    return {
+      status: 206,
+      headers: {
+        'content-range': `bytes ${String(start)}-${String(end)}/${String(bytes.byteLength)}`,
+        'x-artifact-sha256': sha256,
+      },
+      bytes: bytes.slice(start, end + 1),
+    }
   }
 
   it('exposes the address and node id it was built with', () => {
@@ -738,17 +780,112 @@ describe('protocol client', () => {
     expect(body.get('kind')).toBe('log')
   })
 
-  it('downloads a task material and checks it against the stated digest', async () => {
+  it('asks a material its length first and then fetches it in one request', async () => {
     const bytes = new TextEncoder().encode('# 需求说明\n')
-    const { client: instance, calls } = client([], 'tok', [file(bytes)])
+    const { client: instance, calls } = client([], 'tok', [sized(bytes), file(bytes)])
 
     const resource = await instance.resource('tsk_1', 'art_01H8Z')
 
-    expect(calls[0]?.request.method).toBe('GET')
-    expect(calls[0]?.request.url.endsWith('/exec/v1/tasks/tsk_1/resources/art_01H8Z')).toBe(true)
-    expect(calls[0]?.request.headers.authorization).toBe('Bearer tok')
+    expect(calls[0]?.request.method).toBe('HEAD')
+    expect(calls[1]?.request.method).toBe('GET')
+    expect(calls[1]?.request.url.endsWith('/exec/v1/tasks/tsk_1/resources/art_01H8Z')).toBe(true)
+    expect(calls[1]?.request.headers.range).toBeUndefined()
+    expect(calls[1]?.request.headers.authorization).toBe('Bearer tok')
     expect(new TextDecoder().decode(resource.bytes)).toBe('# 需求说明\n')
     expect(resource.sha256).toBe(sha256Of(bytes))
+  })
+
+  it('fetches the material whole when the platform states no length', async () => {
+    const bytes = new TextEncoder().encode('材料\n')
+    const { client: instance, calls } = client([], undefined, [file(bytes, sha256Of(bytes)), file(bytes)])
+
+    const resource = await instance.resource('tsk_1', 'art_01H8Z')
+
+    expect(calls.map(call => call.request.method)).toEqual(['HEAD', 'GET'])
+    expect(new TextDecoder().decode(resource.bytes)).toBe('材料\n')
+  })
+
+  it('fetches a material over the protocol ceiling as byte ranges', async () => {
+    const bytes = new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    const digest = sha256Of(bytes)
+    const { client: instance, calls } = client([], 'tok', [
+      sized(bytes, digest),
+      request => ranged(bytes, request.headers.range, digest),
+    ])
+
+    const resource = await instance.resource('tsk_1', 'art_big')
+
+    expect(calls).toHaveLength(14)
+    expect(calls[0]?.request.method).toBe('HEAD')
+    expect(calls[1]?.request.headers.range).toBe(`bytes=0-${String(ARTIFACT_CHUNK_SIZE_BYTES - 1)}`)
+    expect(calls[13]?.request.headers.range)
+      .toBe(`bytes=${String(12 * ARTIFACT_CHUNK_SIZE_BYTES)}-${String(ARTIFACT_CHUNK_THRESHOLD_BYTES)}`)
+    expect(calls.every(call => call.request.headers.authorization === 'Bearer tok')).toBe(true)
+    expect(resource.bytes.byteLength).toBe(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    expect(resource.sha256).toBe(digest)
+  })
+
+  it('repeats a range the platform refused before it answers it', async () => {
+    const bytes = new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    const digest = sha256Of(bytes)
+    let answered = 0
+    const { client: instance, calls } = client([], undefined, [
+      sized(bytes, digest),
+      (request) => {
+        answered += 1
+        if (answered === 1) return { status: 416, headers: {}, bytes: new Uint8Array() }
+        if (answered === 2) return { status: 503, headers: {}, bytes: new Uint8Array() }
+        return ranged(bytes, request.headers.range, digest)
+      },
+    ])
+
+    const resource = await instance.resource('tsk_1', 'art_big')
+
+    expect(calls).toHaveLength(16)
+    expect(calls.slice(1, 4).map(call => call.request.headers.range))
+      .toEqual(['bytes=0-8388607', 'bytes=0-8388607', 'bytes=0-8388607'])
+    expect(calls[4]?.request.headers.range).toBe('bytes=8388608-16777215')
+    expect(resource.sha256).toBe(digest)
+  })
+
+  it('accepts the whole file when the platform answers a range with the file itself', async () => {
+    const bytes = new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    const digest = sha256Of(bytes)
+    const { client: instance, calls } = client([], undefined, [sized(bytes, digest), () => file(bytes, digest)])
+
+    const resource = await instance.resource('tsk_1', 'art_big')
+
+    expect(calls).toHaveLength(2)
+    expect(resource.bytes.byteLength).toBe(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    expect(resource.sha256).toBe(digest)
+  })
+
+  it('refuses a range shorter than the one it asked for', async () => {
+    const bytes = new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    const digest = sha256Of(bytes)
+    const { client: instance } = client([], undefined, [
+      sized(bytes, digest),
+      (request) => {
+        const answer = ranged(bytes, request.headers.range, digest)
+        return { ...answer, bytes: answer.bytes.slice(0, answer.bytes.byteLength - 1) }
+      },
+    ])
+
+    await expect(instance.resource('tsk_1', 'art_big'))
+      .rejects.toThrow(/answered range 0-8388607 with 8388607 bytes instead of 8388608/)
+  })
+
+  it('refuses an assembled material that does not match the digest the probe stated', async () => {
+    const bytes = new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
+    const digest = sha256Of(bytes)
+    const tampered = new Uint8Array(bytes)
+    tampered[0] = 1
+    const { client: instance } = client([], undefined, [
+      sized(bytes, digest),
+      request => ranged(tampered, request.headers.range, digest),
+    ])
+
+    await expect(instance.resource('tsk_1', 'art_big')).rejects.toMatchObject({ code: 'CHECKSUM_MISMATCH' })
   })
 
   it('refuses material whose contents do not match the stated digest', async () => {

@@ -8,10 +8,12 @@
  */
 
 import { createHash } from 'node:crypto'
-import { retryAfterDelayMs } from './backoff.ts'
+import { requestRetryDelayMs, retryAfterDelayMs } from './backoff.ts'
 import type { PlatformEndpoint } from './endpoint.ts'
 import { ExecResponseError } from './errors.ts'
 import {
+  ARTIFACT_CHUNK_SIZE_BYTES,
+  ARTIFACT_CHUNK_THRESHOLD_BYTES,
   EXEC_OK_CODE,
   EXEC_PROTOCOL_HEADER,
   EXEC_PROTOCOL_VERSION,
@@ -24,8 +26,8 @@ import type { ExecEnvelope } from './protocol.ts'
 export interface ExecHttpRequest {
   /** Absolute request URL. */
   url: string
-  /** HTTP method; every `exec/v1` endpoint is `GET` or `POST`. */
-  method: 'GET' | 'POST'
+  /** HTTP method; the protocol's endpoints are `GET`, `POST`, or a `HEAD` size probe. */
+  method: 'GET' | 'POST' | 'HEAD'
   /** Request headers, already including the protocol header. */
   headers: Record<string, string>
   /**
@@ -93,6 +95,11 @@ export interface ExecClientOptions {
    * orders of magnitude, so it gets its own budget rather than the request one.
    */
   artifactTimeoutMs?: number | undefined
+  /**
+   * Size of one range this client asks for when a material is too large for one
+   * request; defaults to the protocol's chunk size.
+   */
+  resourceChunkBytes?: number | undefined
 }
 
 /** Which slot capacity a registering or heartbeating node reports. */
@@ -462,6 +469,74 @@ export function sha256Of(bytes: Uint8Array): string {
 }
 
 /**
+ * How many times one material range is asked for before the refusal is reported. A
+ * range that failed arrived with neither bytes nor an explanation of its own, so
+ * repeating it is the whole available response.
+ */
+const MATERIAL_RANGE_ATTEMPTS = 3
+
+/**
+ * Check one material's contents against the length and the digest the platform stated.
+ * @param artifactId - the material, named in the failure text.
+ * @param bytes - the contents.
+ * @param stated - the digest the platform stated, empty when it stated none.
+ * @param status - the status the contents arrived with, reported with the failure.
+ * @param expectedTotal - the length the platform stated, when it stated one.
+ * @returns the contents and the digest the node computed.
+ * @throws ExecResponseError when the length or the digest does not match.
+ */
+function verifiedResource(
+  artifactId: string,
+  bytes: Uint8Array,
+  stated: string,
+  status: number,
+  expectedTotal?: number,
+): ExecResource {
+  if (expectedTotal !== undefined && bytes.byteLength !== expectedTotal) {
+    throw new ExecResponseError(
+      `resource ${artifactId} answered ${String(bytes.byteLength)} bytes where the platform stated ${String(expectedTotal)}`,
+      { code: 'INTERNAL_ERROR', httpStatus: status },
+    )
+  }
+  const sha256 = sha256Of(bytes)
+  // A missing digest is a mismatch: the node must not hand bytes over unverified.
+  if (stated !== sha256) {
+    throw new ExecResponseError(`resource ${artifactId} did not match the digest the platform stated`, {
+      code: 'CHECKSUM_MISMATCH',
+      httpStatus: status,
+    })
+  }
+  return { bytes, sha256 }
+}
+
+/**
+ * Join the pieces of one material into the whole the platform stated the length of.
+ * @param parts - the pieces, in the order they were asked for.
+ * @param total - the length the platform stated.
+ * @returns the assembled contents.
+ */
+function concatBytes(parts: readonly Uint8Array[], total: number): Uint8Array {
+  const assembled = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    assembled.set(part, offset)
+    offset += part.byteLength
+  }
+  return assembled
+}
+
+/**
+ * Wait one retry delay.
+ * @param ms - milliseconds to wait.
+ * @returns a promise that settles after the delay.
+ */
+async function delayMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+/**
  * Wrap `fetch` as the transport, lower-casing response header names so the rest
  * of the client reads them the same way from every implementation.
  * @param fetchImpl - the `fetch` implementation to call; defaults to the global one.
@@ -531,6 +606,7 @@ export class ExecClient {
   readonly #token: () => string | undefined
   readonly #requestTimeoutMs: number
   readonly #artifactTimeoutMs: number
+  readonly #resourceChunkBytes: number
 
   /**
    * @param options - the platform address, node id, optional transport and token supplier, and timeout.
@@ -543,6 +619,7 @@ export class ExecClient {
     this.#token = options.token ?? (() => undefined)
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000
     this.#artifactTimeoutMs = options.artifactTimeoutMs ?? 15 * 60 * 1000
+    this.#resourceChunkBytes = options.resourceChunkBytes ?? ARTIFACT_CHUNK_SIZE_BYTES
   }
 
   /** The platform address this client dials. */
@@ -673,8 +750,9 @@ export class ExecClient {
 
   /**
    * Download one task material and check it against the digest the platform states.
-   * The protocol requires the node to verify it, so bytes that do not match are
-   * never handed to a caller.
+   * A material the protocol requires in pieces is asked for as a sequence of byte
+   * ranges, so it never has to fit in one request; the digest is verified over the
+   * assembled contents either way.
    * @param taskId - task id.
    * @param artifactId - the material, which the platform checks belongs to the task.
    * @param signal - caller cancellation.
@@ -682,11 +760,26 @@ export class ExecClient {
    */
   async resource(taskId: string, artifactId: string, signal?: AbortSignal): Promise<ExecResource> {
     const path = `/tasks/${taskId}/resources/${artifactId}`
+    const size = await this.#materialSize(path, signal)
+    if (size === undefined || size.total <= ARTIFACT_CHUNK_THRESHOLD_BYTES) {
+      return await this.#materialInOneRequest(path, artifactId, signal)
+    }
+    return await this.#materialInRanges(path, artifactId, size, signal)
+  }
+
+  /**
+   * Fetch one material whole and verify it against the digest the platform states.
+   * @param path - protocol path.
+   * @param artifactId - the material, named in the failure text.
+   * @param signal - caller cancellation.
+   * @returns the verified contents and the digest.
+   */
+  async #materialInOneRequest(path: string, artifactId: string, signal?: AbortSignal): Promise<ExecResource> {
     const response = await this.#download({
       url: this.#endpoint.url(path),
       method: 'GET',
       headers: this.#requestHeaders(),
-      timeoutMs: this.#requestTimeoutMs,
+      timeoutMs: this.#artifactTimeoutMs,
       signal,
     })
     if (response.status !== 200) {
@@ -694,14 +787,115 @@ export class ExecClient {
       const envelope = this.#envelopeOf(path, response.status, new TextDecoder().decode(response.bytes))
       this.#requireOk<unknown>(path, response.status, envelope)
     }
-    const sha256 = sha256Of(response.bytes)
-    if (response.headers['x-artifact-sha256'] !== sha256) {
-      throw new ExecResponseError(`resource ${artifactId} did not match the digest the platform stated`, {
-        code: 'CHECKSUM_MISMATCH',
-        httpStatus: response.status,
-      })
+    return verifiedResource(artifactId, response.bytes, response.headers['x-artifact-sha256'] ?? '', response.status)
+  }
+
+  /**
+   * Fetch one material as a sequence of byte ranges, then verify the assembled whole.
+   * @param path - protocol path.
+   * @param artifactId - the material, named in the failure text.
+   * @param size - the length and digest the platform stated.
+   * @param signal - caller cancellation.
+   * @returns the verified contents and the digest.
+   */
+  async #materialInRanges(
+    path: string,
+    artifactId: string,
+    size: { total: number; sha256: string },
+    signal?: AbortSignal,
+  ): Promise<ExecResource> {
+    const parts: Uint8Array[] = []
+    let stated = size.sha256
+    for (let start = 0; start < size.total; start += this.#resourceChunkBytes) {
+      const end = Math.min(start + this.#resourceChunkBytes, size.total) - 1
+      const chunk = await this.#materialRange(path, start, end, signal)
+      // The probe's digest is the whole artifact's and wins; a range states one only
+      // when the platform had no length to answer the probe with.
+      if (stated === '' && chunk.sha256 !== '') stated = chunk.sha256
+      // The platform answered with the whole file, which settles the download.
+      if (chunk.whole) return verifiedResource(artifactId, chunk.bytes, stated, chunk.status, size.total)
+      const wanted = end - start + 1
+      if (chunk.bytes.byteLength !== wanted) {
+        throw new ExecResponseError(
+          `resource ${artifactId} answered range ${String(start)}-${String(end)} with ${String(chunk.bytes.byteLength)} bytes instead of ${String(wanted)}`,
+          { code: 'INTERNAL_ERROR', httpStatus: chunk.status },
+        )
+      }
+      parts.push(chunk.bytes)
     }
-    return { bytes: response.bytes, sha256 }
+    return verifiedResource(artifactId, concatBytes(parts, size.total), stated, 206, size.total)
+  }
+
+  /**
+   * Ask the platform how long one material is and which digest it states. A platform
+   * that will not answer a `HEAD`, or states no length, is asked for the file whole
+   * instead — which is what this client did before it could ask.
+   * @param path - protocol path.
+   * @param signal - caller cancellation.
+   * @returns the stated length and digest, or undefined when the platform states neither.
+   */
+  async #materialSize(path: string, signal?: AbortSignal): Promise<{ total: number; sha256: string } | undefined> {
+    let response: ExecBinaryResponse
+    try {
+      response = await this.#download({
+        url: this.#endpoint.url(path),
+        method: 'HEAD',
+        headers: this.#requestHeaders(),
+        timeoutMs: this.#requestTimeoutMs,
+        signal,
+      })
+    } catch {
+      // A transport that cannot make the probe is not a failed download: the caller
+      // fetches the material whole and reports whatever goes wrong there.
+      return undefined
+    }
+    if (response.status !== 200) return undefined
+    const total = Number(response.headers['content-length'])
+    if (!Number.isInteger(total) || total <= 0) return undefined
+    return { total, sha256: response.headers['x-artifact-sha256'] ?? '' }
+  }
+
+  /**
+   * Fetch one range of a material, repeating the same range while the platform answers
+   * with neither the range nor the file.
+   * @param path - protocol path.
+   * @param start - first byte wanted.
+   * @param end - last byte wanted, inclusive.
+   * @param signal - caller cancellation.
+   * @returns the bytes, the digest the platform stated, and how the answer arrived.
+   */
+  async #materialRange(
+    path: string,
+    start: number,
+    end: number,
+    signal?: AbortSignal,
+  ): Promise<{ bytes: Uint8Array; sha256: string; whole: boolean; status: number }> {
+    const range = `bytes=${String(start)}-${String(end)}`
+    for (let attempt = 1; ; attempt += 1) {
+      const response = await this.#download({
+        url: this.#endpoint.url(path),
+        method: 'GET',
+        headers: { ...this.#requestHeaders(), range },
+        timeoutMs: this.#artifactTimeoutMs,
+        signal,
+      })
+      const sha256 = response.headers['x-artifact-sha256'] ?? ''
+      if (response.status === 206) return { bytes: response.bytes, sha256, whole: false, status: response.status }
+      // A platform that ignored the range answered with the whole file, which answers
+      // a request for part of it.
+      if (response.status === 200) return { bytes: response.bytes, sha256, whole: true, status: response.status }
+      if (attempt >= MATERIAL_RANGE_ATTEMPTS) {
+        const text = new TextDecoder().decode(response.bytes)
+        if (text.trim() !== '') {
+          this.#requireOk<unknown>(path, response.status, this.#envelopeOf(path, response.status, text))
+        }
+        throw new ExecResponseError(`resource range ${range} was refused with HTTP ${String(response.status)}`, {
+          code: 'INTERNAL_ERROR',
+          httpStatus: response.status,
+        })
+      }
+      await delayMs(requestRetryDelayMs(attempt))
+    }
   }
 
   /**

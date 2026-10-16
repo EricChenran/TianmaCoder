@@ -126,6 +126,7 @@ export { checkoutSessionReporter, restoredSessionReports } from './session.ts'
 export {
   ARTIFACT_CHUNK_SIZE_BYTES,
   ARTIFACT_CHUNK_THRESHOLD_BYTES,
+  ArtifactTooLargeError,
   clientArtifactUploader,
 } from './artifacts.ts'
 export type {

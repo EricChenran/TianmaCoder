@@ -5,7 +5,9 @@
  * that the origin holds the base commit the platform dispatched, and resets the work
  * branch onto that commit with the previous attempt's leftovers cleared. A base no
  * fetch can reach is refused rather than silently worked from, because the result
- * would describe a tree nobody dispatched.
+ * would describe a tree nobody dispatched. A base the workspace does not hold is the
+ * platform re-dispatching after a baseline refresh, and the tree that holds the earlier
+ * base is cleared before the new one is checked out.
  * @module @tianma/dsh-mps-executor/checkout
  */
 
@@ -25,6 +27,12 @@ export interface PrepareCheckoutOptions {
   repository: TaskRepository
   /** git on this host. */
   git: GitRunner
+  /**
+   * Baseline this workspace held when the node last served it, when one was recorded. A
+   * dispatched base that differs from this one is a re-dispatch the platform refreshed,
+   * not the workspace's first task.
+   */
+  heldBaseCommit?: string | undefined
 }
 
 /** Options for {@link checkoutAllocator}. */
@@ -85,7 +93,7 @@ async function holdsCommit(git: GitRunner, directory: string, commit: string): P
  * such commit, or when git fails.
  */
 export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<TaskCheckout> {
-  const { directory, repository, git } = options
+  const { directory, repository, git, heldBaseCommit } = options
   const url = required(repository.url, 'repository to fetch')
   const baseBranch = required(repository.base_branch, 'base branch')
   const baseCommit = required(repository.base_commit, 'base commit')
@@ -112,6 +120,18 @@ export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<
     const tip = (await git.run(directory, ['rev-parse', `origin/${baseBranch}`])).stdout.trim()
     throw new Error(`refusing to work from a base that is behind origin/${baseBranch}: the task dispatched ${baseCommit}, and origin/${baseBranch} holds ${tip}`)
   }
+  // The platform refreshes the baseline after a BASE_COMMIT_MISMATCH and re-dispatches the
+  // task into the workspace that reported it, so that workspace holds a base other than the
+  // one dispatched. What the earlier attempt left in the tree would make the checkout below
+  // refuse the new base, which would fail this workspace on every re-dispatch; the tree and
+  // the work branch are what the refreshed base replaces. The directory and the session are
+  // what the platform expects to find again, so neither is touched.
+  const refreshed = heldBaseCommit !== undefined && heldBaseCommit !== baseCommit
+  // A cache that holds no HEAD yet has no tree to clear, and `reset --hard` would fail on it.
+  if (refreshed && await holdsCommit(git, directory, 'HEAD')) {
+    await git.run(directory, ['reset', '--quiet', '--hard'])
+    await git.run(directory, ['clean', '--quiet', '-fd'])
+  }
   await git.run(directory, ['checkout', '--quiet', '-B', workBranch, baseCommit])
   // `checkout -B` leaves the tree alone when HEAD already sits on the branch, so a
   // retry in this workspace needs the reset to drop the last attempt's edits.
@@ -132,9 +152,14 @@ export function checkoutAllocator(options: CheckoutAllocatorOptions): TaskWorksp
       const workspaceId = taskWorkspaceId(assignment.payload)
       if (workspaceId === undefined) return undefined
       const directory = await options.store.ensure(workspaceId, assignment.task_id)
+      // The baseline the workspace held when the node last reported a session for it, which
+      // is what tells a re-dispatch after a baseline refresh from this workspace's first task.
+      const heldBaseCommit = options.store.records
+        .find(record => record.workspace_id === workspaceId.trim())
+        ?.session?.base_commit
       const repository = taskRepository(assignment.payload)
       if (repository === undefined) return { directory }
-      const checkout = await prepareCheckout({ directory, repository, git: options.git })
+      const checkout = await prepareCheckout({ directory, repository, git: options.git, heldBaseCommit })
       return { directory, checkout }
     },
   }

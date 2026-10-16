@@ -3,7 +3,7 @@
  * names, and what it refuses.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
@@ -168,15 +168,22 @@ describe('task materials', () => {
     })).rejects.toThrow(/RESOURCE_NOT_IN_SCOPE/)
   })
 
-  it('refuses a material larger than one request', async () => {
+  it('brings in a material larger than one request', async () => {
     const workspace = temporary('mps-materials-')
     const platform = new FakeMaterials()
+    // The client asks the platform for a material this size in byte ranges; this case
+    // pins that the node writes what it was handed instead of refusing the size itself.
     platform.contents.set('art_big', new Uint8Array(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1))
 
-    await expect(fetchMaterials({
+    const written = await fetchMaterials({
       directory: workspace,
       assignment: assignment({ context: { resources: ['art_big'] } }),
       source: platform,
-    })).rejects.toThrow(/over the 104857600 bytes this node fetches in one request/)
+    })
+
+    expect(written).toEqual([
+      { artifact_id: 'art_big', file_name: undefined, path: join(MATERIALS_DIRECTORY, 'art_big'), sha256: 'sha-of-art_big' },
+    ])
+    expect(statSync(join(workspace, MATERIALS_DIRECTORY, 'art_big')).size).toBe(ARTIFACT_CHUNK_THRESHOLD_BYTES + 1)
   })
 })
