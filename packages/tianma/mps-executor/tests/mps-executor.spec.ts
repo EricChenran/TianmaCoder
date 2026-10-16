@@ -6,12 +6,12 @@
  */
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  Config, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
+  Config, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
 import type {
   ExecHttpRequest,
   ExecHttpResponse,
@@ -947,6 +947,49 @@ describe('the runner the node falls back to', () => {
       .filter(call => call.request.url.endsWith('/heartbeat'))
       .map(call => JSON.parse(jsonBody(call.request)) as Record<string, unknown>)
     expect(heartbeats.every(body => !('releasable_workspaces' in body))).toBe(true)
+  })
+
+  it('offers the workspaces it could release while the disk stops it taking work', async () => {
+    vi.useFakeTimers()
+    const root = codingRoot()
+    const kept = join(root, 'ws_1')
+    mkdirSync(kept, { recursive: true })
+    writeFileSync(join(kept, 'f.bin'), Buffer.alloc(2 * 1024 * 1024))
+    writeFileSync(join(root, WORKSPACE_STATE_FILE), JSON.stringify({
+      version: WORKSPACE_STATE_VERSION,
+      workspaces: [{ workspace_id: 'ws_1', directory: kept, last_used_at: '2026-10-15T04:03:55.123Z' }],
+    }))
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope(HEARTBEAT),
+      envelope(HEARTBEAT),
+    ])
+    let free = 1
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor({ diskMinGb: 5, codingRoot: root }),
+      secret: () => 's',
+      transport: queue.transport,
+      probeResources: async () => ({ cpu_percent: 0, mem_percent: 0, disk_free_gb: free }),
+      report: () => {},
+    })
+
+    // The handshake order the node documents: read what it kept, then talk to the platform.
+    await node.restore()
+    await node.bootstrap()
+    await node.heartbeatOnce()
+    free = 40
+    await node.heartbeatOnce()
+
+    const heartbeats = queue.calls
+      .filter(call => call.request.url.endsWith('/heartbeat'))
+      .map(call => JSON.parse(jsonBody(call.request)) as Record<string, unknown>)
+    // What the node offers is what the platform chooses from, footprint and all; once there
+    // is room again the list goes away rather than staying stale.
+    expect(heartbeats[0]?.['releasable_workspaces']).toEqual([
+      { workspace_id: 'ws_1', size_mb: 2, last_task_finished_at: '2026-10-15T04:03:55.123Z' },
+    ])
+    expect(heartbeats[1]).not.toHaveProperty('releasable_workspaces')
   })
 
   it('carries on when the platform cannot be told about draining', async () => {
