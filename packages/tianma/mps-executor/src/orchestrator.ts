@@ -188,6 +188,12 @@ export interface TaskOrchestratorOptions {
    * reports that the attempt has no workspace to upload from.
    */
   artifacts?: TaskArtifactUploader | undefined
+  /**
+   * The largest batch of log lines the platform accepts, as it currently states it;
+   * defaults to the protocol's own ceiling. It is read per batch, because a configuration
+   * revision may lower it.
+   */
+  logBatchMaxLines?: (() => number) | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -246,6 +252,7 @@ export class TaskOrchestrator {
   #claimFailure: string | undefined
 
   readonly #claimLongPollSeconds: () => number
+  readonly #logBatchMaxLines: () => number
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #report: (report: ExecutorReport) => void
@@ -295,6 +302,7 @@ export class TaskOrchestrator {
     })
     this.#canClaim = options.canClaim
     this.#claimLongPollSeconds = options.claimLongPollSeconds ?? (() => options.settings.claimLongPollSeconds)
+    this.#logBatchMaxLines = options.logBatchMaxLines ?? (() => LOG_BATCH_MAX_LINES)
     this.#now = options.now ?? (() => new Date())
   }
 
@@ -707,17 +715,30 @@ export class TaskOrchestrator {
       const value = boundLogLine(redactSecretText(line.text))
       return { at: line.at, level: line.level, text: value.text, truncated: value.truncated }
     })
-    for (let start = 0; start < bounded.length; start += LOG_BATCH_MAX_LINES) {
-      const batch = bounded.slice(start, start + LOG_BATCH_MAX_LINES)
+    const cap = this.#batchLines()
+    for (let start = 0; start < bounded.length; start += cap) {
+      const batch = bounded.slice(start, start + cap)
       // Through the spool: a platform that is briefly unreachable must not cost the lines
       // an attempt produced, and the batch id makes offering them twice harmless.
       await this.#spool.post(running.assignment.task_id, {
         batch_id: logBatchId(),
+        // The attempt travels with the batch: the platform names the file it lands in after
+        // it, so two attempts at one task must not append to the same one.
+        attempt: running.assignment.attempt,
         stream,
         lines: batch.map(({ at, level, text }) => ({ at, level, text })),
         truncated: batch.some(line => line.truncated),
       })
     }
+  }
+
+  /**
+   * The largest batch of log lines to submit: the protocol's ceiling, lowered by whatever
+   * the platform currently accepts.
+   * @returns the line count one batch may carry.
+   */
+  #batchLines(): number {
+    return Math.min(LOG_BATCH_MAX_LINES, this.#logBatchMaxLines())
   }
 
   async #ackAbort(running: RunningAttempt): Promise<void> {
@@ -764,6 +785,15 @@ export class TaskOrchestrator {
         return
       } catch (error) {
         const recovery = error instanceof ExecResponseError ? error.recovery : 'retry'
+        if (recovery === 'reject-result') {
+          // The platform refused this result's contents — a path it will not take, a branch
+          // name it will not accept — so the same body is refused identically every time.
+          this.#report({
+            level: 'error',
+            message: `the platform refused the ${outcome} result for ${taskId} on its contents, so it was not repeated: ${toError(error).message}`,
+          })
+          return
+        }
         if (recovery !== 'retry' && recovery !== 'reauthenticate') {
           const already = error instanceof ExecResponseError && error.code === 'ALREADY_FINAL'
           this.#report({

@@ -22,6 +22,8 @@ export const LOG_SPOOL_DIRECTORY = '.buffers'
 export interface SpooledBatch {
   /** Idempotency key the platform deduplicates on, so offering a batch twice is harmless. */
   batch_id: string
+  /** Attempt the lines belong to, which is how the platform keeps each attempt's log apart. */
+  attempt: number
   /** Stream the lines came from. */
   stream: string
   /** The lines, already bounded and redacted. */

@@ -306,6 +306,9 @@ describe('the CLI runner', () => {
     // Missing inputs are what `blocked` is for: the run never starts.
     expect(result.outcome).toBe('blocked')
     expect(result.summary).toBe("could not bring in the task's materials: RESOURCE_NOT_IN_SCOPE: not in scope")
+    // The reason travels as evidence too: the platform writes its human confirmation from it.
+    expect(result.evidence?.blockedReason)
+      .toBe("could not bring in the task's materials: RESOURCE_NOT_IN_SCOPE: not in scope")
     expect(reported(context).some(line => line.startsWith('stdout:cwd='))).toBe(false)
     expect(context.published).toBe(0)
   })

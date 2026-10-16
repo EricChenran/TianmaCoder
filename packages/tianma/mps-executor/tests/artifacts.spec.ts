@@ -201,6 +201,21 @@ describe('artifact upload', () => {
       .toBe('the platform refused shots/detail.png at 14 bytes: ARTIFACT_TOO_LARGE: over the platform ceiling')
   })
 
+  it('takes the platform ceiling when the platform states the smaller one', async () => {
+    const { directory } = workspaceWithScreenshot()
+    const platform = new RecordingPlatform()
+    const uploader = clientArtifactUploader({
+      client: platform,
+      maxBytes: 1024 * 1024,
+      platformCeiling: () => 4,
+    })
+
+    await expect(uploader.upload({ taskId: 'tsk_1', directory, kind: 'report', path: 'shots/detail.png' }))
+      .rejects.toThrow(/over the 4 bytes this node uploads/)
+    // Refused before anything was sent, because the platform refuses it anyway.
+    expect(platform.uploads).toEqual([])
+  })
+
   it('takes the smaller of the deployment limit and one request of bytes', async () => {
     const { directory } = workspaceWithScreenshot()
     const platform = new RecordingPlatform()

@@ -9,6 +9,7 @@
 
 import { createHash } from 'node:crypto'
 import { requestRetryDelayMs, retryAfterDelayMs } from './backoff.ts'
+import { ulid } from './ids.ts'
 import type { PlatformEndpoint } from './endpoint.ts'
 import { ExecResponseError } from './errors.ts'
 import {
@@ -17,6 +18,7 @@ import {
   EXEC_OK_CODE,
   EXEC_PROTOCOL_HEADER,
   EXEC_PROTOCOL_VERSION,
+  EXEC_REQUEST_ID_HEADER,
   isAlreadyFinal,
   parseExecEnvelope,
 } from './protocol.ts'
@@ -124,8 +126,6 @@ export interface ExecCapabilities {
   access_modes: string[]
   /** Largest single artifact the node uploads without chunking. */
   max_artifact_bytes: number
-  /** Protocol versions the node speaks. */
-  supported_protocols: string[]
 }
 
 /** Body of `POST /auth/token`, without the node id the client injects. */
@@ -214,6 +214,19 @@ export interface ExecResources {
   disk_free_gb: number
 }
 
+/**
+ * One workspace a node offers for release. A node names these only while its disk is too
+ * full to hold another attempt; which one is released stays the platform's decision.
+ */
+export interface ExecReleasableWorkspace {
+  /** Platform workspace id. */
+  workspace_id: string
+  /** Its footprint on disk, in megabytes, as the node measured it. */
+  size_mb: number
+  /** When the workspace was last used, as an RFC 3339 string. */
+  last_task_finished_at: string
+}
+
 /** Body of `POST /heartbeat`, without the node id the client injects. */
 export interface ExecHeartbeatRequest {
   /** Tasks running right now; every one of these has its lease renewed. */
@@ -226,6 +239,11 @@ export interface ExecHeartbeatRequest {
   node_time: string
   /** Agent version. */
   agent_version: string
+  /**
+   * Workspaces this node could release, offered only while it is below its disk floor and
+   * claiming nothing. A platform that predates the field ignores it.
+   */
+  releasable_workspaces?: ExecReleasableWorkspace[] | undefined
 }
 
 /** One command the platform sends down in a heartbeat response. */
@@ -324,6 +342,8 @@ export interface ExecLogLine {
 export interface ExecLogRequest {
   /** Idempotency key for this batch. */
   batch_id: string
+  /** Attempt the lines belong to, which is how the platform keeps each attempt's log apart. */
+  attempt: number
   /** Stream the lines came from. */
   stream: string
   /** Lines in this batch. */
@@ -354,6 +374,12 @@ export interface ExecResultEvidence {
   report_artifact_id?: string | undefined
   /** Diff artifact id. */
   patch_artifact_id?: string | undefined
+  /**
+   * Why the attempt could not go on, when it reported `blocked`. The platform builds the
+   * human confirmation it raises from this text, so it names what was missing rather than
+   * repeating the summary.
+   */
+  blockedReason?: string | undefined
 }
 
 /** Body of `POST /tasks/{id}/result`, without the node id the client injects. */
@@ -466,6 +492,17 @@ export interface ExecArtifactUpload {
  */
 export function sha256Of(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+/**
+ * One failure message, carrying the platform's request id when it echoed one, so a node's
+ * own report of a failure can be joined to the platform's access log.
+ * @param message - what went wrong.
+ * @param requestId - the id the envelope echoed, empty when it echoed none.
+ * @returns the message to report.
+ */
+function withRequestId(message: string, requestId: string): string {
+  return requestId === '' ? message : `${message} (request ${requestId})`
 }
 
 /**
@@ -676,6 +713,9 @@ export class ExecClient {
     const token = this.#token()
     const headers: Record<string, string> = {
       [EXEC_PROTOCOL_HEADER]: EXEC_PROTOCOL_VERSION,
+      // A fresh id per request: the platform echoes it, so its access log and this node's
+      // own record of a failure name the same request.
+      [EXEC_REQUEST_ID_HEADER]: ulid(),
       accept: 'application/json',
     }
     if (token !== undefined && token !== '') headers.authorization = `Bearer ${token}`
@@ -719,7 +759,7 @@ export class ExecClient {
     }
     if (envelope.code !== EXEC_OK_CODE && !isAlreadyFinal(envelope.code)) {
       const detail = envelope.msg === '' ? '' : `: ${envelope.msg}`
-      throw new ExecResponseError(`${envelope.code}${detail}`, {
+      throw new ExecResponseError(withRequestId(`${envelope.code}${detail}`, envelope.requestId), {
         code: envelope.code,
         httpStatus: status,
         requestId: envelope.requestId,
@@ -954,7 +994,7 @@ export class ExecClient {
     const { status, envelope } = await this.#send('/claim', { node_id: this.#nodeId, ...body }, timeoutMs, signal)
     if (envelope === undefined) return undefined
     if (envelope.code !== EXEC_OK_CODE) {
-      throw new ExecResponseError(envelope.msg === '' ? envelope.code : envelope.msg, {
+      throw new ExecResponseError(withRequestId(envelope.msg === '' ? envelope.code : envelope.msg, envelope.requestId), {
         code: envelope.code,
         httpStatus: status,
         requestId: envelope.requestId,

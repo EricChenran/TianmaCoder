@@ -35,7 +35,7 @@ function temporary(prefix: string): string {
  * @returns the batch.
  */
 function batch(text: string, id = 'batch-1'): SpooledBatch {
-  return { batch_id: id, stream: 'stdout', lines: [{ at: '2026-10-15T04:00:00Z', level: 'info', text }], truncated: false }
+  return { batch_id: id, attempt: 1, stream: 'stdout', lines: [{ at: '2026-10-15T04:00:00Z', level: 'info', text }], truncated: false }
 }
 
 describe('spooling a log the platform did not take', () => {

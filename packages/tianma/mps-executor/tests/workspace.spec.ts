@@ -12,6 +12,7 @@ import {
   WORKSPACE_STATE_FILE,
   WORKSPACE_STATE_VERSION,
   WorkspaceStore,
+  releasableWorkspaceEntries,
   releasableWorkspaces,
 } from '@tianma/dsh-mps-executor'
 import type { ExecutorReport } from '@tianma/dsh-mps-executor'
@@ -54,6 +55,43 @@ describe('naming the workspaces a node could release', () => {
   it('lists the ids it keeps, and says so plainly when it keeps none', () => {
     expect(releasableWorkspaces([])).toBe('none')
     expect(releasableWorkspaces([{ workspace_id: 'ws_1' }, { workspace_id: 'ws_2' }])).toBe('ws_1, ws_2')
+  })
+
+  it('measures what each workspace holds, largest first, with its last use', async () => {
+    const root = temporary('mps-release-')
+    const small = join(root, 'ws_small')
+    const large = join(root, 'ws_large')
+    mkdirSync(join(large, 'nested'), { recursive: true })
+    mkdirSync(small, { recursive: true })
+    writeFileSync(join(small, 'one.bin'), Buffer.alloc(1024))
+    writeFileSync(join(large, 'two.bin'), Buffer.alloc(2 * 1024 * 1024))
+    writeFileSync(join(large, 'nested', 'three.bin'), Buffer.alloc(1024 * 1024))
+
+    const entries = await releasableWorkspaceEntries([
+      { workspace_id: 'ws_small', directory: small, last_used_at: '2026-10-15T04:03:55.123Z' },
+      { workspace_id: 'ws_large', directory: large, last_used_at: '2026-10-16T04:03:55.123Z' },
+    ])
+
+    // The footprint is what the platform chooses between, so the largest workspace is named
+    // first; a workspace under a megabyte is honestly reported as zero.
+    expect(entries).toEqual([
+      { workspace_id: 'ws_large', size_mb: 3, last_task_finished_at: '2026-10-16T04:03:55.123Z' },
+      { workspace_id: 'ws_small', size_mb: 0, last_task_finished_at: '2026-10-15T04:03:55.123Z' },
+    ])
+  })
+
+  it('counts nothing for a workspace whose directory it cannot read', async () => {
+    const entries = await releasableWorkspaceEntries([
+      {
+        workspace_id: 'ws_gone',
+        directory: join(temporary('mps-release-'), 'never-created'),
+        last_used_at: '2026-10-15T04:03:55.123Z',
+      },
+    ])
+
+    expect(entries).toEqual([
+      { workspace_id: 'ws_gone', size_mb: 0, last_task_finished_at: '2026-10-15T04:03:55.123Z' },
+    ])
   })
 })
 

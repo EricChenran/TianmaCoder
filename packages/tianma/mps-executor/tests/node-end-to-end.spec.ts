@@ -12,7 +12,7 @@ import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -118,9 +118,14 @@ async function runOneTask(options: {
 interface Recorded {
   path: string
   method: string
+  /** The `Range` header the request carried, when it asked for bytes rather than a file. */
+  range: string | undefined
   body: string
   contentType: string | undefined
 }
+
+/** The byte range a ranged request asks for. */
+const RANGE_OF = /^bytes=(\d+)-(\d+)$/u
 
 /** The platform the node dials: it answers one task and records everything it was sent. */
 class PlatformStub {
@@ -131,6 +136,7 @@ class PlatformStub {
 
   #commands: Record<string, unknown>[] = []
   #materials = new Map<string, { bytes: Buffer; digest: string }>()
+  #materialRefusals = new Map<string, number>()
   /** Whether this platform still lets a node continue the task it leases. */
   leaseContinues = true
   /** Pieces this platform says it already holds, which is what a resumed upload is. */
@@ -144,12 +150,23 @@ class PlatformStub {
    * Serve one material this task references. The digest is what the platform states in the
    * response header, so a test can state a wrong one on purpose.
    * @param artifactId - the material's artifact id.
-   * @param body - the bytes to serve.
+   * @param body - the bytes to serve: a string is encoded as UTF-8, a buffer is served as it is.
    * @param digest - the sha256 the header states; the bytes' own digest by default.
    */
-  serveMaterial(artifactId: string, body: string, digest?: string): void {
-    const bytes = Buffer.from(body, 'utf8')
+  serveMaterial(artifactId: string, body: string | Buffer, digest?: string): void {
+    const bytes = typeof body === 'string' ? Buffer.from(body, 'utf8') : body
     this.#materials.set(artifactId, { bytes, digest: digest ?? sha256Of(bytes) })
+  }
+
+  /**
+   * Refuse the next requests for one range of one material, which is how a test makes the
+   * node ask again for the range it was refused rather than start the download over.
+   * @param artifactId - the material's artifact id.
+   * @param start - the first byte of the range to refuse.
+   * @param count - how many times to answer that range with 503.
+   */
+  refuseRange(artifactId: string, start: number, count: number): void {
+    this.#materialRefusals.set(`${artifactId}:${String(start)}`, count)
   }
 
   /**
@@ -213,6 +230,7 @@ class PlatformStub {
     this.requests.push({
       path,
       method: request.method ?? 'GET',
+      range: request.headers.range,
       body: path.endsWith('/chunk') ? `chunk ${index} ${String(body.byteLength)}` : body.toString('utf8'),
       contentType: request.headers['content-type'],
     })
@@ -249,14 +267,37 @@ class PlatformStub {
     }
     const material = /\/resources\/([^/]+)$/u.exec(path)
     if (material !== null) {
-      const served = this.#materials.get(material[1] ?? '')
+      const artifactId = material[1] ?? ''
+      const served = this.#materials.get(artifactId)
       if (served === undefined) {
         response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({
           code: 'RESOURCE_NOT_IN_SCOPE', msg: 'no such material', data: null, requestId: 'req_e2e',
         }))
         return
       }
-      // The download carries the bytes themselves, with the digest the platform states.
+      const range = RANGE_OF.exec(request.headers.range ?? '')
+      // A refused range is how a test makes the node resume: the same offset is asked for again.
+      const refusals = range === null ? 0 : (this.#materialRefusals.get(`${artifactId}:${String(Number(range[1]))}`) ?? 0)
+      if (range !== null && refusals > 0) {
+        this.#materialRefusals.set(`${artifactId}:${String(Number(range[1]))}`, refusals - 1)
+        response.writeHead(503).end()
+        return
+      }
+      if (range !== null) {
+        // A ranged request gets the slice it asked for and the digest of the whole file,
+        // which is what the platform states for a material however it is fetched.
+        const start = Number(range[1])
+        const end = Math.min(Number(range[2]), served.bytes.byteLength - 1)
+        const slice = served.bytes.subarray(start, end + 1)
+        response.writeHead(206, {
+          'content-type': 'application/octet-stream',
+          'x-artifact-sha256': served.digest,
+          'content-range': `bytes ${String(start)}-${String(end)}/${String(served.bytes.byteLength)}`,
+          'content-length': String(slice.byteLength),
+        }).end(slice)
+        return
+      }
+      // The whole download carries the bytes themselves, with the digest the platform states.
       response.writeHead(200, {
         'content-type': 'application/octet-stream',
         'x-artifact-sha256': served.digest,
@@ -435,7 +476,9 @@ describe('the node end to end', () => {
     // Capabilities are a promise: the node declares both access modes because it does both.
     const registered = platform.at('/exec/v1/register')[0]?.body ?? ''
     expect(registered).toContain('"access_modes":["read_only","read_write"]')
-    expect(registered).toContain('"supported_protocols":["exec/v1"]')
+    // Version negotiation is the top-level field; the capability itself was dropped.
+    expect(registered).toContain('"protocol_version":"exec/v1"')
+    expect(registered).not.toContain('"supported_protocols"')
     expect(platform.at('/exec/v1/claim').length).toBeGreaterThan(0)
 
     const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_e2e/result')[0]?.body ?? '{}') as Record<string, unknown>
@@ -884,6 +927,80 @@ describe('the node end to end', () => {
     expect(taskBook).toContain('.materials')
     expect(taskBook).toContain('art_material')
     const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_material/result')[0]?.body ?? '{}') as Record<string, unknown>
+    expect(result).toMatchObject({ outcome: 'success' })
+  }, 120_000)
+
+  it('fetches a material over the protocol ceiling in byte ranges and resumes a refused one', async () => {
+    const root = temporary('mps-e2e-')
+    const workspaceRoot = join(root, 'node')
+    const logs = join(root, 'logs')
+    mkdirSync(workspaceRoot, { recursive: true })
+    const { bare, base } = await repository(root)
+    // 101 MiB is a chunk over the protocol's single-request ceiling; zeros cost nothing
+    // beyond the transfer itself.
+    const total = 101 * 1024 * 1024
+    const bytes = Buffer.alloc(total)
+    const platform = new PlatformStub({
+      task_id: 'tsk_material_big',
+      work_item_id: 'wi_material_big',
+      attempt: 1,
+      max_attempts: 3,
+      kind: 'coding',
+      priority: 400,
+      lease_expire_at: '2030-01-01T00:00:00Z',
+      lease_renew_seconds: 30,
+      payload: {
+        limits: { max_runtime_seconds: 300 },
+        spec: { raw_instruction: '按大材料里的要求改' },
+        context: { resources: ['art_big_material'] },
+        workspace: {
+          workspace_id: 'ws_material_big',
+          access_mode: 'read_write',
+          repo: { url: bare.replace(/\\/gu, '/'), base_branch: 'main', base_commit: base, work_branch: 'feature/tsk_material_big' },
+        },
+        constraints: { must_stay_in_workspace: false },
+        deliverables: { push_required: true },
+      },
+    })
+    platform.serveMaterial('art_big_material', bytes)
+    // The second range is refused twice. Refusing a later range is what makes this case
+    // say "the node resumed" rather than "the node happened to ask from the start again".
+    platform.refuseRange('art_big_material', executor.ARTIFACT_CHUNK_SIZE_BYTES, 2)
+    const port = await platform.listen()
+    let written = 0
+    try {
+      context = await boot({ port, workspaceRoot, logs })
+      await waitFor(() => platform.at('/exec/v1/tasks/tsk_material_big/result').length > 0)
+      written = statSync(join(workspaceRoot, 'coding', 'ws_material_big', '.materials', 'art_big_material')).size
+    } finally {
+      await platform.close()
+    }
+
+    const requests = platform.at('/exec/v1/tasks/tsk_material_big/resources/art_big_material')
+    // The node asks the length once and then fetches the file as ranges, nothing else.
+    expect(requests[0]?.method).toBe('HEAD')
+    expect(requests[0]?.range).toBeUndefined()
+    const ranges = requests.slice(1).map((request) => {
+      expect(request.method).toBe('GET')
+      const parsed = RANGE_OF.exec(request.range ?? '')
+      expect(parsed).not.toBeNull()
+      return { start: Number(parsed?.[1]), end: Number(parsed?.[2]) }
+    })
+    // The refused range is asked for again at the same offset before the download moves on:
+    // a node that restarted the download would have asked for byte 0 here instead.
+    const refused = ranges[1]
+    expect(refused?.start).toBe(executor.ARTIFACT_CHUNK_SIZE_BYTES)
+    expect(ranges.slice(1, 4)).toEqual([refused, refused, refused])
+    // Apart from those repeats, the ranges tile the file: no gap, no overlap, nothing missing.
+    const distinct = ranges.filter((range, index) => index === 0 || range.start !== ranges[index - 1]?.start)
+    expect(distinct).toHaveLength(Math.ceil(total / executor.ARTIFACT_CHUNK_SIZE_BYTES))
+    for (const [index, range] of distinct.entries()) {
+      expect(range.start).toBe(index === 0 ? 0 : (distinct[index - 1]?.end ?? -1) + 1)
+    }
+    expect(distinct.at(-1)?.end).toBe(total - 1)
+    // The assembled material reached the workspace whole, which is what the digest check passed on.
+    expect(written).toBe(total)
+    const result = JSON.parse(platform.at('/exec/v1/tasks/tsk_material_big/result')[0]?.body ?? '{}') as Record<string, unknown>
     expect(result).toMatchObject({ outcome: 'success' })
   }, 120_000)
 

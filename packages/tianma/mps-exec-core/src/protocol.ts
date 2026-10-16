@@ -12,6 +12,13 @@ export const EXEC_PROTOCOL_VERSION = 'exec/v1'
 /** Request header naming the protocol version. */
 export const EXEC_PROTOCOL_HEADER = 'X-Exec-Protocol'
 
+/**
+ * Request header carrying an id the node mints for one request. The platform echoes it as
+ * the envelope's `requestId`, which is how a node's own record of a failure is joined to
+ * the platform's access log.
+ */
+export const EXEC_REQUEST_ID_HEADER = 'X-Request-Id'
+
 /** The envelope code every successful response carries. */
 export const EXEC_OK_CODE = 'OK'
 

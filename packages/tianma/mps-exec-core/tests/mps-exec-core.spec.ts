@@ -13,6 +13,7 @@ import {
   DEFAULT_PLATFORM_PORT,
   EXEC_PROTOCOL_HEADER,
   EXEC_PROTOCOL_VERSION,
+  EXEC_REQUEST_ID_HEADER,
   ExecClient,
   ExecResponseError,
   artifactId,
@@ -259,7 +260,9 @@ describe('error recovery', () => {
     expect(recoveryForCode('BASE_COMMIT_MISMATCH')).toBe('abandon-task')
     expect(recoveryForCode('ARTIFACT_TOO_LARGE')).toBe('abandon-task')
     expect(recoveryForCode('CHECKSUM_MISMATCH')).toBe('retry')
-    expect(recoveryForCode('INVALID_CHANGED_FILES')).toBe('retry')
+    // A submission the platform refused on its contents is refused identically if repeated.
+    expect(recoveryForCode('INVALID_CHANGED_FILES')).toBe('reject-result')
+    expect(recoveryForCode('INVALID_BRANCH')).toBe('reject-result')
     expect(recoveryForCode('SLOT_OVERSELL')).toBe('retry')
     expect(recoveryForCode('RATE_LIMITED')).toBe('retry')
     expect(recoveryForCode('DB_UNAVAILABLE')).toBe('retry')
@@ -476,6 +479,27 @@ describe('protocol client', () => {
     }
   }
 
+  it('names every request with an id the platform can echo', async () => {
+    const { client: instance, calls } = client([
+      ok({ token: 't', expires_at: 'e', node_id: 'node-1' }),
+      ok({ protocol_versions: ['exec/v1'] }),
+    ])
+
+    await instance.authToken({
+      secret: 's',
+      protocol_version: EXEC_PROTOCOL_VERSION,
+      agent_info: { name: 'tianmacoder', version: '1' },
+    })
+    await instance.capabilities()
+
+    // One id per request: the platform echoes it, so its access log and this node's record
+    // of a failure name the same request.
+    const ids = calls.map(call => call.request.headers[EXEC_REQUEST_ID_HEADER])
+    expect(ids[0]).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/u)
+    expect(ids[1]).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/u)
+    expect(ids[0]).not.toBe(ids[1])
+  })
+
   it('exposes the address and node id it was built with', () => {
     const { client: instance } = client([])
     expect(instance.endpoint.origin).toBe('http://10.0.0.7:8791')
@@ -511,7 +535,6 @@ describe('protocol client', () => {
         os: 'windows',
         access_modes: ['read_write'],
         max_artifact_bytes: 1,
-        supported_protocols: [EXEC_PROTOCOL_VERSION],
       },
       workspace_root: 'D:\\mps',
       node_time: 't',
@@ -530,7 +553,7 @@ describe('protocol client', () => {
   it('reports progress and logs without reading a payload', async () => {
     const { client: instance, calls } = client([ok(null), ok(null)])
     await instance.progress('tsk_1', { attempt: 1, progress: 40, stage: 'coding', message: 'm' })
-    await instance.log('tsk_1', { batch_id: 'b', stream: 'stdout', lines: [{ at: 't', level: 'info', text: 'x' }], truncated: false })
+    await instance.log('tsk_1', { batch_id: 'b', attempt: 1, stream: 'stdout', lines: [{ at: 't', level: 'info', text: 'x' }], truncated: false })
     expect(calls[0]?.request.url.endsWith('/tasks/tsk_1/progress')).toBe(true)
     expect(calls[1]?.request.url.endsWith('/tasks/tsk_1/log')).toBe(true)
   })
@@ -612,7 +635,9 @@ describe('protocol client', () => {
     expect(error).toBeInstanceOf(ExecResponseError)
     expect((error as ExecResponseError).recovery).toBe('discard-result')
     expect((error as ExecResponseError).requestId).toBe('req_2')
-    expect((error as ExecResponseError).message).toBe('LEASE_EXPIRED')
+    // The platform's request id travels with the failure, so a node's record of it and the
+    // platform's access log name the same request.
+    expect((error as ExecResponseError).message).toBe('LEASE_EXPIRED (request req_2)')
   })
 
   it('rejects a response with no envelope where one is required', async () => {

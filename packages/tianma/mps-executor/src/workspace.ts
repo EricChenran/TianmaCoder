@@ -8,10 +8,11 @@
  * @module @tianma/dsh-mps-executor/workspace
  */
 
-import { mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, relative } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { formatRfc3339 } from '@tianma/dsh-mps-exec-core'
+import type { ExecReleasableWorkspace } from '@tianma/dsh-mps-exec-core'
 import type { ExecutorReport } from './report.ts'
 import { toError } from './report.ts'
 
@@ -60,6 +61,59 @@ interface WorkspaceStateFile {
  */
 export function releasableWorkspaces(records: readonly { workspace_id: string }[]): string {
   return records.map(record => record.workspace_id).join(', ') || 'none'
+}
+
+/**
+ * The workspaces a node could release, with the footprint the platform needs to choose
+ * between them. Measuring walks each workspace once, which is why the node asks for this
+ * only when the disk is too full to hold another attempt.
+ * @param records - the workspaces the node keeps.
+ * @returns the entries, largest first.
+ */
+export async function releasableWorkspaceEntries(
+  records: readonly WorkspaceRecord[],
+): Promise<ExecReleasableWorkspace[]> {
+  const entries = await Promise.all(records.map(async record => ({
+    workspace_id: record.workspace_id,
+    size_mb: await directorySizeMb(record.directory),
+    last_task_finished_at: record.last_used_at,
+  })))
+  return entries.sort((left, right) => right.size_mb - left.size_mb)
+}
+
+/**
+ * How many megabytes one directory holds.
+ * @param directory - the directory.
+ * @returns its size in megabytes, rounded down; 0 when nothing under it can be read.
+ */
+async function directorySizeMb(directory: string): Promise<number> {
+  let bytes = 0
+  const pending = [directory]
+  while (pending.length > 0) {
+    const current = pending.pop() as string
+    let entries
+    try {
+      entries = await readdir(current, { withFileTypes: true })
+    } catch {
+      // A directory the node cannot read contributes nothing to the footprint; the platform
+      // decides what to release either way.
+      continue
+    }
+    for (const entry of entries) {
+      const path = join(current, entry.name)
+      if (entry.isDirectory()) {
+        pending.push(path)
+        continue
+      }
+      try {
+        bytes += (await stat(path)).size
+      } catch {
+        // A file that vanished mid-walk is not part of the footprint.
+        continue
+      }
+    }
+  }
+  return Math.floor(bytes / (1024 * 1024))
 }
 
 /** Options for {@link WorkspaceStore}. */

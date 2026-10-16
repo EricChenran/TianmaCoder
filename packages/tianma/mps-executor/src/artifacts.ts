@@ -126,6 +126,12 @@ export interface ArtifactUploaderOptions {
   client: ArtifactPlatformClient
   /** Largest artifact this node uploads, from its own configuration. */
   maxBytes: number
+  /**
+   * The ceiling the platform currently states through its configuration, when it states
+   * one. The effective ceiling is the smaller of the two, because a platform refuses what
+   * it will not store.
+   */
+  platformCeiling?: (() => number) | undefined
 }
 
 /**
@@ -186,12 +192,13 @@ export function clientArtifactUploader(options: ArtifactUploaderOptions): TaskAr
       if (details === undefined || !details.isFile()) {
         throw new Error(`refusing to upload ${request.path}: it is not a file in the workspace`)
       }
-      // The node's own ceiling is the smaller of what the platform and this node declared;
+      // The effective ceiling is the smaller of what the platform and this node declared;
       // above the protocol's threshold the upload has to be sent in chunks.
-      if (details.size > options.maxBytes) {
+      const ceiling = Math.min(options.maxBytes, options.platformCeiling?.() ?? Number.POSITIVE_INFINITY)
+      if (details.size > ceiling) {
         throw new ArtifactTooLargeError(
-          `refusing to upload ${request.path}: it is ${String(details.size)} bytes, over the ${String(options.maxBytes)} bytes this node uploads`,
-          { path: request.path, sizeBytes: details.size, ceilingBytes: options.maxBytes },
+          `refusing to upload ${request.path}: it is ${String(details.size)} bytes, over the ${String(ceiling)} bytes this node uploads`,
+          { path: request.path, sizeBytes: details.size, ceilingBytes: ceiling },
         )
       }
       const bytes = await readFile(path)
@@ -226,7 +233,7 @@ export function clientArtifactUploader(options: ArtifactUploaderOptions): TaskAr
         if (error instanceof ExecResponseError && error.code === 'ARTIFACT_TOO_LARGE') {
           throw new ArtifactTooLargeError(
             `the platform refused ${request.path} at ${String(details.size)} bytes: ${error.message}`,
-            { path: request.path, sizeBytes: details.size, ceilingBytes: options.maxBytes },
+            { path: request.path, sizeBytes: details.size, ceilingBytes: ceiling },
           )
         }
         throw error

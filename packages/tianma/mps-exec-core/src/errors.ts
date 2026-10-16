@@ -1,8 +1,9 @@
 /**
  * What the node must do after one non-`OK` envelope code. The protocol fixes
- * three codes as never-retryable and leaves the rest to backoff retry; codes
- * that report a task-level mismatch carry their own local recovery instead, so
- * this module is the single place that decides between them.
+ * three codes as never-retryable, and a submission the platform refused on its contents
+ * is not retryable either because repeating it fails identically; everything else backs
+ * off and retries. Codes that report a task-level mismatch carry their own local recovery
+ * instead, so this module is the single place that decides between them.
  * @module @tianma/dsh-mps-exec-core/errors
  */
 
@@ -18,6 +19,8 @@ export type ExecRecovery =
   | 'abandon-task'
   /** The lease is not held here any more: stop, and submit no result. */
   | 'discard-result'
+  /** The platform refused this submission on its contents: repeating it fails identically. */
+  | 'reject-result'
   /** The node cannot recover by itself: stop every request and report to operators. */
   | 'halt-node'
 
@@ -36,7 +39,10 @@ const RECOVERY_BY_CODE: Readonly<Record<string, ExecRecovery>> = {
   LEASE_EXPIRED: 'discard-result',
   ARTIFACT_TOO_LARGE: 'abandon-task',
   BASE_COMMIT_MISMATCH: 'abandon-task',
-  INVALID_CHANGED_FILES: 'retry',
+  // A submission the platform refused on its contents: the same body is refused the same
+  // way, so an operator has to see it instead of a backoff loop.
+  INVALID_CHANGED_FILES: 'reject-result',
+  INVALID_BRANCH: 'reject-result',
   SLOT_OVERSELL: 'retry',
   CHECKSUM_MISMATCH: 'retry',
   RATE_LIMITED: 'retry',

@@ -171,7 +171,8 @@ describe('node configuration', () => {
     expect(settings.capabilities.tools).toEqual(['node'])
     expect(settings.capabilities.os).toBe(process.platform)
     expect(settings.capabilities.access_modes).toEqual(['read_only', 'read_write'])
-    expect(settings.capabilities.supported_protocols).toEqual(['exec/v1'])
+    // Version negotiation is the top-level `protocol_version`, so the capability is gone.
+    expect('supported_protocols' in settings.capabilities).toBe(false)
     expect(settings.labels).toEqual({ owner: 'ops' })
   })
 
@@ -309,7 +310,7 @@ describe('node runtime', () => {
     await expect(node.bootstrap()).rejects.toThrow('NODE_DISABLED')
     expect(node.state).toBe('halted')
     expect(node.token).toBeUndefined()
-    expect(node.lastError?.message).toBe('NODE_DISABLED: no')
+    expect(node.lastError?.message).toBe('NODE_DISABLED: no (request r2)')
     expect(reports[0]?.level).toBe('error')
   })
 
@@ -317,7 +318,7 @@ describe('node runtime', () => {
     const { runtime: node } = runtime([envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }), rejection('DB_UNAVAILABLE')])
     await expect(node.bootstrap()).rejects.toThrow('DB_UNAVAILABLE')
     expect(node.state).toBe('authenticated')
-    expect(node.lastError?.message).toBe('DB_UNAVAILABLE: no')
+    expect(node.lastError?.message).toBe('DB_UNAVAILABLE: no (request r2)')
   })
 
   it('refuses to heartbeat before it authenticated', async () => {
@@ -723,9 +724,11 @@ describe('the runner the node falls back to', () => {
     // The node owns the heartbeat interval, so it follows the platform's value.
     expect(node.heartbeatSeconds).toBe(7)
     // The parameters it keeps at the values it declared are named, never dropped silently.
+    // The artifact ceiling is not among them: the platform's own ceiling applies to uploads.
     expect(reports.some(report => report.message.includes(
-      'this node keeps the values it declared for claim_long_poll_seconds, max_artifact_bytes',
+      'this node keeps the values it declared for claim_long_poll_seconds',
     ))).toBe(true)
+    expect(reports.some(report => report.message.includes('max_artifact_bytes'))).toBe(false)
   })
 
   it('keeps the configuration it holds while the revision stands still', async () => {
@@ -818,7 +821,9 @@ describe('the runner the node falls back to', () => {
     node.stop()
 
     expect(node.heartbeatSeconds).toBe(3)
-    expect(reports.some(report => report.message.includes('keeps the values it declared for log_batch_max_lines'))).toBe(true)
+    // The platform's batch cap is followed rather than kept, so nothing is reported as kept
+    // for it; the batching it drives is covered where the batches reach the platform.
+    expect(reports.some(report => report.message.includes('keeps the values it declared for log_batch_max_lines'))).toBe(false)
   })
 
   it('warns instead of breaking the heartbeat when the configuration cannot be read', async () => {
@@ -937,6 +942,11 @@ describe('the runner the node falls back to', () => {
     expect(paths.filter(path => path.endsWith('/resume'))).toHaveLength(1)
     expect(reports.some(report => report.message.includes('is below 5GB free (1GB)'))).toBe(true)
     expect(reports.some(report => report.message.includes('has 40GB free again'))).toBe(true)
+    // A node with nothing to release offers no list at all, rather than an empty one.
+    const heartbeats = queue.calls
+      .filter(call => call.request.url.endsWith('/heartbeat'))
+      .map(call => JSON.parse(jsonBody(call.request)) as Record<string, unknown>)
+    expect(heartbeats.every(body => !('releasable_workspaces' in body))).toBe(true)
   })
 
   it('carries on when the platform cannot be told about draining', async () => {

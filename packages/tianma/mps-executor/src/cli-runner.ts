@@ -117,9 +117,13 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
           signal: context.signal,
         })
       } catch (error) {
+        const reason = `could not bring in the task's materials: ${toError(error).message}`
         return {
           outcome: 'blocked',
-          summary: `could not bring in the task's materials: ${toError(error).message}`,
+          summary: reason,
+          // The platform raises its human confirmation from this text, so it carries the
+          // reason itself rather than leaving the operator with a one-line summary.
+          evidence: { blockedReason: reason },
         }
       }
       // The instruction is the prompt; everything else the attempt needs — constraints,

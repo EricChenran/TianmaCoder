@@ -204,6 +204,7 @@ function orchestratorWith(options: {
   canClaim?: () => boolean
   sessions?: TaskSessionReporter
   workspaces?: TaskWorkspaceAllocator
+  logBatchMaxLines?: () => number
 }): { orchestrator: TaskOrchestrator; hooks: FakeHooks; reports: ExecutorReport[] } {
   const hooks = options.hooks ?? new FakeHooks()
   const reports = options.reports ?? []
@@ -216,6 +217,7 @@ function orchestratorWith(options: {
     canClaim: options.canClaim,
     sessions: options.sessions,
     workspaces: options.workspaces,
+    logBatchMaxLines: options.logBatchMaxLines,
     now: () => new Date('2026-10-15T04:03:55.123Z'),
   })
   return { orchestrator, hooks, reports }
@@ -855,6 +857,53 @@ describe('task lifecycle', () => {
     expect(platform.logs[1]?.truncated).toBe(false)
     expect(platform.logs[0]?.batch_id).not.toBe(platform.logs[1]?.batch_id)
     expect(platform.logs[0]?.batch_id.startsWith('log-')).toBe(true)
+  })
+
+  it('bounds every batch by the cap the platform states, and names the attempt', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      logBatchMaxLines: () => 2,
+      runner: runnerOf(async (context) => {
+        await context.reportLog('stdout', Array.from({ length: 5 }, (_value, index) => ({
+          at: '2026-10-15T12:03:55.123+08:00',
+          level: 'info',
+          text: `line ${String(index)}`,
+        })))
+        return { outcome: 'success', summary: 'done' }
+      }),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    // The platform refuses a batch over the cap it states, so no batch may exceed it.
+    expect(platform.logs.map(batch => batch.lines.length)).toEqual([2, 2, 1])
+    // Every batch names its attempt, which is how the platform keeps two attempts apart.
+    expect(platform.logs.map(batch => batch.attempt)).toEqual([1, 1, 1])
+  })
+
+  it('reports a result the platform refused on its contents instead of repeating it', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    platform.resultAnswers.push(new ExecResponseError('INVALID_CHANGED_FILES: must be relative', {
+      code: 'INVALID_CHANGED_FILES',
+      httpStatus: 422,
+    }))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => ({ outcome: 'success', summary: 'done' })),
+    })
+
+    await orchestrator.claimOnce()
+    await orchestrator.drain()
+
+    // The same body is refused identically every time, so it is submitted once and reported.
+    expect(platform.results).toHaveLength(1)
+    expect(reports.some(report => report.level === 'error' && report.message.includes(
+      'the platform refused the success result for tsk_1 on its contents, so it was not repeated',
+    ))).toBe(true)
   })
 
   it('submits no batch for an empty log submission', async () => {

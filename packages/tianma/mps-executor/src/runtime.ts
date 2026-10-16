@@ -19,6 +19,7 @@ import type {
   ExecHeartbeatResult,
   ExecHttpDownload,
   ExecHttpTransport,
+  ExecReleasableWorkspace,
   ExecRegisterResult,
   ExecResources,
   ExecRunningTask,
@@ -32,11 +33,11 @@ import { clientArtifactUploader } from './artifacts.ts'
 import { cliGit } from './git.ts'
 import { checkoutPublisher } from './publish.ts'
 import { checkoutSessionReporter, restoredSessionReports } from './session.ts'
-import { TaskOrchestrator } from './orchestrator.ts'
+import { LOG_BATCH_MAX_LINES, TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunner, TaskRunnerSource } from './runner.ts'
-import { WorkspaceStore, releasableWorkspaces } from './workspace.ts'
+import { WorkspaceStore, releasableWorkspaceEntries, releasableWorkspaces } from './workspace.ts'
 
 export type { ExecutorReport } from './report.ts'
 
@@ -46,10 +47,7 @@ export type { ExecutorReport } from './report.ts'
  */
 const KEPT_CONFIGURATION = [
   'claim_long_poll_seconds',
-  'log_batch_max_lines',
-  'log_batch_max_bytes',
-  'max_artifact_bytes',
-  'redaction_rule_version',
+  'sanitize_rules_version',
   'code_access_mode',
 ] as const
 
@@ -121,6 +119,12 @@ export class MpsExecutorRuntime {
   #heartbeatSeconds: number
   /** Claim long poll in force, as the platform most recently assigned it. */
   #claimLongPollSeconds: number
+  /** The largest log batch the platform currently accepts. */
+  #logBatchMaxLines: number
+  /** The artifact ceiling the platform currently states; until it states one, only this node's own applies. */
+  #artifactCeilingBytes = Number.POSITIVE_INFINITY
+  /** The workspaces this node offers for release, measured while it is below its disk floor. */
+  #releasable: ExecReleasableWorkspace[] = []
   /** Agent version this node reported, probed once. */
   #version: string | undefined
   /** How the agent's version is probed, when a deployment composed a CLI to ask. */
@@ -155,6 +159,7 @@ export class MpsExecutorRuntime {
     this.#report = options.report ?? (() => {})
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
     this.#claimLongPollSeconds = options.settings.claimLongPollSeconds
+    this.#logBatchMaxLines = LOG_BATCH_MAX_LINES
     this.#probeAgentVersion = options.probeAgentVersion
     this.#probeResources = options.probeResources
     this.#draining = drainingMarker(options.settings.codingRoot)
@@ -194,10 +199,15 @@ export class MpsExecutorRuntime {
         identity: { name: this.settings.gitUserName, email: this.settings.gitUserEmail },
       }),
       sessions: checkoutSessionReporter({ store: this.#workspaces, client: this.client }),
-      artifacts: clientArtifactUploader({ client: this.client, maxBytes: this.settings.maxArtifactBytes }),
+      artifacts: clientArtifactUploader({
+        client: this.client,
+        maxBytes: this.settings.maxArtifactBytes,
+        platformCeiling: () => this.#artifactCeilingBytes,
+      }),
       // Claiming stops while the disk is too full to hold another attempt.
       canClaim: () => this.#hasRoom,
       claimLongPollSeconds: () => this.#claimLongPollSeconds,
+      logBatchMaxLines: () => this.#logBatchMaxLines,
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -313,6 +323,7 @@ export class MpsExecutorRuntime {
     if (room === this.#hasRoom) return
     this.#hasRoom = room
     if (room) {
+      this.#releasable = []
       this.#report({
         level: 'info',
         message: `node ${this.settings.nodeId} has ${String(resources.disk_free_gb)}GB free again; claiming work`,
@@ -326,6 +337,9 @@ export class MpsExecutorRuntime {
       level: 'warn',
       message: `node ${this.settings.nodeId} is below ${String(this.settings.diskMinGb)}GB free (${String(resources.disk_free_gb)}GB); claiming nothing until there is room. Its workspaces are ${releasableWorkspaces(this.#workspaces.records)}`,
     })
+    // The platform needs the footprints to decide what to release, and it only needs them
+    // while the node is holding work back, so they are measured once per drain.
+    this.#releasable = await releasableWorkspaceEntries(this.#workspaces.records)
     // Claiming nothing leaves the platform dispatching to a node that will not answer;
     // draining is how the protocol says a node stops taking work.
     await this.#announce('drain', `this node is below its ${String(this.settings.diskMinGb)}GB disk floor`)
@@ -433,6 +447,7 @@ export class MpsExecutorRuntime {
       resources: this.#resources,
       node_time: formatRfc3339(this.#now()),
       agent_version: this.settings.agentVersion,
+      ...(this.#releasable.length === 0 ? {} : { releasable_workspaces: this.#releasable }),
     }, signal)
     await this.#applyCommands(heartbeat.commands)
     if (heartbeat.config_revision !== this.#configRevision) {
@@ -481,6 +496,18 @@ export class MpsExecutorRuntime {
     if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 && seconds !== this.#heartbeatSeconds) {
       this.#heartbeatSeconds = seconds
       this.#arm()
+    }
+    const batchLines = stated['log_batch_max_lines']
+    // The platform refuses a batch over the cap it states, so its value — never this node's
+    // own preference — is the one that has to hold.
+    if (typeof batchLines === 'number' && Number.isInteger(batchLines) && batchLines > 0) {
+      this.#logBatchMaxLines = Math.min(batchLines, LOG_BATCH_MAX_LINES)
+    }
+    const ceiling = stated['max_artifact_bytes']
+    // The platform refuses what it will not store, so its ceiling applies to every upload
+    // from here on; the effective one is the smaller of the two.
+    if (typeof ceiling === 'number' && Number.isFinite(ceiling) && ceiling > 0) {
+      this.#artifactCeilingBytes = ceiling
     }
     const kept = KEPT_CONFIGURATION.filter(name => stated[name] !== undefined)
     this.#report({

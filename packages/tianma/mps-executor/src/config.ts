@@ -13,7 +13,6 @@ import z from '@deepseek-ai/schemastery'
 import {
   DEFAULT_PLATFORM_BASE_PATH,
   DEFAULT_PLATFORM_PORT,
-  EXEC_PROTOCOL_VERSION,
   resolvePlatformEndpoint,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecCapabilities, PlatformEndpoint, PlatformScheme } from '@tianma/dsh-mps-exec-core'
@@ -413,7 +412,6 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
       os: platform(),
       access_modes: ['read_only', 'read_write'],
       max_artifact_bytes: DEFAULT_MAX_ARTIFACT_BYTES,
-      supported_protocols: [EXEC_PROTOCOL_VERSION],
     },
     agentVersion: config.agentVersion ?? UNKNOWN_AGENT_VERSION,
     labels: { ...(config.labels ?? {}) },
