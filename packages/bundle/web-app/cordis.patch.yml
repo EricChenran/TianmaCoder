@@ -150,6 +150,14 @@
         requestTimeoutMs: 30000
         requireSignIn: true
 
+    # Tianma MPS executor-node control: the Settings page's entry to the node
+    # process. The node's own deployment parameters — platform address, node id,
+    # secret environment, coding root — reach it through the environment this
+    # process was started with, so the row states none of them and the node
+    # reports whatever a deployment still has to state in its own output.
+    - id: mps-node-control
+      name: '@tianma/dsh-mps-node-control'
+
     # Configuration-surface reads and writes over Typert Remote. Each method
     # reports an actionable error when its settings-domain provider is absent.
     - id: account-controller
@@ -315,6 +323,11 @@
     # that render the signing-in account and edit its own profile.
     - id: oa-account-ui
       name: '@tianma/dsh-oa-account-ui'
+
+    # Tianma executor-node surface: the Settings page that starts and stops the
+    # node and reads back what it printed.
+    - id: mps-node-ui
+      name: '@tianma/dsh-mps-node-ui'
 
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'

@@ -458,6 +458,7 @@
     { "path": "./packages/tianma/mps-exec-core" },
     { "path": "./packages/tianma/mps-executor" },
     { "path": "./packages/tianma/mps-node-bundle" },
+    { "path": "./packages/tianma/mps-node-control" },
     { "path": "./packages/bundle/headless" },
     { "path": "./packages/bundle/sdk-app" },
     { "path": "./packages/bundle/sdk-minimal" },

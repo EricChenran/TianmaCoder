@@ -1,0 +1,209 @@
+/**
+ * What the GUI's node entry can ask of the supervised process: that it starts, that
+ * it stops when told, what it printed, and that disposing the plugin leaves no node
+ * behind. The child these specs supervise is a real Node process running a stub
+ * script, so the launch, the pipes, and the kill are the ones a deployment gets.
+ */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import MpsNodeControlService from '@tianma/dsh-mps-node-control'
+
+/** Directories one test created, removed after it. */
+const created: string[] = []
+
+/** Contexts one test created, disposed after it. */
+const contexts: Context[] = []
+
+afterEach(async () => {
+  for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
+  for (const directory of created.splice(0)) rmSync(directory, { recursive: true, force: true })
+})
+
+/**
+ * A script that stands in for the node: it prints on both streams and stays alive
+ * until it is killed. Extra arguments are ignored, so the service may pass the
+ * profile flag the real node takes.
+ * @returns the script's path.
+ */
+function nodeStub(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+  created.push(directory)
+  const path = join(directory, 'node-stub.mjs')
+  writeFileSync(path, [
+    "console.log('mps node listening')",
+    "console.error('mps node warning')",
+    'setInterval(() => {}, 250)',
+    '',
+  ].join('\n'))
+  return path
+}
+
+/**
+ * Wait for a condition the child satisfies asynchronously.
+ * @param condition - the condition to poll.
+ * @param timeoutMs - how long to keep polling.
+ */
+async function waitFor(condition: () => Promise<boolean>, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await condition()) return
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  throw new Error('the condition was not met before the deadline')
+}
+
+/**
+ * Whether a process id still names a live process.
+ * @param pid - the process id to probe.
+ * @returns true while the process exists.
+ */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** One host carrying the control service over a stub node script. */
+async function control(options: { entry?: string } = {}): Promise<Context> {
+  const ctx = new Context()
+  contexts.push(ctx)
+  await ctx.plugin(MpsNodeControlService, {
+    entry: options.entry ?? nodeStub(),
+    // The loaders this spec runs under belong to the test runner, not to the node.
+    loaders: [],
+  })
+  return ctx
+}
+
+describe('supervising the executor node', () => {
+  it('starts the node, reads what it printed, and stops it', async () => {
+    const ctx = await control()
+
+    expect(await ctx.mpsNodeControl.status()).toMatchObject({ phase: 'stopped', profile: 'mps-node' })
+
+    const started = await ctx.mpsNodeControl.start()
+    // The launch is confirmed by the operating system, so the first reading is
+    // `starting` and the process is not claimed to run before it does.
+    expect(started.phase).toBe('starting')
+    await waitFor(async () => (await ctx.mpsNodeControl.status()).phase === 'running')
+    const running = await ctx.mpsNodeControl.status()
+    expect(running.pid).toBeGreaterThan(0)
+    expect(running.startedAt).toBeDefined()
+
+    const pid = running.pid as number
+    await waitFor(async () => (await ctx.mpsNodeControl.logs()).length >= 2)
+    const lines = await ctx.mpsNodeControl.logs()
+    expect(lines.map(line => `${line.stream}:${line.text}`)).toEqual(expect.arrayContaining([
+      'stdout:mps node listening',
+      'stderr:mps node warning',
+    ]))
+    expect(lines.every(line => line.at !== '')).toBe(true)
+
+    const stopped = await ctx.mpsNodeControl.stop()
+    expect(stopped.phase).toBe('stopped')
+    expect(stopped.pid).toBeUndefined()
+    expect(stopped.exit?.code).toBeDefined()
+    expect(alive(pid)).toBe(false)
+  })
+
+  it('leaves the running node alone when it is asked to start again', async () => {
+    const ctx = await control()
+    const started = await ctx.mpsNodeControl.start()
+
+    const again = await ctx.mpsNodeControl.start()
+
+    expect(again.pid).toBe(started.pid)
+    expect(again.startedAt).toBe(started.startedAt)
+  })
+
+  it('keeps only the most recent lines it was told to keep', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+    created.push(directory)
+    const path = join(directory, 'chatty.mjs')
+    writeFileSync(path, [
+      'for (let index = 0; index < 20; index += 1) console.log(`line ${index}`)',
+      'setInterval(() => {}, 250)',
+      '',
+    ].join('\n'))
+    await ctx.plugin(MpsNodeControlService, { entry: path, loaders: [], logLines: 3 })
+
+    await ctx.mpsNodeControl.start()
+    await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
+    await waitFor(async () => {
+      const lines = await ctx.mpsNodeControl.logs()
+      return lines.length === 3 && lines[2]?.text === 'line 19'
+    })
+
+    const lines = await ctx.mpsNodeControl.logs()
+    expect(lines.map(line => line.text)).toEqual(['line 17', 'line 18', 'line 19'])
+  })
+
+  it('reports a node that started and then died, with what it said', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+    created.push(directory)
+    const ctx = new Context()
+    contexts.push(ctx)
+    // The binary is fine but the entry is not there, so the node runs and exits
+    // instead of failing to launch: the reading has to tell those apart.
+    await ctx.plugin(MpsNodeControlService, { entry: join(directory, 'missing.mjs'), loaders: [] })
+
+    await ctx.mpsNodeControl.start()
+    await waitFor(async () => (await ctx.mpsNodeControl.status()).exit !== undefined)
+
+    const reading = await ctx.mpsNodeControl.status()
+    expect(reading.phase).toBe('stopped')
+    expect(reading.error).toBeUndefined()
+    expect(typeof reading.exit?.code).toBe('number')
+    expect(reading.exit?.code).not.toBe(0)
+    expect((await ctx.mpsNodeControl.logs()).some(line => line.stream === 'stderr')).toBe(true)
+  })
+
+  it('reports a launch that failed outright', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+    created.push(directory)
+    const ctx = new Context()
+    contexts.push(ctx)
+    // A binary that is not there is the one failure that produces no process at all,
+    // so no exit can account for it; the reading carries the launch error instead.
+    await ctx.plugin(MpsNodeControlService, {
+      nodeBinary: join(directory, 'missing-node'),
+      entry: nodeStub(),
+      loaders: [],
+    })
+
+    await ctx.mpsNodeControl.start()
+    await waitFor(async () => (await ctx.mpsNodeControl.status()).phase === 'failed')
+
+    const reading = await ctx.mpsNodeControl.status()
+    expect(reading.error).toBeDefined()
+    expect(reading.exit).toBeUndefined()
+  })
+
+  it('stops the node when the GUI disposes the plugin', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const fiber = await ctx.plugin(MpsNodeControlService, { entry: nodeStub(), loaders: [] })
+    const started = await ctx.mpsNodeControl.start()
+    const pid = started.pid as number
+
+    await fiber.dispose()
+
+    await waitFor(async () => !alive(pid))
+  })
+
+  it('refuses a composition that names nothing to launch', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+
+    await expect(ctx.plugin(MpsNodeControlService, { entry: '', loaders: [] }))
+      .rejects.toThrow(/nothing to launch/u)
+  })
+})

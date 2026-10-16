@@ -187,7 +187,9 @@
     "@deepseek-ai/dsh-client-ui-settings-session-log": "workspace:*",
     "@tianma/dsh-department-prompts": "workspace:*",
     "@tianma/dsh-oa-account": "workspace:*",
-    "@tianma/dsh-oa-account-ui": "workspace:*"
+    "@tianma/dsh-oa-account-ui": "workspace:*",
+    "@tianma/dsh-mps-node-control": "workspace:*",
+    "@tianma/dsh-mps-node-ui": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

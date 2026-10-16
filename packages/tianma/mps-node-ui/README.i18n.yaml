@@ -1,0 +1,40 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/tianma/mps-node-ui/README.md
+/:
+  en: 97c021859d110221
+  zh: 9b6ee0a73e1b942e
+/tianma-dsh-mps-node-ui:
+  en: 995339c1062a9c2e
+  zh: fb056f7d9b25442a
+/tianma-dsh-mps-node-ui/summary:
+  en: a434bf6a8c628749
+  zh: f515cf00dc6955be
+/tianma-dsh-mps-node-ui/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 0ddfaed0f41243e6
+/tianma-dsh-mps-node-ui/use-this-package:
+  en: 287a52a468988475
+  zh: cd76febcbfbd7194
+/tianma-dsh-mps-node-ui/understand-the-implementation:
+  en: 78067a663f7f81b5
+  zh: ec53864e687e6582
+/tianma-dsh-mps-node-ui/understand-the-implementation/source-map:
+  en: d435eecd926cb396
+  zh: ad093cbb5f41bf22
+/tianma-dsh-mps-node-ui/further-exploration:
+  en: 0669860e8af2a588
+  zh: 61ae94ff06fd8c32
+/tianma-dsh-mps-node-ui/model-experience:
+  en: 9d82872115ee4243
+  zh: 4ae49d390eae8ba1
+/tianma-dsh-mps-node-ui/model-experience/kv-cache-effect:
+  en: 2960cb72641edfb5
+  zh: 5bab693b46a695cd
+/tianma-dsh-mps-node-ui/known-limitations-and-deferred-work:
+  en: 3cb62992a4c6045e
+  zh: b9d56404c178c6f4
+/tianma-dsh-mps-node-ui/known-limitations-and-deferred-work/dev-note:
+  en: 24b94ef8d902665a
+  zh: a72833894cd7c438

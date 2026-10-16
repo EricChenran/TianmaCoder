@@ -1,0 +1,79 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupTitle {
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.rowLabel {
+  min-width: 96px;
+  opacity: 0.7;
+}
+
+.rowValue {
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.notice {
+  opacity: 0.7;
+  margin: 0;
+}
+
+.error {
+  color: var(--dsh-color-danger, #d4380d);
+}
+
+.logs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--dsh-color-border, rgba(0, 0, 0, 0.12));
+  border-radius: 6px;
+  font-family: var(--dsh-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.logLine {
+  display: flex;
+  gap: 8px;
+}
+
+.logStream {
+  min-width: 48px;
+  opacity: 0.6;
+}
+
+.logStreamError {
+  min-width: 48px;
+  color: var(--dsh-color-danger, #d4380d);
+}
+
+.logText {
+  white-space: pre-wrap;
+  word-break: break-all;
+}

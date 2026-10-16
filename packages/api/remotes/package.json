@@ -95,6 +95,7 @@
     "@deepseek-ai/dsh-api-account-controller": "workspace:*",
     "@deepseek-ai/dsh-deepseek-account": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
-    "@tianma/dsh-oa-account": "workspace:*"
+    "@tianma/dsh-oa-account": "workspace:~",
+    "@tianma/dsh-mps-node-control": "workspace:~"
   }
 }

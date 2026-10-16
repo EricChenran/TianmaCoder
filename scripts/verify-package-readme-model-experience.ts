@@ -74,6 +74,8 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/tianma/token-meter-calibration': { kind: 'indirect', reason: 'The plugin corrects the pressure measurement compaction reads, so compaction timing follows CJK-aware pricing; it registers no prompt, tool, or Session event.' },
   'packages/tianma/mps-executor': { kind: 'none', reason: 'The node runtime transports exec/v1 protocol traffic for the management platform and registers no prompt, tool, or Session event of its own.' },
   'packages/tianma/mps-node-bundle': { kind: 'indirect', reason: 'Composition patch rows mount the executor node and restate base permission rows; the mounted package owns every model-facing effect.' },
+  'packages/tianma/mps-node-control': { kind: 'none', reason: 'The service supervises the node process for the Settings surface and registers no prompt, tool, or Session event of its own.' },
+  'packages/tianma/mps-node-ui': { kind: 'none', reason: 'The plugin renders a Settings section over the node-control Remote namespace and registers no prompt, tool, or Session event of its own.' },
 
   'packages/attachment/attachment': { kind: 'indirect', reason: 'The storage seam delegates model request rendering to provider adapters.' },
   'packages/attachment/attachment-local': { kind: 'indirect', reason: 'The local backend delegates model request rendering to provider adapters.' },
