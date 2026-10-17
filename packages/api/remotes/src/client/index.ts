@@ -20,6 +20,8 @@ import messageFeedbackRemote from '@deepseek-ai/dsh-message-feedback/remote'
 import permissionPresetsRemote from '@deepseek-ai/dsh-permission-presets/remote'
 import oaAccountRemote from '@tianma/dsh-oa-account/remote'
 export type {} from '@tianma/dsh-oa-account/remote'
+import mpsNodeControlRemote from '@tianma/dsh-mps-node-control/remote'
+export type {} from '@tianma/dsh-mps-node-control/remote'
 import sessionFeedbackRemote from '@deepseek-ai/dsh-command-feedback/remote'
 import fileUploadsRemote from '@deepseek-ai/dsh-client-file-upload/remote'
 import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
@@ -185,7 +187,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       goalsRemote, llmRemote, dynamicRemote, scheduleRemote,
       pluginInventoryRemote, pluginManagerRemote, pluginRegistryProbeRemote, messageFeedbackRemote, sessionFeedbackRemote,
       fileUploadsRemote, sessionReferencesRemote,
-      permissionPresetsRemote, oaAccountRemote, subagentsRemote, sessionRemote, jobRemote,
+      permissionPresetsRemote, oaAccountRemote, mpsNodeControlRemote, subagentsRemote, sessionRemote, jobRemote,
       workspaceRemote, workspaceFilesRemote, terminalRemote,
       officeToPdfRemote, userQuestionsRemote,
     ]) {
