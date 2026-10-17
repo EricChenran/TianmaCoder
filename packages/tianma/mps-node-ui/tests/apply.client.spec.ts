@@ -55,6 +55,7 @@ async function surface(options: {
   stop?: () => Promise<unknown>
   config?: () => Promise<unknown>
   saveConfig?: (form: unknown) => Promise<unknown>
+  probe?: (form: unknown) => Promise<unknown>
 } = {}): Promise<{ registered: Registered[]; operations: () => Record<string, (...args: never[]) => Promise<unknown>> }> {
   const ctx = new Context()
   const registered: Registered[] = []
@@ -66,6 +67,7 @@ async function surface(options: {
       stop: options.stop ?? (() => Promise.resolve({ ok: true, value: { phase: 'stopped', profile: 'mps-node' } })),
       config: options.config ?? (() => Promise.resolve({ ok: true, value: CONFIG })),
       saveConfig: options.saveConfig ?? ((form: unknown) => Promise.resolve({ ok: true, value: { ...CONFIG, saved: form } })),
+      probe: options.probe ?? (() => Promise.resolve({ ok: true, value: { reachable: true, httpStatus: 401, latencyMs: 12, detail: 'answered 401 in 12 ms' } })),
     },
   }
   ctx.provide('slots', {

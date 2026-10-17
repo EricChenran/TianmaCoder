@@ -5,6 +5,7 @@
  * script, so the launch, the pipes, and the kill are the ones a deployment gets.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -307,5 +308,43 @@ describe('the deployment parameters the Settings form owns', () => {
 
     await expect(ctx.mpsNodeControl.config()).rejects.toThrow(/mps-node-control\.json/u)
     await expect(ctx.mpsNodeControl.start()).rejects.toThrow(/mps-node-control\.json/u)
+  })
+
+  it('reports a platform that answers the probe, whatever status it answers with', async () => {
+    const server = createServer((request, response) => {
+      // The platform's own note: a 401 on a deliberately wrong credential is the
+      // healthy shape of the token endpoint.
+      response.statusCode = request.url === '/exec/v1/auth/token' ? 401 : 404
+      response.end()
+    })
+    await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', () => { resolve() }) })
+    try {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      isolatedHome()
+      const ctx = await control()
+
+      const probe = await ctx.mpsNodeControl.probe({ platformHost: '127.0.0.1', platformPort: String(port) })
+      expect(probe.reachable).toBe(true)
+      expect(probe.httpStatus).toBe(401)
+      expect(probe.latencyMs).toBeDefined()
+      expect(probe.detail).toMatch(/401/u)
+    } finally {
+      await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
+    }
+  })
+
+  it('reports a platform it cannot dial, and an address it was not given', async () => {
+    isolatedHome()
+    const ctx = await control()
+
+    const refused = await ctx.mpsNodeControl.probe({ platformHost: '127.0.0.1', platformPort: '1' })
+    expect(refused.reachable).toBe(false)
+    expect(refused.httpStatus).toBeUndefined()
+    expect(refused.detail).toMatch(/could not reach/u)
+
+    const absent = await ctx.mpsNodeControl.probe({})
+    expect(absent.reachable).toBe(false)
+    expect(absent.detail).toMatch(/no platform address/u)
   })
 })

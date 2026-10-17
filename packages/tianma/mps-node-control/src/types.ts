@@ -138,3 +138,15 @@ export interface MpsNodeForm {
   workspaceRoot?: string | undefined
   slotsTotal?: string | undefined
 }
+
+/** What one connectivity probe found, in the form's own words to show. */
+export interface MpsNodeProbeResult {
+  /** Whether the platform answered at all; any HTTP status means it did. */
+  reachable: boolean
+  /** HTTP status the platform answered with, when it answered. */
+  httpStatus?: number | undefined
+  /** How long the answer took, in milliseconds, when one arrived. */
+  latencyMs?: number | undefined
+  /** What happened, as the settings surface shows it. */
+  detail: string
+}

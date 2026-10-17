@@ -44,6 +44,8 @@ export function apply(ctx: Context): void {
     busy: false,
     configBusy: false,
     configSaved: false,
+    probeBusy: false,
+    probe: undefined,
     error: undefined,
     configError: undefined,
     unreadable: false,
@@ -111,6 +113,11 @@ export function apply(ctx: Context): void {
       }
       publish({ configBusy: false, configSaved: true, config: result.value })
       return true
+    },
+    async probePlatform(form) {
+      publish({ probeBusy: true })
+      const result = await ctx.remote.mpsNodeControl.probe(form)
+      publish({ probeBusy: false, probe: result.ok ? result.value : { reachable: false, detail: failure(result.error) } })
     },
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({

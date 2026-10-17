@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeConfig, MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
 import type { MpsNodeFormInput, MpsNodeInjected } from './contract.ts'
 import type { MpsNodeKey } from './locales.ts'
 import css from './Node.module.css'
@@ -28,7 +28,7 @@ const FIELDS = [
  * @param props - localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
-export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, t }: MpsNodeSectionProps) {
+export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, probePlatform, t }: MpsNodeSectionProps) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
   const running = phase === 'running' || phase === 'starting'
@@ -53,6 +53,11 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, t
   }
   const submit = (): void => {
     void saveConfig(form).then((ok) => { if (ok) setEditing(false) })
+  }
+  // The probe reads the form as it stands, so an address can be tested before it
+  // is saved; outside editing it reads whatever is in effect.
+  const probeNow = (): void => {
+    void probePlatform(editing ? form : savedForm(config))
   }
   return <div className={css.section}>
     <p className={css.notice}>{t('description')}</p>
@@ -113,6 +118,16 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, t
                 && <span className={css.error} role="alert">{node.configError === '' ? t('configSaveFailed') : node.configError}</span>}
             </div>
           </>}
+      <div className={css.actions}>
+        <Button variant="outline" onClick={probeNow} disabled={node.probeBusy}>
+          {node.probeBusy ? t('probeRunning') : t('probe')}
+        </Button>
+        {node.probe !== undefined && (node.probe.reachable
+          ? <span className={css.notice} role="status">
+            {t('probeOk')} — {node.probe.detail}
+          </span>
+          : <span className={css.error} role="status">{t('probeUnreachable')} — {node.probe.detail}</span>)}
+      </div>
       <p className={css.notice}>{t('configSecretNote')}</p>
     </div>
     <div className={css.group}>
@@ -127,6 +142,22 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, t
         </div>}
     </div>
   </div>
+}
+
+/**
+ * The saved parameters as the probe reads them outside editing: the form the
+ * Host would be configured with, as text.
+ * @param config - the deployment-parameter reading.
+ * @returns the form values, empty when no reading arrived.
+ */
+function savedForm(config: MpsNodeConfig | undefined): MpsNodeFormInput {
+  const saved: MpsNodeFormInput = {}
+  if (config === undefined) return saved
+  for (const field of FIELDS) {
+    const value = config.saved[field.key]
+    if (value !== undefined) saved[field.key] = String(value)
+  }
+  return saved
 }
 
 /**

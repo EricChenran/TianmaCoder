@@ -29,7 +29,7 @@ kind: "package-reference"
 
 配置项：`entry`（默认取随本包一同安装的 `dsh` CLI 入口）、`nodeBinary`（默认取运行中进程自己的 Node）、`loaders`（默认取本进程自己的模块加载器，源码启动能跑正是靠它）、`profile`（默认 `mps-node`）、`logLines`（默认 200）、`stopGraceMs`（默认 10 000）。
 
-远程命名空间 `mpsNodeControl` 暴露 `status`、`start`、`stop`、`logs`、`config`、`saveConfig`。[@tianma/dsh-mps-node-ui](../mps-node-ui/README.zh.md) 的浏览器半边把它们渲染成设置页的一节。节点的部署参数有两条给法：部署设置本 GUI 继承的 `MPS_*` 环境变量，或由设置页表单保存（明文 JSON 存在节点 profile 旁边，**不是** profile patch 行），`start` 时叠加到子进程环境上——保存值优先、继承值次之、节点自身默认兜底。节点密钥刻意不在表单里：它由部署通过 `MPS_NODE_SECRET` 环境变量提供。
+远程命名空间 `mpsNodeControl` 暴露 `status`、`start`、`stop`、`logs`、`config`、`saveConfig` 与 `probe`——对表单当前所持地址发一次故意错凭据的 `POST /auth/token`，任何 HTTP 应答（尤其 401）都证明链路通，正是平台联调文档自带的测法。[@tianma/dsh-mps-node-ui](../mps-node-ui/README.zh.md) 的浏览器半边把它们渲染成设置页的一节。节点的部署参数有两条给法：部署设置本 GUI 继承的 `MPS_*` 环境变量，或由设置页表单保存（明文 JSON 存在节点 profile 旁边，**不是** profile patch 行），`start` 时叠加到子进程环境上——保存值优先、继承值次之、节点自身默认兜底。节点密钥刻意不在表单里：它由部署通过 `MPS_NODE_SECRET` 环境变量提供。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

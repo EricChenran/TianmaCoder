@@ -51,6 +51,10 @@ export const en = {
   'sourceSaved': 'saved here',
   'sourceEnvironment': 'from environment',
   'sourceUnset': 'not set',
+  'probe': 'Test connectivity',
+  'probeRunning': 'Testing…',
+  'probeOk': 'The platform is reachable',
+  'probeUnreachable': 'The platform could not be reached',
   'unknown': '—',
 } as const
 
@@ -103,5 +107,9 @@ export const zh: Record<MpsNodeKey, string> = {
   'sourceSaved': '本页保存',
   'sourceEnvironment': '来自环境变量',
   'sourceUnset': '未设置',
+  'probe': '测试连通性',
+  'probeRunning': '测试中…',
+  'probeOk': '平台可达',
+  'probeUnreachable': '平台不可达',
   'unknown': '—',
 }

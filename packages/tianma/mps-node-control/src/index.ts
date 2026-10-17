@@ -28,7 +28,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
 import type {
   MpsNodeConfig, MpsNodeConfigEntry, MpsNodeDeployment, MpsNodeExit,
-  MpsNodeForm, MpsNodeLogLine, MpsNodePhase, MpsNodeStatus,
+  MpsNodeForm, MpsNodeLogLine, MpsNodePhase, MpsNodeProbeResult, MpsNodeStatus,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -95,6 +95,9 @@ function defaultDshEntry(): string | undefined {
  * here would silently pin values the deployment never chose.
  */
 const DEPLOYMENT_FILENAME = 'mps-node-control.json'
+
+/** How long a connectivity probe waits for the platform's answer. */
+const PROBE_TIMEOUT_MS = 8_000
 
 /** Deployment fields and the environment variables the node reads them from. */
 const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
@@ -208,6 +211,19 @@ function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
     if (value !== undefined && value !== '') overlay[DEPLOYMENT_ENV[key]] = String(value)
   }
   return { ...process.env, ...overlay }
+}
+
+/**
+ * One probe failure in a shape a settings page shows.
+ * @param error - what the fetch threw.
+ * @returns the message, with the timeout named as such.
+ */
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.name === 'TimeoutError') return `no answer within ${String(PROBE_TIMEOUT_MS / 1000)} seconds`
+    return error.message
+  }
+  return String(error)
 }
 
 /**
@@ -372,6 +388,60 @@ export class MpsNodeControlService extends TypertRemoteService {
     mkdirSync(directory, { recursive: true })
     writeFileSync(join(directory, DEPLOYMENT_FILENAME), `${JSON.stringify(saved, null, 2)}\n`, 'utf8')
     return await this.config()
+  }
+
+  /**
+   * Probe the platform address the form currently holds, the way the platform's
+   * own integration note does: one `POST /auth/token` with deliberately wrong
+   * credentials, where any HTTP answer — a 401 above all — means the network
+   * path is open. The form's own values are read, not the saved ones, so an
+   * address can be tested before it is stored.
+   * @param form - the deployment-parameter form as it stands.
+   * @returns what the probe found.
+   */
+  @Remote
+  async probe(form: MpsNodeForm): Promise<MpsNodeProbeResult> {
+    const saved = await this.config()
+    const pick = (formValue: string | undefined, key: keyof MpsNodeDeployment): string | undefined => {
+      const text = formValue?.trim()
+      if (text !== undefined && text !== '') return text
+      const effective = saved.effective[key].value
+      return effective
+    }
+    const host = pick(form.platformHost, 'platformHost')
+    if (host === undefined) {
+      return { reachable: false, detail: 'no platform address to test; state one in the form or the environment' }
+    }
+    const scheme = pick(form.platformScheme, 'platformScheme') === 'https' ? 'https' : 'http'
+    const portText = pick(form.platformPort, 'platformPort')
+    const port = portText === undefined ? (scheme === 'https' ? 443 : 80) : Number(portText)
+    if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+      return { reachable: false, detail: `the platform port "${portText ?? ''}" is not a usable TCP port` }
+    }
+    const basePath = (pick(form.platformBasePath, 'platformBasePath') ?? '/exec/v1').replace(/\/+$/u, '')
+    const url = `${scheme}://${host}:${String(port)}${basePath}/auth/token`
+    const startedAt = Date.now()
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ nodeId: 'connectivity-probe', secret: 'wrong-on-purpose' }),
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      })
+      const latencyMs = Date.now() - startedAt
+      // Any answer proves the address is dialable and something exec-shaped is
+      // listening; the 401 is the documented shape of a healthy endpoint.
+      return {
+        reachable: true,
+        httpStatus: response.status,
+        latencyMs,
+        detail: response.status === 401
+          ? `the platform answered 401 in ${String(latencyMs)} ms, which is the healthy shape`
+          : `the platform answered ${String(response.status)} in ${String(latencyMs)} ms`,
+      }
+    } catch (error) {
+      return { reachable: false, detail: `could not reach ${url}: ${toErrorMessage(error)}` }
+    }
   }
 
   /**
