@@ -29,7 +29,7 @@ Mount the plugin wherever a GUI entry is wanted; the Web application bundle moun
 
 Config: `entry` (defaults to the `dsh` CLI shipped beside this package), `nodeBinary` (defaults to the running process's own Node), `loaders` (defaults to this process's own module loaders, which is what makes a source launch work), `profile` (default `mps-node`), `logLines` (default 200), `stopGraceMs` (default 10 000).
 
-The Remote namespace `mpsNodeControl` exposes `status`, `start`, `stop`, and `logs`. The browser half of [@tianma/dsh-mps-node-ui](../mps-node-ui/README.md) renders them as a Settings section; the node's own deployment parameters are deliberately not this plugin's business — the child inherits the environment, and the node reports whatever a deployment still has to state in the output this service reads back.
+The Remote namespace `mpsNodeControl` exposes `status`, `start`, `stop`, `logs`, `config`, and `saveConfig`. The browser half of [@tianma/dsh-mps-node-ui](../mps-node-ui/README.md) renders them as a Settings section. The node's deployment parameters may be stated two ways: a deployment sets the `MPS_*` environment this GUI inherits, or the Settings form saves them (plain JSON beside the node profile, never a profile patch row) and `start` overlays them onto the child's environment — saved first, inherited second, the node's own defaults last. The node secret is deliberately absent from the form: it rides the `MPS_NODE_SECRET` environment variable a deployment states.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation

@@ -27,6 +27,22 @@ const RUNNING: MpsNodeStatus = {
 /** One line the node printed. */
 const LINE: MpsNodeLogLine = { stream: 'stdout', at: '2026-10-16T09:00:01.000Z', text: 'registered at the platform' }
 
+/** One deployment-parameter reading the Host can return. */
+const CONFIG = {
+  saved: { platformHost: 'mps.example.com' },
+  effective: {
+    platformHost: { value: 'mps.example.com', source: 'saved' },
+    platformPort: { value: '8791', source: 'environment' },
+    platformScheme: { source: 'unset' },
+    platformBasePath: { source: 'unset' },
+    nodeId: { source: 'unset' },
+    nodeName: { source: 'unset' },
+    nodeHost: { source: 'unset' },
+    workspaceRoot: { source: 'unset' },
+    slotsTotal: { source: 'unset' },
+  },
+}
+
 /**
  * One host carrying the node surface over stubbed client services.
  * @param options - the Remote answers to build the stub with.
@@ -37,7 +53,9 @@ async function surface(options: {
   logs?: () => Promise<unknown>
   start?: () => Promise<unknown>
   stop?: () => Promise<unknown>
-} = {}): Promise<{ registered: Registered[]; operations: () => Record<string, (...args: never[]) => Promise<void>> }> {
+  config?: () => Promise<unknown>
+  saveConfig?: (form: unknown) => Promise<unknown>
+} = {}): Promise<{ registered: Registered[]; operations: () => Record<string, (...args: never[]) => Promise<unknown>> }> {
   const ctx = new Context()
   const registered: Registered[] = []
   const remote = {
@@ -46,6 +64,8 @@ async function surface(options: {
       logs: options.logs ?? (() => Promise.resolve({ ok: true, value: [LINE] })),
       start: options.start ?? (() => Promise.resolve({ ok: true, value: RUNNING })),
       stop: options.stop ?? (() => Promise.resolve({ ok: true, value: { phase: 'stopped', profile: 'mps-node' } })),
+      config: options.config ?? (() => Promise.resolve({ ok: true, value: CONFIG })),
+      saveConfig: options.saveConfig ?? ((form: unknown) => Promise.resolve({ ok: true, value: { ...CONFIG, saved: form } })),
     },
   }
   ctx.provide('slots', {
@@ -83,7 +103,31 @@ describe('the node apply owns the Settings section', () => {
     const hooks = operations() as unknown as { hooks: { mpsNode: { getSnapshot: () => unknown } } }
 
     await vi.waitFor(() => {
-      expect(hooks.hooks.mpsNode.getSnapshot()).toMatchObject({ status: RUNNING, lines: [LINE], unreadable: false })
+      expect(hooks.hooks.mpsNode.getSnapshot()).toMatchObject({ status: RUNNING, lines: [LINE], config: CONFIG, unreadable: false })
+    })
+  })
+
+  it('saves the deployment form and reports what the Host refused', async () => {
+    const refused = await surface({
+      saveConfig: () => Promise.resolve({ ok: false, error: { message: 'platformPort is out of range' } }),
+    })
+    const refusedOps = refused.operations()
+    expect(await refusedOps['saveConfig']?.({ platformPort: 'not a port' } as never)).toBe(false)
+    const refusedHooks = refusedOps as unknown as { hooks: { mpsNode: { getSnapshot: () => Record<string, unknown> } } }
+    expect(refusedHooks.hooks.mpsNode.getSnapshot()).toMatchObject({
+      configBusy: false,
+      configSaved: false,
+      configError: 'platformPort is out of range',
+    })
+
+    const accepted = await surface()
+    const acceptedOps = accepted.operations()
+    expect(await acceptedOps['saveConfig']?.({ platformHost: 'mps.example.com' } as never)).toBe(true)
+    const acceptedHooks = acceptedOps as unknown as { hooks: { mpsNode: { getSnapshot: () => Record<string, unknown> } } }
+    expect(acceptedHooks.hooks.mpsNode.getSnapshot()).toMatchObject({
+      configBusy: false,
+      configSaved: true,
+      configError: undefined,
     })
   })
 

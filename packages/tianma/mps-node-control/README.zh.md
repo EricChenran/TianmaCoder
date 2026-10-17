@@ -29,7 +29,7 @@ kind: "package-reference"
 
 配置项：`entry`（默认取随本包一同安装的 `dsh` CLI 入口）、`nodeBinary`（默认取运行中进程自己的 Node）、`loaders`（默认取本进程自己的模块加载器，源码启动能跑正是靠它）、`profile`（默认 `mps-node`）、`logLines`（默认 200）、`stopGraceMs`（默认 10 000）。
 
-远程命名空间 `mpsNodeControl` 暴露 `status`、`start`、`stop`、`logs`。[@tianma/dsh-mps-node-ui](../mps-node-ui/README.zh.md) 的浏览器半边把它们渲染成设置页的一节；节点自己的部署参数**刻意不归本插件管**——子进程继承环境变量，缺什么由节点在日志里说明，而这些日志正是本服务回读的内容。
+远程命名空间 `mpsNodeControl` 暴露 `status`、`start`、`stop`、`logs`、`config`、`saveConfig`。[@tianma/dsh-mps-node-ui](../mps-node-ui/README.zh.md) 的浏览器半边把它们渲染成设置页的一节。节点的部署参数有两条给法：部署设置本 GUI 继承的 `MPS_*` 环境变量，或由设置页表单保存（明文 JSON 存在节点 profile 旁边，**不是** profile patch 行），`start` 时叠加到子进程环境上——保存值优先、继承值次之、节点自身默认兜底。节点密钥刻意不在表单里：它由部署通过 `MPS_NODE_SECRET` 环境变量提供。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -72,7 +72,7 @@ kind: "package-reference"
 <a id="known-limitations-and-deferred-work"></a>
 ## 已知限制与延期工作
 
-- **部署参数不在这里编辑** —— 平台地址、节点 id、密钥环境变量与编码根，都通过启动本 GUI 进程时的环境变量传给节点。若部署希望从界面改这些值，需要一个把它们写到节点会读的地方的界面，那不在本包职责内。
+- **节点密钥不走表单** —— 平台地址、节点 id、编码根等部署参数已可在设置页编辑（保存于节点 profile 旁的 JSON，`start` 时叠加到子进程环境）；密钥仍只由部署通过 `MPS_NODE_SECRET` 环境变量提供，刻意不落盘到本页写的文件里。
 - **最近输出只在内存里** —— 环形缓冲只留最后 `logLines` 行，随进程消失；更早的内容以节点自己按天的日志文件为准。
 - **读数不持久** —— GUI 重启后就忘了上一段节点进程是怎么结束的，直到下一段结束。
 - **一个 GUI 一个节点** —— 本服务只托管一个子进程；一台机器要跑多个节点就在这个入口之外跑。

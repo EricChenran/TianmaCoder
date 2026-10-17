@@ -40,8 +40,12 @@ export function apply(ctx: Context): void {
   let snapshot: MpsNodeSnapshot = {
     status: undefined,
     lines: [],
+    config: undefined,
     busy: false,
+    configBusy: false,
+    configSaved: false,
     error: undefined,
+    configError: undefined,
     unreadable: false,
   }
   const listeners = new Set<() => void>()
@@ -54,9 +58,10 @@ export function apply(ctx: Context): void {
   // then renders its localized copy.
   const failure = (error: { message?: string }): string => error.message ?? ''
   const refresh = async (): Promise<void> => {
-    const [status, lines] = await Promise.all([
+    const [status, lines, config] = await Promise.all([
       ctx.remote.mpsNodeControl.status(),
       ctx.remote.mpsNodeControl.logs(),
+      ctx.remote.mpsNodeControl.config(),
     ])
     if (!status.ok) {
       publish({ unreadable: true, error: failure(status.error) })
@@ -65,6 +70,8 @@ export function apply(ctx: Context): void {
     publish({
       status: status.value,
       lines: lines.ok ? lines.value : [],
+      config: config.ok ? config.value : undefined,
+      configError: config.ok ? undefined : failure(config.error),
       unreadable: false,
       error: undefined,
     })
@@ -95,6 +102,16 @@ export function apply(ctx: Context): void {
       await refresh()
     },
     refresh,
+    async saveConfig(form) {
+      publish({ configBusy: true, configSaved: false, configError: undefined })
+      const result = await ctx.remote.mpsNodeControl.saveConfig(form)
+      if (!result.ok) {
+        publish({ configBusy: false, configError: failure(result.error) })
+        return false
+      }
+      publish({ configBusy: false, configSaved: true, config: result.value })
+      return true
+    },
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'mps-node', order: -5, label: () => t('nav'),

@@ -6,7 +6,10 @@
  * @module @tianma/dsh-mps-node-ui/contract
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeLogLine, MpsNodeStatus } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeConfig, MpsNodeDeployment, MpsNodeLogLine, MpsNodeStatus } from '@tianma/dsh-mps-node-control/types'
+
+/** The form's own shape: one text field per deployment parameter. */
+export type MpsNodeFormInput = Partial<Record<keyof MpsNodeDeployment, string>>
 
 /** Everything the node surface renders. */
 export interface MpsNodeSnapshot {
@@ -14,13 +17,21 @@ export interface MpsNodeSnapshot {
   status: MpsNodeStatus | undefined
   /** Recent lines the node printed, oldest first. */
   lines: MpsNodeLogLine[]
+  /** Deployment-parameter reading, absent until the first read answers. */
+  config: MpsNodeConfig | undefined
   /** Whether a start or a stop is in flight. */
   busy: boolean
+  /** Whether a parameter save is in flight. */
+  configBusy: boolean
+  /** Whether the last parameter save succeeded, so the section can say so. */
+  configSaved: boolean
   /**
    * Failure to show: the Host's own message, or an empty string when the call
    * failed without one — the section then renders localized copy.
    */
   error: string | undefined
+  /** Parameter failure to show, in the Host's own words when it had them. */
+  configError: string | undefined
   /** Whether the Host refused the last read, so the section can say so. */
   unreadable: boolean
 }
@@ -33,6 +44,8 @@ export interface MpsNodeInjected {
   start: () => Promise<void>
   /** Stop the node, then re-read its status and lines. */
   stop: () => Promise<void>
-  /** Re-read the status and the recent lines. */
+  /** Re-read the status, the recent lines, and the deployment parameters. */
   refresh: () => Promise<void>
+  /** Save the deployment-parameter form; resolves false when the Host refused. */
+  saveConfig: (form: MpsNodeFormInput) => Promise<boolean>
 }

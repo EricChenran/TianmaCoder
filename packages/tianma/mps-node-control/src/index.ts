@@ -18,12 +18,18 @@
  * @module @tianma/dsh-mps-node-control
  */
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import z from '@deepseek-ai/schemastery'
-import type { MpsNodeExit, MpsNodeLogLine, MpsNodePhase, MpsNodeStatus } from './types.ts'
+import type {
+  MpsNodeConfig, MpsNodeConfigEntry, MpsNodeDeployment, MpsNodeExit,
+  MpsNodeForm, MpsNodeLogLine, MpsNodePhase, MpsNodeStatus,
+} from './types.ts'
 
 export type * from './types.ts'
 
@@ -80,6 +86,128 @@ function defaultDshEntry(): string | undefined {
   } catch {
     return process.argv[1]
   }
+}
+
+/**
+ * Filename the Settings form's deployment parameters live in, inside the node
+ * profile's own directory. Plain JSON rather than a profile patch row: a patch
+ * row replaces its target's whole `config`, so restating every executor key
+ * here would silently pin values the deployment never chose.
+ */
+const DEPLOYMENT_FILENAME = 'mps-node-control.json'
+
+/** Deployment fields and the environment variables the node reads them from. */
+const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
+  platformHost: 'MPS_PLATFORM_HOST',
+  platformPort: 'MPS_PLATFORM_PORT',
+  platformScheme: 'MPS_PLATFORM_SCHEME',
+  platformBasePath: 'MPS_PLATFORM_BASE_PATH',
+  nodeId: 'MPS_NODE_ID',
+  nodeName: 'MPS_NODE_NAME',
+  nodeHost: 'MPS_NODE_HOST',
+  workspaceRoot: 'MPS_NODE_WORKSPACE',
+  slotsTotal: 'MPS_NODE_SLOTS',
+}
+
+
+
+/**
+ * Read one deployment file. A missing file is simply no saved parameters; a
+ * corrupt one is a deployment's own doing and fails loudly.
+ * @param profileDir - the node profile's directory.
+ * @returns the saved parameters, each field possibly unset.
+ */
+function readDeployment(profileDir: string): MpsNodeDeployment {
+  let text: string
+  try {
+    text = readFileSync(join(profileDir, DEPLOYMENT_FILENAME), 'utf8')
+  } catch {
+    return {}
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw new Error(`mps-node-control: ${DEPLOYMENT_FILENAME} is not valid JSON: ${String(error)}`)
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`mps-node-control: ${DEPLOYMENT_FILENAME} does not hold a deployment object`)
+  }
+  const result: MpsNodeDeployment = {}
+  for (const [key, value] of Object.entries(parsed)) {
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string' && typeof value !== 'number') {
+      throw new Error(`mps-node-control: ${DEPLOYMENT_FILENAME} field ${JSON.stringify(key)} is neither text nor a number`)
+    }
+    if (key === 'platformPort' || key === 'slotsTotal') {
+      if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+        throw new Error(`mps-node-control: ${DEPLOYMENT_FILENAME} field ${JSON.stringify(key)} is not an integer`)
+      }
+      result[key] = value
+    } else if (key === 'platformScheme') {
+      if (value !== 'http' && value !== 'https') {
+        throw new Error(`mps-node-control: ${DEPLOYMENT_FILENAME} field "platformScheme" is neither "http" nor "https"`)
+      }
+      result.platformScheme = value
+    } else if (typeof value === 'string' && value !== '') {
+      ;(result as Record<string, string | number>)[key] = value
+    }
+  }
+  return result
+}
+
+/**
+ * Normalize one form field's text into a deployment value.
+ * @param key - the deployment field.
+ * @param raw - what the form held; empty or whitespace means "unset".
+ * @returns the value to store, or an error message when the text cannot be it.
+ */
+function parseField(key: keyof MpsNodeDeployment, raw: string): { value?: string | number } | { error: string } {
+  const text = raw.trim()
+  if (text === '') return {}
+  if (key === 'platformPort' || key === 'slotsTotal') {
+    const value = Number(text)
+    if (!Number.isSafeInteger(value)) return { error: `${key} must be a whole number` }
+    if (value < 1 || (key === 'platformPort' && value > 65_535)) {
+      return { error: `${key} is out of range` }
+    }
+    return { value }
+  }
+  if (key === 'platformScheme' && text !== 'http' && text !== 'https') {
+    return { error: 'platformScheme must be "http" or "https"' }
+  }
+  return { value: text }
+}
+
+/**
+ * One effective-value reading: saved first, then the environment, then unset.
+ * @param key - the deployment field.
+ * @param saved - the form's stored parameters.
+ * @returns the entry the settings surface shows.
+ */
+function effectiveEntry(key: keyof MpsNodeDeployment, saved: MpsNodeDeployment): MpsNodeConfigEntry {
+  const savedValue = saved[key]
+  if (savedValue !== undefined && savedValue !== '') {
+    return { value: String(savedValue), source: 'saved' }
+  }
+  const fromEnv = process.env[DEPLOYMENT_ENV[key]]
+  if (fromEnv !== undefined && fromEnv.trim() !== '') return { value: fromEnv, source: 'environment' }
+  return { source: 'unset' }
+}
+
+/**
+ * The environment the node launches with: this process's own, plus one
+ * `MPS_*` variable per saved field, so a saved value outranks an inherited one.
+ * @param saved - the form's stored parameters.
+ * @returns the child's environment.
+ */
+function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
+  const overlay: NodeJS.ProcessEnv = {}
+  for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
+    const value = saved[key]
+    if (value !== undefined && value !== '') overlay[DEPLOYMENT_ENV[key]] = String(value)
+  }
+  return { ...process.env, ...overlay }
 }
 
 /**
@@ -170,7 +298,7 @@ export class MpsNodeControlService extends TypertRemoteService {
     this.exit = undefined
     this.startedAt = undefined
     const child = spawn(this.nodeBinary, [...this.loaders, this.entry, '--profile', this.profile], {
-      env: process.env,
+      env: launchEnvironment(readDeployment(this.profileDir())),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     })
@@ -205,6 +333,54 @@ export class MpsNodeControlService extends TypertRemoteService {
   @Remote
   async logs(): Promise<MpsNodeLogLine[]> {
     return [...this.lines]
+  }
+
+  /**
+   * The deployment parameters the Settings form renders: what this page saved
+   * and what the next launch would run with, per field.
+   * @returns the saved parameters and the effective reading.
+   */
+  @Remote
+  async config(): Promise<MpsNodeConfig> {
+    const saved = readDeployment(this.profileDir())
+    const entries = Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>
+    const effective = {} as MpsNodeConfig['effective']
+    for (const key of entries) effective[key] = effectiveEntry(key, saved)
+    return { saved, effective }
+  }
+
+  /**
+   * Store the deployment parameters the form submitted and report the new
+   * reading. A saved value only reaches the node at its next launch: a running
+   * node keeps the environment it was started with.
+   * @param form - one text field per edited parameter; empty text clears it.
+   * @returns the reading after the save.
+   */
+  @Remote
+  async saveConfig(form: MpsNodeForm): Promise<MpsNodeConfig> {
+    const saved: MpsNodeDeployment = {}
+    for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
+      const parsed = parseField(key, form[key] ?? '')
+      if ('error' in parsed) {
+        throw new Error(`mps-node-control: ${parsed.error}`)
+      }
+      if (parsed.value !== undefined) {
+        ;(saved as Record<string, string | number>)[key] = parsed.value
+      }
+    }
+    const directory = this.profileDir()
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, DEPLOYMENT_FILENAME), `${JSON.stringify(saved, null, 2)}\n`, 'utf8')
+    return await this.config()
+  }
+
+  /**
+   * The node profile's own directory under the shared home, where the saved
+   * deployment parameters live.
+   * @returns the directory path, which may not exist yet.
+   */
+  private profileDir(): string {
+    return join(resolveDshHome(), 'profiles', this.profile)
   }
 
   /**

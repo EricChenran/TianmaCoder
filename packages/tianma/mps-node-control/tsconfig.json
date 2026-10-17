@@ -7,6 +7,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../typert/protocol" },
+    { "path": "../../util/home-paths" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" }
   ]

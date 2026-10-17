@@ -1,8 +1,9 @@
 /** Settings section: the node process this GUI supervises, and what it printed. */
-import { useEffect } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useState } from 'react'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeInjected } from './contract.ts'
+import type { MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeFormInput, MpsNodeInjected } from './contract.ts'
 import type { MpsNodeKey } from './locales.ts'
 import css from './Node.module.css'
 
@@ -10,11 +11,24 @@ import css from './Node.module.css'
 export type MpsNodeSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.mpsNode'> & InjectFace<MpsNodeInjected>
 
+/** One deployment-parameter field: its storage key and its copy key. */
+const FIELDS = [
+  { key: 'platformHost', label: 'fieldPlatformHost' },
+  { key: 'platformPort', label: 'fieldPlatformPort' },
+  { key: 'platformScheme', label: 'fieldPlatformScheme' },
+  { key: 'platformBasePath', label: 'fieldPlatformBasePath' },
+  { key: 'nodeId', label: 'fieldNodeId' },
+  { key: 'nodeName', label: 'fieldNodeName' },
+  { key: 'nodeHost', label: 'fieldNodeHost' },
+  { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
+  { key: 'slotsTotal', label: 'fieldSlotsTotal' },
+] as const
+
 /**
  * @param props - localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
-export function MpsNodeSection({ useMpsNode, start, stop, refresh, t }: MpsNodeSectionProps) {
+export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, t }: MpsNodeSectionProps) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
   const running = phase === 'running' || phase === 'starting'
@@ -25,6 +39,21 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, t }: MpsNodeS
     const timer = setInterval(() => { void refresh() }, 5_000)
     return () => { clearInterval(timer) }
   }, [refresh])
+  const config = node.config
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<MpsNodeFormInput>({})
+  const beginEdit = (): void => {
+    const saved: MpsNodeFormInput = {}
+    for (const field of FIELDS) {
+      const value = config?.saved[field.key]
+      if (value !== undefined) saved[field.key] = String(value)
+    }
+    setForm(saved)
+    setEditing(true)
+  }
+  const submit = (): void => {
+    void saveConfig(form).then((ok) => { if (ok) setEditing(false) })
+  }
   return <div className={css.section}>
     <p className={css.notice}>{t('description')}</p>
     <div className={css.group}>
@@ -48,6 +77,45 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, t }: MpsNodeS
       </div>
     </div>
     <div className={css.group}>
+      <span className={css.groupTitle}>{t('configTitle')}</span>
+      <p className={css.notice}>{t('configDescription')}</p>
+      {config === undefined
+        ? <span className={css.notice}>{t('sourceUnset')}</span>
+        : editing
+          ? <div className={css.fields}>
+            {FIELDS.map(field => <label key={field.key} className={css.field}>
+              <span className={css.fieldLabel}>{t(field.label)}</span>
+              <Input
+                value={form[field.key] ?? ''}
+                placeholder={placeholder(config.effective[field.key], t)}
+                onChange={(event) => { setForm({ ...form, [field.key]: event.target.value }) }}
+              />
+            </label>)}
+            <div className={css.actions}>
+              <Button variant="primary" onClick={submit} disabled={node.configBusy}>
+                {node.configBusy ? t('configSaving') : t('configSave')}
+              </Button>
+              <Button variant="ghost" onClick={() => { setEditing(false) }} disabled={node.configBusy}>{t('configCancel')}</Button>
+              {node.configError !== undefined
+                && <span className={css.error} role="alert">{node.configError === '' ? t('configSaveFailed') : node.configError}</span>}
+            </div>
+          </div>
+          : <>
+            {FIELDS.map(field => <Row
+              key={field.key}
+              label={t(field.label)}
+              value={effectiveLabel(config.effective[field.key], t)}
+            />)}
+            <div className={css.actions}>
+              <Button variant="outline" onClick={beginEdit}>{t('configEdit')}</Button>
+              {node.configSaved && <span className={css.notice}>{t('configSaved')}</span>}
+              {node.configError !== undefined
+                && <span className={css.error} role="alert">{node.configError === '' ? t('configSaveFailed') : node.configError}</span>}
+            </div>
+          </>}
+      <p className={css.notice}>{t('configSecretNote')}</p>
+    </div>
+    <div className={css.group}>
       <span className={css.groupTitle}>{t('logs')}</span>
       {node.lines.length === 0
         ? <span className={css.notice}>{t('noLogs')}</span>
@@ -59,6 +127,39 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, t }: MpsNodeS
         </div>}
     </div>
   </div>
+}
+
+/**
+ * The placeholder one empty field shows: the value the next launch would take
+ * from elsewhere, so "blank" reads as "keep whatever is in effect".
+ * @param entry - the field's effective reading.
+ * @param t - the namespace's translation seat.
+ * @returns the placeholder text.
+ */
+function placeholder(entry: MpsNodeConfigEntry | undefined, t: (key: MpsNodeKey) => string): string {
+  if (entry === undefined) return t('sourceUnset')
+  return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceLabel(entry, t)}`
+}
+
+/**
+ * The read-only rendering of one effective field: its value plus its origin.
+ * @param entry - the field's effective reading.
+ * @param t - the namespace's translation seat.
+ * @returns the row value text.
+ */
+function effectiveLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => string): string {
+  return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceLabel(entry, t)}`
+}
+
+/**
+ * @param entry - the field's effective reading.
+ * @param t - the namespace's translation seat.
+ * @returns the localized origin label.
+ */
+function sourceLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => string): string {
+  if (entry.source === 'saved') return t('sourceSaved')
+  if (entry.source === 'environment') return t('sourceEnvironment')
+  return t('sourceUnset')
 }
 
 /**
