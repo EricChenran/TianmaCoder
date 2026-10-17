@@ -5,10 +5,10 @@
  * process instead of mounting the node into the GUI's profile.
  *
  * The child is launched the way this process itself was launched — the same Node
- * binary, the same loaders, and the entry that started this process — so a source
- * launch and a packaged launch both work without a deployment stating paths. Each
- * of the three is overridable for a composition that runs the node from somewhere
- * else.
+ * binary and the same loaders — but through the `dsh` CLI entry shipped beside
+ * this package, so a source launch and a packaged launch both work without a
+ * deployment stating paths. Each of the three is overridable for a composition
+ * that runs the node from somewhere else.
  *
  * The GUI owns the lifecycle: disposing this plugin stops the process, because a
  * node left running behind a closed window is a node nobody is watching. The
@@ -18,6 +18,7 @@
  * @module @tianma/dsh-mps-node-control
  */
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { createRequire } from 'node:module'
 import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -38,8 +39,11 @@ type NodeProcess = ChildProcessByStdio<null, Readable, Readable>
 /** Plugin configuration. */
 export interface Config {
   /**
-   * Entry that starts a dsh process; defaults to the entry that started this one,
-   * so the node runs the same build as the GUI it was started from.
+   * Entry that starts a dsh process; defaults to the `dsh` CLI shipped beside
+   * this package, so the node runs the same build as the GUI it was started
+   * from. The process's own entry is only the fallback: the packaged desktop
+   * host takes positional argv, so relaunching it with `--profile` would read
+   * the flag as a path.
    */
   entry?: string | undefined
   /** Node binary to launch it with; defaults to the running process's own. */
@@ -62,6 +66,21 @@ export const DEFAULT_LOG_LINES = 200
 
 /** How long a stop waits for the node to end by default, in milliseconds. */
 export const DEFAULT_STOP_GRACE_MS = 10_000
+
+/**
+ * The `dsh` CLI entry this package was installed beside, or the entry that
+ * started this process when no such CLI is resolvable (a source tree whose CLI
+ * build has not run yet). Only a profile-taking entry can boot the node: the
+ * packaged desktop host reads positional argv, so relaunching it with
+ * `--profile` makes it read the flag as a path.
+ */
+function defaultDshEntry(): string | undefined {
+  try {
+    return createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
+  } catch {
+    return process.argv[1]
+  }
+}
 
 /**
  * Starts, stops, and reports on the executor node this GUI supervises. The node's
@@ -106,7 +125,7 @@ export class MpsNodeControlService extends TypertRemoteService {
    */
   constructor(ctx: Context, config: Config) {
     super(ctx, 'mpsNodeControl')
-    const entry = config.entry ?? process.argv[1]
+    const entry = config.entry ?? defaultDshEntry()
     if (entry === undefined || entry === '') {
       throw new Error('mps-node-control: nothing to launch; state the dsh entry in the plugin config')
     }

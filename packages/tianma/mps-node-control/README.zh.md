@@ -27,7 +27,7 @@ kind: "package-reference"
 
 把插件挂在需要 GUI 入口的组合里；Web 应用 bundle 为桌面与浏览器 profile 挂上它，不需要节点的自动化 profile 只要不加这一行即可。
 
-配置项：`entry`（默认取启动本进程的那个入口）、`nodeBinary`（默认取运行中进程自己的 Node）、`loaders`（默认取本进程自己的模块加载器，源码启动能跑正是靠它）、`profile`（默认 `mps-node`）、`logLines`（默认 200）、`stopGraceMs`（默认 10 000）。
+配置项：`entry`（默认取随本包一同安装的 `dsh` CLI 入口）、`nodeBinary`（默认取运行中进程自己的 Node）、`loaders`（默认取本进程自己的模块加载器，源码启动能跑正是靠它）、`profile`（默认 `mps-node`）、`logLines`（默认 200）、`stopGraceMs`（默认 10 000）。
 
 远程命名空间 `mpsNodeControl` 暴露 `status`、`start`、`stop`、`logs`。[@tianma/dsh-mps-node-ui](../mps-node-ui/README.zh.md) 的浏览器半边把它们渲染成设置页的一节；节点自己的部署参数**刻意不归本插件管**——子进程继承环境变量，缺什么由节点在日志里说明，而这些日志正是本服务回读的内容。
 
@@ -37,7 +37,7 @@ kind: "package-reference"
 <details>
 <summary>实现内情——点击展开</summary>
 
-子进程按**本进程自己的启动方式**拉起：同一个 Node 二进制、同一套模块加载器、以 `process.argv[1]` 作为入口，再补上 `--profile mps-node`。因此源码启动（TypeScript 加载器下）与安装包启动（已安装 CLI 下）都不需要部署额外声明路径，同时这三者都保留可覆盖，供把节点放在别处的组合使用。
+子进程按**本进程自己的启动方式**拉起：同一个 Node 二进制、同一套模块加载器，入口取本包旁边解析到的 `dsh` CLI（`@deepseek-ai/dsh/lib/bin.js`），再补上 `--profile mps-node`；本进程自己的入口只作回退——安装包里的桌面宿主入口吃的是**位置参数**，拿 `--profile` 重新拉它会把旗标当路径读。因此源码启动与安装包启动都不需要部署额外声明路径，同时这三者都保留可覆盖，供把节点放在别处的组合使用。
 
 状态放在 TypeScript 的 `private` 字段而不是 ECMAScript 的 `#private` 字段里。调用方是通过 Cordis 的 Service 代理到达服务方法的，那个 receiver 并不是实例本身，所以 `#private` 字段在方法体里根本不可见。
 

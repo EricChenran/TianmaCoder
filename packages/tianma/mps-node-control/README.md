@@ -27,7 +27,7 @@ Give the Web GUI one place to run the executor node. The node is an application 
 
 Mount the plugin wherever a GUI entry is wanted; the Web application bundle mounts it for the desktop and browser profiles, and an automation profile that never wants a node simply leaves the row out.
 
-Config: `entry` (defaults to the entry that started this process), `nodeBinary` (defaults to the running process's own Node), `loaders` (defaults to this process's own module loaders, which is what makes a source launch work), `profile` (default `mps-node`), `logLines` (default 200), `stopGraceMs` (default 10 000).
+Config: `entry` (defaults to the `dsh` CLI shipped beside this package), `nodeBinary` (defaults to the running process's own Node), `loaders` (defaults to this process's own module loaders, which is what makes a source launch work), `profile` (default `mps-node`), `logLines` (default 200), `stopGraceMs` (default 10 000).
 
 The Remote namespace `mpsNodeControl` exposes `status`, `start`, `stop`, and `logs`. The browser half of [@tianma/dsh-mps-node-ui](../mps-node-ui/README.md) renders them as a Settings section; the node's own deployment parameters are deliberately not this plugin's business — the child inherits the environment, and the node reports whatever a deployment still has to state in the output this service reads back.
 
@@ -37,7 +37,7 @@ The Remote namespace `mpsNodeControl` exposes `status`, `start`, `stop`, and `lo
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The child is launched the way this process itself was launched: the same Node binary, the same module loaders, and `process.argv[1]` as the entry, with `--profile mps-node` appended. A source launch under the TypeScript loader and a packaged launch under the installed CLI therefore both work with no deployment stating paths, while each of the three stays overridable for a composition that keeps the node somewhere else.
+The child is launched the way this process itself was launched — the same Node binary and the same module loaders — but through the `dsh` CLI entry resolved beside this package, with `--profile mps-node` appended (the process's own entry is only the fallback: the packaged desktop host takes positional argv, so relaunching it with `--profile` would read the flag as a path). A source launch and a packaged launch therefore both work with no deployment stating paths, while each of the three stays overridable for a composition that keeps the node somewhere else.
 
 State is held in TypeScript-private fields rather than ECMAScript `#private` ones. Callers reach a service method through the Cordis Service proxy, whose receiver is not the instance, so a `#private` field would be invisible to the method body.
 
