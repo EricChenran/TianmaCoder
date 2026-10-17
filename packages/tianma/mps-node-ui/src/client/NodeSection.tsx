@@ -28,7 +28,7 @@ const FIELDS = [
  * @param props - localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
-export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, probePlatform, t }: MpsNodeSectionProps) {
+export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, t }: MpsNodeSectionProps) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
   const running = phase === 'running' || phase === 'starting'
@@ -90,11 +90,21 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
           ? <div className={css.fields}>
             {FIELDS.map(field => <label key={field.key} className={css.field}>
               <span className={css.fieldLabel}>{t(field.label)}</span>
-              <Input
-                value={form[field.key] ?? ''}
-                placeholder={placeholder(config.effective[field.key], t)}
-                onChange={(event) => { setForm({ ...form, [field.key]: event.target.value }) }}
-              />
+              <div className={css.fieldRow}>
+                <Input
+                  value={form[field.key] ?? ''}
+                  placeholder={placeholder(config.effective[field.key], t)}
+                  onChange={(event) => { setForm({ ...form, [field.key]: event.target.value }) }}
+                />
+                {field.key === 'workspaceRoot' && <Button
+                  variant='ghost'
+                  onClick={() => {
+                    void browse().then((picked) => {
+                      if (picked !== undefined) setForm({ ...form, workspaceRoot: picked })
+                    })
+                  }}
+                >{t('browse')}</Button>}
+              </div>
             </label>)}
             <div className={css.actions}>
               <Button variant="primary" onClick={submit} disabled={node.configBusy}>
@@ -190,6 +200,7 @@ function effectiveLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => strin
 function sourceLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => string): string {
   if (entry.source === 'saved') return t('sourceSaved')
   if (entry.source === 'environment') return t('sourceEnvironment')
+  if (entry.source === 'default') return t('sourceDefault')
   return t('sourceUnset')
 }
 

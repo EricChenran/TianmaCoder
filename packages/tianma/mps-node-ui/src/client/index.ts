@@ -119,6 +119,19 @@ export function apply(ctx: Context): void {
       const result = await ctx.remote.mpsNodeControl.probe(form)
       publish({ probeBusy: false, probe: result.ok ? result.value : { reachable: false, detail: failure(result.error) } })
     },
+    // The workspace UI service is read lazily rather than injected, so this
+    // surface still mounts in a composition without the directory picker.
+    async browse() {
+      // Structurally typed: the workspace UI service is not a compile-time
+      // dependency of this surface, so only the one method it needs is named.
+      const workspace = ctx.get('uiWorkspace') as { pickDirectory(): Promise<string | null> } | undefined
+      if (workspace === undefined) return undefined
+      try {
+        return await workspace.pickDirectory() ?? undefined
+      } catch {
+        return undefined
+      }
+    },
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section', id: 'mps-node', order: -5, label: () => t('nav'),

@@ -92,6 +92,8 @@ export type MpsNodeConfigSource =
   | 'saved'
   /** Inherited from the environment this GUI was started with. */
   | 'environment'
+  /** The protocol's own default, shown so a blank field never reads as missing. */
+  | 'default'
   /** Neither: the node falls back to its own bundle defaults. */
   | 'unset'
 

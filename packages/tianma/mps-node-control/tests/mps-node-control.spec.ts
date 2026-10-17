@@ -237,6 +237,12 @@ describe('the deployment parameters the Settings form owns', () => {
     const before = await ctx.mpsNodeControl.config()
     expect(before.saved).toEqual({})
     expect(before.effective.platformHost.source).toBe('unset')
+    // The protocol's own defaults show wherever neither the form nor the
+    // environment states a value, so a blank field never reads as missing.
+    expect(before.effective.platformPort).toEqual({ value: '8791', source: 'default' })
+    expect(before.effective.platformScheme).toEqual({ value: 'http', source: 'default' })
+    expect(before.effective.platformBasePath).toEqual({ value: '/exec/v1', source: 'default' })
+    expect(before.effective.slotsTotal).toEqual({ value: '1', source: 'default' })
 
     const after = await ctx.mpsNodeControl.saveConfig({ platformHost: '  mps.example.com ', platformPort: '8791', nodeId: '' })
     expect(after.saved).toEqual({ platformHost: 'mps.example.com', platformPort: 8791 })

@@ -99,6 +99,18 @@ const DEPLOYMENT_FILENAME = 'mps-node-control.json'
 /** How long a connectivity probe waits for the platform's answer. */
 const PROBE_TIMEOUT_MS = 8_000
 
+/**
+ * The protocol's own defaults, shown wherever neither the form nor the
+ * environment states a value, so a blank field reads as "keeps this" rather
+ * than "missing". These are the same defaults the node's bundle patch applies.
+ */
+const FIELD_DEFAULTS: Readonly<Partial<Record<keyof MpsNodeDeployment, string>>> = {
+  platformPort: '8791',
+  platformScheme: 'http',
+  platformBasePath: '/exec/v1',
+  slotsTotal: '1',
+}
+
 /** Deployment fields and the environment variables the node reads them from. */
 const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
   platformHost: 'MPS_PLATFORM_HOST',
@@ -195,6 +207,8 @@ function effectiveEntry(key: keyof MpsNodeDeployment, saved: MpsNodeDeployment):
   }
   const fromEnv = process.env[DEPLOYMENT_ENV[key]]
   if (fromEnv !== undefined && fromEnv.trim() !== '') return { value: fromEnv, source: 'environment' }
+  const fallback = FIELD_DEFAULTS[key]
+  if (fallback !== undefined) return { value: fallback, source: 'default' }
   return { source: 'unset' }
 }
 
@@ -414,7 +428,7 @@ export class MpsNodeControlService extends TypertRemoteService {
     }
     const scheme = pick(form.platformScheme, 'platformScheme') === 'https' ? 'https' : 'http'
     const portText = pick(form.platformPort, 'platformPort')
-    const port = portText === undefined ? (scheme === 'https' ? 443 : 80) : Number(portText)
+    const port = portText === undefined ? 8791 : Number(portText)
     if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
       return { reachable: false, detail: `the platform port "${portText ?? ''}" is not a usable TCP port` }
     }

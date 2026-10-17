@@ -57,4 +57,9 @@ export interface MpsNodeInjected {
    * what it found rather than throwing, so an unreachable address is a result.
    */
   probePlatform: (form: MpsNodeFormInput) => Promise<void>
+  /**
+   * Open the Host-native directory chooser and resolve what it picked, or
+   * undefined when it was cancelled or no chooser is composed.
+   */
+  browse: () => Promise<string | undefined>
 }
