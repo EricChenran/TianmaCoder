@@ -21,6 +21,7 @@ import type { TaskRunner } from './runner.ts'
 
 export {
   Config,
+  DEFAULT_ANSWER_RUNTIME_SECONDS,
   DEFAULT_CLAIM_LONG_POLL_SECONDS,
   DEFAULT_GIT_USER_EMAIL,
   DEFAULT_GIT_USER_NAME,

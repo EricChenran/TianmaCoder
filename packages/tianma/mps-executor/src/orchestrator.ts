@@ -17,6 +17,7 @@ import {
   strongerOutcome,
   taskRepository,
   taskRuntimeLimitMs,
+  WORK_KIND_CHAT_ANSWER,
 } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
@@ -111,11 +112,11 @@ export const LOG_LINE_MAX_BYTES = 4096
 /** Most log lines one submission carries. */
 export const LOG_BATCH_MAX_LINES = 500
 
-/** Wait before claiming again once every slot is busy. */
-const SLOT_WAIT_MS = 1000
-
 /** Wait before claiming again after the platform answered an empty long poll. */
 const EMPTY_CLAIM_PAUSE_MS = 500
+
+/** Wait before claiming again while the node has no room for work at all. */
+const ROOM_WAIT_MS = 1000
 
 /** Wait before claiming again after a failed claim. */
 const CLAIM_FAILURE_PAUSE_MS = 5000
@@ -157,6 +158,12 @@ export interface TaskOrchestratorOptions {
   settings: ExecutorSettings
   /** Executes one attempt. */
   runner: TaskRunner
+  /**
+   * Executes one chat-answer attempt. Without one, an answer task the platform
+   * dispatches is reported `failed` at once, so the platform's own answerer takes
+   * over instead of waiting on the lease.
+   */
+  chatRunner?: TaskRunner | undefined
   /**
    * Resolves the directory an attempt works in. Without one, an attempt runs where
    * its runner decides and the context names no directory.
@@ -238,6 +245,7 @@ export class TaskOrchestrator {
   readonly #client: TaskPlatformClient
   readonly #settings: ExecutorSettings
   readonly #runner: TaskRunner
+  readonly #chatRunner: TaskRunner | undefined
   readonly #workspaces: TaskWorkspaceAllocator | undefined
   readonly #publisher: TaskPublisher | undefined
   readonly #sessions: TaskSessionReporter | undefined
@@ -273,6 +281,7 @@ export class TaskOrchestrator {
     this.#client = options.client
     this.#settings = options.settings
     this.#runner = options.runner
+    this.#chatRunner = options.chatRunner
     this.#workspaces = options.workspaces
     this.#publisher = options.publisher
     this.#sessions = options.sessions
@@ -319,6 +328,19 @@ export class TaskOrchestrator {
     return [...this.#attempts.keys()]
   }
 
+  /**
+   * How many running attempts are chat answers, which hold no coding slot. The
+   * runtime reads this so a busy coder still counts as available to a customer.
+   * @returns the count of running answer attempts.
+   */
+  chatAnswerCount(): number {
+    let count = 0
+    for (const attempt of this.#attempts.values()) {
+      if (attempt.assignment.kind === WORK_KIND_CHAT_ANSWER) count += 1
+    }
+    return count
+  }
+
   /** Start claiming while a slot is free. Repeating the call changes nothing. */
   start(): void {
     if (this.#claiming) return
@@ -354,7 +376,10 @@ export class TaskOrchestrator {
     // The precondition belongs to the claim itself: a caller that reaches it directly
     // must not take on work the node has no room for.
     if (this.#canClaim?.() === false) return false
-    if (this.#hooks.availableSlots() <= 0) return false
+    // A claim is sent even while every coding slot is busy: an answer task needs no
+    // slot and no workspace, so the node would otherwise keep a customer waiting while
+    // it writes code. The platform reads `available_slots` and sends coding only when
+    // one is free.
     const assignment = await this.#client.claim({
       available_slots: this.#hooks.availableSlots(),
       capabilities: {
@@ -372,6 +397,13 @@ export class TaskOrchestrator {
       this.#report({
         level: 'warn',
         message: `the platform dispatched ${assignment.task_id} while this node had no room for it; leaving it to its lease rather than starting it`,
+      })
+      return false
+    }
+    if (assignment.kind !== WORK_KIND_CHAT_ANSWER && this.#hooks.availableSlots() <= 0) {
+      this.#report({
+        level: 'warn',
+        message: `the platform dispatched ${assignment.task_id} while every coding slot was busy; leaving it to its lease rather than starting it`,
       })
       return false
     }
@@ -397,10 +429,6 @@ export class TaskOrchestrator {
 
   async #claimLoop(): Promise<void> {
     while (this.#claiming) {
-      if (this.#hooks.availableSlots() <= 0) {
-        await this.#pause(SLOT_WAIT_MS)
-        continue
-      }
       // Offer anything the platform has not taken yet — a task's log, and the outcome of an
       // attempt whose result the platform could not take when it settled. A spool this node
       // cannot read is a warning: letting it end the loop would leave a node that looks
@@ -416,7 +444,7 @@ export class TaskOrchestrator {
       }
       if (this.#canClaim?.() === false) {
         // A node without room claims nothing; whoever knows why has already reported it.
-        await this.#pause(SLOT_WAIT_MS)
+        await this.#pause(ROOM_WAIT_MS)
         continue
       }
       try {
@@ -458,7 +486,13 @@ export class TaskOrchestrator {
     if (renewMs !== undefined) {
       running.renewTimer = setInterval(() => { void this.#renew(running) }, renewMs)
     }
-    const limitMs = taskRuntimeLimitMs(assignment.payload) ?? this.#settings.taskRuntimeSeconds * 1000
+    // An answer attempt runs inside the platform's soft answer deadline, which its own
+    // engine enforces after the node's ceiling: a node still working past the deadline
+    // would answer a question the platform has already taken back.
+    const defaultLimit = assignment.kind === WORK_KIND_CHAT_ANSWER
+      ? this.#settings.answerRuntimeSeconds * 1000
+      : this.#settings.taskRuntimeSeconds * 1000
+    const limitMs = taskRuntimeLimitMs(assignment.payload) ?? defaultLimit
     running.limitTimer = setTimeout(() => { this.#expire(running) }, limitMs)
     this.#runningCount += 1
     void this.#runAttempt(running, startedAt)
@@ -527,29 +561,40 @@ export class TaskOrchestrator {
     try {
       let result: TaskRunResult
       try {
+        // An answer task owns no workspace: it asks one question in a throwaway
+        // directory, so preparing one would both wait on a slot it does not need and
+        // hold a checkout it must never touch.
+        const chat = running.assignment.kind === WORK_KIND_CHAT_ANSWER
         // Nothing to prepare without an allocator, so the attempt starts without
         // yielding; otherwise the runner waits for its workspace.
-        const workspace = this.#workspaces === undefined
+        const workspace = chat || this.#workspaces === undefined
           ? undefined
           : await this.#workspaces.prepare(running.assignment)
         if (running.superseded) return
-        // An attempt stopped while its workspace was prepared must not start work
-        // the platform no longer wants.
-        result = running.aborted || running.timedOut
-          ? { outcome: 'blocked', summary: 'the attempt was stopped before its work started' }
-          : await this.#runner.run({
-            task: running.assignment,
-            workspaceDirectory: workspace?.directory,
-            checkout: workspace?.checkout,
-            publish: async () => await this.#publish(running, workspace),
-            uploadArtifact: async (kind: ExecArtifactKind, path: string, meta?: Record<string, unknown>) =>
-              await this.#uploadArtifact(running, workspace, kind, path, meta),
-            resource: async (artifactId: string) => await this.#resource(running, artifactId),
-            reportSession: async (sessionRef: string) => { await this.#reportSession(running, workspace, sessionRef) },
-            signal: running.controller.signal,
-            reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
-            reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
-          })
+        const runner = chat ? this.#chatRunner : this.#runner
+        if (runner === undefined) {
+          // Reported at once, so the platform's own answerer takes over instead of
+          // waiting on the lease to recycle the question.
+          result = { outcome: 'failed', summary: 'this node composes no runner for chat answers' }
+        } else {
+          // An attempt stopped while its workspace was prepared must not start work
+          // the platform no longer wants.
+          result = running.aborted || running.timedOut
+            ? { outcome: 'blocked', summary: 'the attempt was stopped before its work started' }
+            : await runner.run({
+              task: running.assignment,
+              workspaceDirectory: workspace?.directory,
+              checkout: workspace?.checkout,
+              publish: async () => await this.#publish(running, workspace),
+              uploadArtifact: async (kind: ExecArtifactKind, path: string, meta?: Record<string, unknown>) =>
+                await this.#uploadArtifact(running, workspace, kind, path, meta),
+              resource: async (artifactId: string) => await this.#resource(running, artifactId),
+              reportSession: async (sessionRef: string) => { await this.#reportSession(running, workspace, sessionRef) },
+              signal: running.controller.signal,
+              reportProgress: async (progress: TaskProgress) => { await this.#progress(running, progress) },
+              reportLog: async (stream: string, lines: ExecLogLine[]) => { await this.#postLog(running, stream, lines) },
+            })
+        }
       } catch (error: unknown) {
         result = { outcome: 'failed', summary: attemptFailureSummary(error) }
       }

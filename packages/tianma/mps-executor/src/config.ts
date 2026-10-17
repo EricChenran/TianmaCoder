@@ -14,6 +14,8 @@ import {
   DEFAULT_PLATFORM_BASE_PATH,
   DEFAULT_PLATFORM_PORT,
   resolvePlatformEndpoint,
+  WORK_KIND_CHAT_ANSWER,
+  WORK_KIND_CODING,
 } from '@tianma/dsh-mps-exec-core'
 import type { ExecCapabilities, PlatformEndpoint, PlatformScheme } from '@tianma/dsh-mps-exec-core'
 import { probeTools } from './capabilities.ts'
@@ -54,6 +56,14 @@ export const DEFAULT_LEASE_RENEW_SECONDS = 30
 
 /** Runtime ceiling for one attempt, used when the task payload states none. */
 export const DEFAULT_TASK_RUNTIME_SECONDS = 3 * 60 * 60
+
+/**
+ * Runtime ceiling for one chat-answer attempt, used when its payload states none.
+ * The platform answers in its own engine after `MPS_ANSWER_NODE_TIMEOUT` (60 s),
+ * so the node's ceiling stays under it: a node still working past the deadline
+ * would answer a question the platform has already taken back.
+ */
+export const DEFAULT_ANSWER_RUNTIME_SECONDS = 55
 
 /** Budget for one ordinary platform request. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
@@ -140,6 +150,8 @@ export interface Config {
   leaseRenewSeconds?: number
   /** Runtime ceiling in seconds for one attempt, used when the task payload states none. */
   taskRuntimeSeconds?: number
+  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  answerRuntimeSeconds?: number
   /** Budget for one ordinary platform request in milliseconds. */
   requestTimeoutMs?: number
   /** Work kinds this node accepts. */
@@ -183,6 +195,7 @@ export const Config: z<Config> = z.object({
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
   leaseRenewSeconds: z.number().step(1).min(1).max(3600).default(DEFAULT_LEASE_RENEW_SECONDS),
   taskRuntimeSeconds: z.number().step(1).min(1).default(DEFAULT_TASK_RUNTIME_SECONDS),
+  answerRuntimeSeconds: z.number().step(1).min(1).default(DEFAULT_ANSWER_RUNTIME_SECONDS),
   requestTimeoutMs: z.number().step(1).min(1000).default(DEFAULT_REQUEST_TIMEOUT_MS),
   lanes: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
@@ -241,6 +254,8 @@ export interface ExecutorSettings {
   leaseRenewSeconds: number
   /** Runtime ceiling in seconds for one attempt, before a payload states its own. */
   taskRuntimeSeconds: number
+  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  answerRuntimeSeconds: number
   /** Budget for one ordinary request. */
   requestTimeoutMs: number
   /** Capability promise the node registers. */
@@ -403,9 +418,15 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     claimLongPollSeconds: config.claimLongPollSeconds ?? DEFAULT_CLAIM_LONG_POLL_SECONDS,
     leaseRenewSeconds: config.leaseRenewSeconds ?? DEFAULT_LEASE_RENEW_SECONDS,
     taskRuntimeSeconds: config.taskRuntimeSeconds ?? DEFAULT_TASK_RUNTIME_SECONDS,
+    answerRuntimeSeconds: config.answerRuntimeSeconds ?? DEFAULT_ANSWER_RUNTIME_SECONDS,
     requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     capabilities: {
-      lanes: [...(config.lanes ?? [])],
+      // The platform does not dispatch a task whose `required_capabilities` the node's
+      // lanes do not cover, so a node that states none promises both work kinds it
+      // ships runners for.
+      lanes: config.lanes === undefined || config.lanes.length === 0
+        ? [WORK_KIND_CODING, WORK_KIND_CHAT_ANSWER]
+        : [...config.lanes],
       // A capability is a promise: the tools are the ones this machine has, unless a
       // deployment states the set it wants to be scheduled for.
       tools: config.tools === undefined || config.tools.length === 0 ? probeTools() : [...config.tools],

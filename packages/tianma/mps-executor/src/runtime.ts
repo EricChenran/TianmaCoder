@@ -29,6 +29,7 @@ import { drainingMarker } from './draining.ts'
 import type { DrainingMarker } from './draining.ts'
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
+import { chatAnswerRunner } from './chat-runner.ts'
 import { clientArtifactUploader } from './artifacts.ts'
 import { cliGit } from './git.ts'
 import { checkoutPublisher } from './publish.ts'
@@ -193,6 +194,21 @@ export class MpsExecutorRuntime {
       client: this.client,
       settings: this.settings,
       runner,
+      // Answer tasks ride the same CLI the coding runner resolved to, in a
+      // throwaway directory; without a resolved command there is no chat runner and
+      // an answer dispatch is reported failed at once.
+      ...(this.settings.cliRunner.command.length === 0
+        ? {}
+        : {
+          chatRunner: chatAnswerRunner({
+            command: this.settings.cliRunner.command,
+            logsDirectory: this.settings.cliRunner.logsDirectory,
+            ...(this.settings.cliRunner.dshHome === undefined ? {} : {
+              env: { DSH_HOME: this.settings.cliRunner.dshHome },
+            }),
+            jsonEvents: this.settings.cliRunner.jsonEvents,
+          }),
+        }),
       workspaces: checkoutAllocator({ store: this.#workspaces, git }),
       publisher: checkoutPublisher({
         git,
@@ -267,7 +283,10 @@ export class MpsExecutorRuntime {
    * @returns the free-slot count, never below zero.
    */
   availableSlots(): number {
-    return Math.max(this.settings.slotsTotal - this.#runningTasks.length, 0)
+    // An answer task holds no coding slot, so a node busy writing code still counts
+    // as available to a customer's question.
+    const coding = this.#runningTasks.length - (this.#tasks?.chatAnswerCount() ?? 0)
+    return Math.max(this.settings.slotsTotal - coding, 0)
   }
 
   /**

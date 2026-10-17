@@ -198,6 +198,7 @@ function waitingRunner(result: (context: TaskRunContext) => TaskRunResult): Task
 function orchestratorWith(options: {
   platform: FakePlatform
   runner: TaskRunner
+  chatRunner?: TaskRunner
   hooks?: FakeHooks
   reports?: ExecutorReport[]
   settings?: ExecutorSettings
@@ -212,6 +213,7 @@ function orchestratorWith(options: {
     client: options.platform,
     settings: options.settings ?? settings(),
     runner: options.runner,
+    ...(options.chatRunner === undefined ? {} : { chatRunner: options.chatRunner }),
     hooks,
     report: (report) => { reports.push(report) },
     canClaim: options.canClaim,
@@ -589,7 +591,7 @@ describe('task lifecycle', () => {
 
     expect(platform.claims).toEqual([{
       available_slots: 1,
-      capabilities: { lanes: [], tools: ['node'] },
+      capabilities: { lanes: ['coding', 'chat_answer'], tools: ['node'] },
       max_wait_seconds: settings().claimLongPollSeconds,
     }])
     expect(hooks.started).toEqual([{
@@ -617,18 +619,75 @@ describe('task lifecycle', () => {
     expect(orchestrator.runningTaskIds()).toEqual([])
   })
 
-  it('claims nothing while every slot is busy', async () => {
+  it('keeps claiming while every slot is busy, but starts no coding task it cannot hold', async () => {
     const platform = new FakePlatform()
+    platform.assignments.push(assignment())
     const hooks = new FakeHooks()
     hooks.slots = 0
+    const reports: ExecutorReport[] = []
     const { orchestrator } = orchestratorWith({
       platform,
       hooks,
+      reports,
       runner: runnerOf(async () => ({ outcome: 'success', summary: '' })),
     })
 
     expect(await orchestrator.claimOnce()).toBe(false)
-    expect(platform.claims).toEqual([])
+    // The claim was sent — an answer task needs no slot, so the node keeps asking —
+    // but a coding dispatch at zero slots is named and left to its lease.
+    expect(platform.claims).toHaveLength(1)
+    expect(platform.claims[0]?.available_slots).toBe(0)
+    expect(hooks.started).toEqual([])
+    expect(reports.some(report => /every coding slot was busy/u.test(report.message))).toBe(true)
+  })
+
+  it('starts a chat answer while every slot is busy, with no workspace and its own runner', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      kind: 'chat_answer',
+      priority: 800,
+      payload: { answer: { chat_id: 'wr1', message_id: 7, question: '现在有哪些任务在跑？', sender: '陈祖豪' } },
+    }))
+    const hooks = new FakeHooks()
+    hooks.slots = 0
+    const workspaces: TaskWorkspaceAllocator = {
+      prepare: async () => { throw new Error('an answer task must not prepare a workspace') },
+    }
+    const { orchestrator } = orchestratorWith({
+      platform,
+      hooks,
+      workspaces,
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: runnerOf(async (context) => {
+        expect(context.workspaceDirectory).toBeUndefined()
+        expect(context.checkout).toBeUndefined()
+        return { outcome: 'success', summary: '现在共 2 个任务在跑。' }
+      }),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(true)
+    await orchestrator.drain()
+
+    expect(hooks.started).toHaveLength(1)
+    expect(platform.results[0]).toMatchObject({
+      outcome: 'success',
+      summary: '现在共 2 个任务在跑。',
+    })
+    expect(orchestrator.chatAnswerCount()).toBe(0)
+  })
+
+  it('reports an answer task as failed at once when no chat runner is composed', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({ kind: 'chat_answer', payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } } }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(true)
+    await orchestrator.drain()
+
+    expect(platform.results[0]).toMatchObject({ outcome: 'failed', summary: /no runner for chat answers/u })
   })
 
   it('treats an empty long poll as no work', async () => {
@@ -738,6 +797,29 @@ describe('task lifecycle', () => {
 
     await orchestrator.claimOnce()
     await vi.advanceTimersByTimeAsync(5_000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('failed')
+    expect(reports.some(report => report.message.includes('runtime ceiling'))).toBe(true)
+  })
+
+  it('stops an answer attempt at the answer ceiling, which stays under the coding one', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    // No payload limit: the answer ceiling is the settings' own.
+    platform.assignments.push(assignment({
+      kind: 'chat_answer',
+      payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } },
+    }))
+    const { orchestrator, reports } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: waitingRunner(() => ({ outcome: 'success', summary: 'late answer' })),
+    })
+
+    await orchestrator.claimOnce()
+    // The coding ceiling is hours; the answer one is 55 seconds by default.
+    await vi.advanceTimersByTimeAsync(55_000)
     await orchestrator.drain()
 
     expect(platform.results[0]?.outcome).toBe('failed')
@@ -1677,7 +1759,8 @@ describe('task lifecycle', () => {
     expect(platform.results.map(result => result.summary)).toEqual(['tsk_1', 'tsk_2'])
   })
 
-  it('waits for a slot to free without asking the platform', async () => {    vi.useFakeTimers()
+  it('keeps asking while every slot is busy, so an answer task is not kept waiting', async () => {
+    vi.useFakeTimers()
     const platform = new FakePlatform()
     const hooks = new FakeHooks()
     hooks.slots = 0
@@ -1689,7 +1772,10 @@ describe('task lifecycle', () => {
 
     orchestrator.start()
     await vi.advanceTimersByTimeAsync(3000)
-    expect(platform.claims).toEqual([])
+    // The platform answered every long poll empty, and the node asked again each
+    // time, with zero slots on offer: an answer dispatch needs none.
+    expect(platform.claims.length).toBeGreaterThan(1)
+    expect(platform.claims.every(claim => claim.available_slots === 0)).toBe(true)
     orchestrator.stop()
     await orchestrator.drain()
   })

@@ -227,3 +227,50 @@ function stringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   return value.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
 }
+
+/** The coding work kind: a repository task with the full delivery pipeline. */
+export const WORK_KIND_CODING = 'coding'
+
+/**
+ * The chat-answer work kind: a hosted-group question that needs one reply in
+ * the result `summary`, no repository, no artifacts, and the platform's own
+ * answerer taking over when the node does not settle within its soft deadline.
+ */
+export const WORK_KIND_CHAT_ANSWER = 'chat_answer'
+
+/** The chat-answer task's payload, the `answer` object of a claim's response. */
+export interface ChatAnswerTask {
+  /** Group conversation the question arrived in; echoed back, never dialed. */
+  chat_id: string
+  /** Message id the platform knows the question by. */
+  message_id: number
+  /** The question to answer. */
+  question: string
+  /** Who asked, when the platform states it. */
+  sender?: string | undefined
+  /** Classified intent, when the platform states one. */
+  intent?: string | undefined
+}
+
+/**
+ * Read the chat-answer payload of an answer-kind task. A claim whose payload
+ * states no readable question cannot be answered, which the caller reports as
+ * `failed` so the platform's own answerer takes over quickly.
+ * @param payload - the payload a claim returned.
+ * @returns the answer task, or undefined when the payload states none.
+ */
+export function chatAnswerOf(payload: Record<string, unknown>): ChatAnswerTask | undefined {
+  const answer = payload['answer']
+  if (!isRecord(answer)) return undefined
+  const chatId = stringField(answer, 'chat_id')
+  const question = stringField(answer, 'question')
+  if (chatId === undefined || question === undefined) return undefined
+  const messageId = answer['message_id']
+  return {
+    chat_id: chatId,
+    message_id: typeof messageId === 'number' && Number.isFinite(messageId) ? messageId : -1,
+    question,
+    ...(stringField(answer, 'sender') === undefined ? {} : { sender: stringField(answer, 'sender') }),
+    ...(stringField(answer, 'intent') === undefined ? {} : { intent: stringField(answer, 'intent') }),
+  }
+}

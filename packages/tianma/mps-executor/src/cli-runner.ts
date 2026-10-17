@@ -543,7 +543,7 @@ export function sessionIsGone(outcome: RunOutcome, lines: readonly RunLine[]): b
 }
 
 /** What one run settled as. */
-interface RunOutcome {
+export interface RunOutcome {
   /** Why the run ended. */
   kind: 'exited' | 'stopped'
   /** Exit code the host reported; null when the run ended without one. */
@@ -569,7 +569,7 @@ interface RunRequest {
  * @param request - the command, its directory, and where its lines go.
  * @returns how the run settled.
  */
-async function runProcess(request: RunRequest): Promise<RunOutcome> {
+export async function runProcess(request: RunRequest): Promise<RunOutcome> {
   return await new Promise<RunOutcome>((resolve, reject) => {
     const child = spawn(request.bin, request.args, {
       cwd: request.directory,
@@ -649,7 +649,7 @@ export function runFailureSummary(code: number | null | undefined, lastStderr: s
  * @param lines - everything the run printed.
  * @param outcome - how the run settled.
  */
-function writeRawLog(path: string, lines: RunLine[], outcome: RunOutcome, dropped = 0): void {
+export function writeRawLog(path: string, lines: RunLine[], outcome: RunOutcome, dropped = 0): void {
   const header = [
     `# ${path}`,
     `# ended: ${outcome.kind} with code ${String(exitCodeOf(outcome))}`,

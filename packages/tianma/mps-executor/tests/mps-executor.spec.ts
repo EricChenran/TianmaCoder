@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  Config, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
+  Config, DEFAULT_ANSWER_RUNTIME_SECONDS, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
 import type {
   ExecHttpRequest,
   ExecHttpResponse,
@@ -142,6 +142,19 @@ describe('node configuration', () => {
     expect(config.agentVersion).toBe(UNKNOWN_AGENT_VERSION)
     expect(config.labels).toEqual({})
     expect(config.autoStart).toBe(true)
+  })
+
+  it('promises both work kinds and the answer ceiling when a deployment states neither', () => {
+    const settings = settingsFor({})
+    // Empty lanes would keep the platform from dispatching anything that states
+    // required capabilities, so the resolution names both kinds it has runners for.
+    expect(settings.capabilities.lanes).toEqual(['coding', 'chat_answer'])
+    expect(settings.answerRuntimeSeconds).toBe(DEFAULT_ANSWER_RUNTIME_SECONDS)
+  })
+
+  it('keeps the lanes a deployment states', () => {
+    const settings = settingsFor({ lanes: ['coding'] })
+    expect(settings.capabilities.lanes).toEqual(['coding'])
   })
 
   it('accepts an explicit port, scheme, and base path', () => {
@@ -1219,6 +1232,9 @@ describe('task claiming through the runtime', () => {
       envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
       envelope(REGISTERED),
       envelope(CLAIMED),
+      // The claim loop keeps asking while the one coding slot is busy — an answer
+      // task needs none — so the next long poll is answered empty here.
+      envelope(null),
       envelope({
         ...HEARTBEAT,
         commands: [

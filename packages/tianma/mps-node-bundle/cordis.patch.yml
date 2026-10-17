@@ -35,6 +35,8 @@
         secretEnv: MPS_NODE_SECRET
         workspaceRoot: !!js process.env.MPS_NODE_WORKSPACE ?? process.cwd()
         slotsTotal: !!js Number(process.env.MPS_NODE_SLOTS ?? 1)
+        # Empty means "both work kinds this build ships runners for" (coding and
+        # chat_answer); state a subset only to keep a node off one of them.
         lanes: []
         tools: []
         agentVersion: !!js process.env.MPS_AGENT_VERSION ?? 'unknown'

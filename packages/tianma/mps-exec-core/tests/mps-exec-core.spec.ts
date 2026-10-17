@@ -14,6 +14,8 @@ import {
   EXEC_PROTOCOL_HEADER,
   EXEC_PROTOCOL_VERSION,
   EXEC_REQUEST_ID_HEADER,
+  WORK_KIND_CHAT_ANSWER,
+  WORK_KIND_CODING,
   ExecClient,
   ExecResponseError,
   artifactId,
@@ -34,6 +36,7 @@ import {
   sha256Of,
   strongerOutcome,
   taskAttemptDelayMs,
+  chatAnswerOf,
   taskInstruction,
   taskPolicy,
   taskRepository,
@@ -1084,5 +1087,38 @@ describe('task vocabulary', () => {
       summary: undefined,
     })
     expect(taskPolicy({ workspace: { access_mode: 'other_mode' } }).access_mode).toBeUndefined()
+  })
+})
+
+describe('chat answer payload', () => {
+  it('reads the answer object of an answer-kind task', () => {
+    expect(chatAnswerOf({
+      answer: { chat_id: 'wrsEplRgAA', message_id: 7562, question: '现在项目里都有哪些任务在跑？', sender: '陈祖豪', intent: 'question' },
+    })).toEqual({
+      chat_id: 'wrsEplRgAA',
+      message_id: 7562,
+      question: '现在项目里都有哪些任务在跑？',
+      sender: '陈祖豪',
+      intent: 'question',
+    })
+  })
+
+  it('keeps an answer that states no sender or intent readable', () => {
+    expect(chatAnswerOf({ answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } })).toEqual({
+      chat_id: 'wr1',
+      message_id: 7,
+      question: 'hi',
+    })
+  })
+
+  it('refuses a payload whose question it cannot read', () => {
+    expect(chatAnswerOf({})).toBeUndefined()
+    expect(chatAnswerOf({ answer: { chat_id: 'wr1' } })).toBeUndefined()
+    expect(chatAnswerOf({ answer: 'not an object' })).toBeUndefined()
+  })
+
+  it('names both work kinds the platform dispatches', () => {
+    expect(WORK_KIND_CODING).toBe('coding')
+    expect(WORK_KIND_CHAT_ANSWER).toBe('chat_answer')
   })
 })
