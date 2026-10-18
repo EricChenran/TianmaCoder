@@ -310,7 +310,9 @@ async function pushWorkBranch(options: {
   directory: string
   branch: string
   head: string
-  signal?: AbortSignal
+  // The `| undefined` is what `exactOptionalPropertyTypes` makes meaningful: the callers
+  // pass the caller's own possibly-absent signal through, rather than omitting the key.
+  signal?: AbortSignal | undefined
 }): Promise<void> {
   try {
     await options.git.run(options.directory, ['push', 'origin', options.branch], options.signal)
