@@ -14695,6 +14695,9 @@ importers:
       '@deepseek-ai/cordis-plugin-loader':
         specifier: workspace:~
         version: link:../../../vendor/loader
+      '@deepseek-ai/dsh':
+        specifier: workspace:*
+        version: link:../../../apps/cli
       '@tianma/dsh-mps-exec-core':
         specifier: workspace:*
         version: link:../mps-exec-core

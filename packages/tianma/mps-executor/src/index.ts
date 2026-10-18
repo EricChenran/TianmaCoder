@@ -245,7 +245,13 @@ export function apply(ctx: Context, config: Config): void {
     runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? ownRunner,
     // The version is probed from the CLI this node runs, so the platform schedules on
     // the build that is really here rather than a value someone wrote down.
-    probeAgentVersion: async () => await probeAgentVersion({ bin: settings.cliRunner.bin }),
+    probeAgentVersion: async () => await probeAgentVersion({
+      bin: settings.cliRunner.versionCommand[0] ?? settings.cliRunner.bin,
+      // A rewritten command starts with the interpreter, so the CLI entry rides along.
+      args: settings.cliRunner.versionCommand.length > 1
+        ? [...settings.cliRunner.versionCommand.slice(1), '--version']
+        : ['--version'],
+    }),
     probeResources: resourceReader({ root: settings.codingRoot }).read,
     // Both sinks, always: the logger is what a host shows, and the file is what a
     // deployment can read when the host shows nothing. Warnings and errors also

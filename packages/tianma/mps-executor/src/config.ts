@@ -7,8 +7,10 @@
  * @module @tianma/dsh-mps-executor/config
  */
 
+import { existsSync } from 'node:fs'
 import { hostname as hostHostname, platform } from 'node:os'
-import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { delimiter, isAbsolute, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import {
   DEFAULT_PLATFORM_BASE_PATH,
@@ -214,6 +216,8 @@ export interface ResolvedCliRunner {
   logsDirectory: string
   /** `DSH_HOME` the run uses, or undefined to inherit the node's environment. */
   dshHome?: string | undefined
+  /** The command that answers `--version`, which is not always `command[0]`. */
+  versionCommand: string[]
   /** Whether the run is asked for its event stream instead of its final answer alone. */
   jsonEvents: boolean
 }
@@ -277,22 +281,69 @@ export interface ExecutorSettings {
  */
 function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: string): ResolvedCliRunner {
   const statedCommand = stated?.command ?? []
-  const command = statedCommand.length === 0 ? [...DEFAULT_CLI_COMMAND] : statedCommand
-  if (command[0] === undefined || command[0] === '') {
-    throw new TypeError('the CLI runner needs the command it starts, such as dsh --profile headless')
-  }
-  // The check above is what makes this executable exist; TypeScript cannot see through an
-  // element read, so the resolved runner carries it explicitly.
-  const bin = command[0] as string
+  const command = executableCommand(statedCommand.length === 0 ? [...DEFAULT_CLI_COMMAND] : statedCommand)
   const logs = (stated?.logsDirectory ?? '').trim()
   const home = (stated?.dshHome ?? '').trim()
   return {
     command,
-    bin,
+    bin: command[0] as string,
+    versionCommand: versionProbeCommand(command),
     logsDirectory: logs === '' ? join(workspaceRoot, 'logs') : logs,
     dshHome: home === '' ? undefined : home,
     jsonEvents: stated?.jsonEvents === true,
   }
+}
+
+/**
+ * The command one run starts, taken as stated when it names a path or a name
+ * the PATH holds. A bare name nothing resolves — the packaged GUI's node, a clean
+ * machine without the CLI on its PATH — falls back to the dsh CLI shipped beside
+ * this package, started with this process's own binary: the same interpreter that
+ * started the node, so an ABI or PATH mismatch cannot occur.
+ * @param stated - the command the configuration stated.
+ * @returns the command to run.
+ */
+function executableCommand(stated: string[]): string[] {
+  const [bin, ...args] = stated
+  if (bin === undefined || bin === '') {
+    throw new TypeError('the CLI runner needs the command it starts, such as dsh --profile headless')
+  }
+  if (bin.includes('/') || bin.includes('\\') || isAbsolute(bin) || onPath(bin)) return stated
+  try {
+    const entry = createRequire(import.meta.url).resolve('@deepseek-ai/dsh/lib/bin.js')
+    return [process.execPath, entry, ...args]
+  } catch {
+    // No bundled CLI either: keep the stated name, so the failure names it.
+    return stated
+  }
+}
+
+/**
+ * Whether one bare name is on the PATH, with the Windows executable extensions.
+ * @param bin - the bare name.
+ * @returns true when some PATH directory holds it.
+ */
+function onPath(bin: string): boolean {
+  const extensions = platform() === 'win32' ? ['', '.cmd', '.exe', '.bat'] : ['']
+  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
+    if (directory === '') continue
+    for (const extension of extensions) {
+      if (existsSync(join(directory, bin + extension))) return true
+    }
+  }
+  return false
+}
+
+/**
+ * The command that answers `--version`: the stated executable when it is one, or
+ * the interpreter plus the CLI entry when the run command was rewritten.
+ * @param command - the resolved run command.
+ * @returns the command the version probe starts.
+ */
+function versionProbeCommand(command: string[]): string[] {
+  const entry = command.find(part => part.endsWith('lib\\bin.js') || part.endsWith('lib/bin.js'))
+  if (entry === undefined || command[0] === undefined) return [command[0] as string]
+  return command.slice(0, command.indexOf(entry) + 1)
 }
 
 /**

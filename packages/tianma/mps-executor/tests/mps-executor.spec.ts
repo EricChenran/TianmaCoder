@@ -152,6 +152,23 @@ describe('node configuration', () => {
     expect(settings.answerRuntimeSeconds).toBe(DEFAULT_ANSWER_RUNTIME_SECONDS)
   })
 
+  it('falls back to the CLI shipped beside the node when the PATH holds none', () => {
+    const settings = settingsFor({ cliRunner: { command: ['dsh', '--profile', 'headless'], logsDirectory: '', dshHome: '', jsonEvents: false } })
+    // On a machine without dsh on its PATH — the packaged GUI's node — the bare
+    // name is rewritten to this process's interpreter plus the bundled CLI entry.
+    expect(settings.cliRunner.command[0]).toBe(process.execPath)
+    expect(settings.cliRunner.command[1]).toContain('bin.js')
+    expect(settings.cliRunner.command.slice(2)).toEqual(['--profile', 'headless'])
+    // The version probe asks the interpreter plus the entry, then --version.
+    expect(settings.cliRunner.versionCommand).toEqual(settings.cliRunner.command.slice(0, 2))
+  })
+
+  it('keeps a stated command that names a path', () => {
+    const settings = settingsFor({ cliRunner: { command: ['C:/tools/dsh.cmd', '--profile', 'headless'], logsDirectory: '', dshHome: '', jsonEvents: false } })
+    expect(settings.cliRunner.command).toEqual(['C:/tools/dsh.cmd', '--profile', 'headless'])
+    expect(settings.cliRunner.versionCommand).toEqual(['C:/tools/dsh.cmd'])
+  })
+
   it('keeps the lanes a deployment states', () => {
     const settings = settingsFor({ lanes: ['coding'] })
     expect(settings.capabilities.lanes).toEqual(['coding'])
@@ -580,9 +597,13 @@ describe('plugin wiring', () => {
 
   it('resolves the CLI runner it falls back to', () => {
     const defaults = settingsFor()
+    // 'dsh' is not on this suite's PATH, so the default falls back to the CLI
+    // shipped beside the node, started with this process's interpreter.
+    const entry = require.resolve('@tianma/../dsh/lib/bin.js'.replace('@tianma/../', '@deepseek-ai/'))
     expect(defaults.cliRunner).toEqual({
-      command: ['dsh', '--profile', 'headless'],
-      bin: 'dsh',
+      command: [process.execPath, entry, '--profile', 'headless'],
+      bin: process.execPath,
+      versionCommand: [process.execPath, entry],
       logsDirectory: join(defaults.workspaceRoot, 'logs'),
       dshHome: undefined,
       jsonEvents: false,
@@ -599,6 +620,7 @@ describe('plugin wiring', () => {
     expect(stated.cliRunner).toEqual({
       command: ['C:\\tools\\dsh.exe', '--profile', 'headless'],
       bin: 'C:\\tools\\dsh.exe',
+      versionCommand: ['C:\\tools\\dsh.exe'],
       logsDirectory: 'C:\\node-logs',
       dshHome: 'C:\\node-home',
       jsonEvents: true,
