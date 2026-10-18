@@ -532,14 +532,19 @@ function stringOf(value: unknown): string | undefined {
 }
 
 /**
- * Whether a run failed because the CLI does not hold the session it was asked to adopt.
+ * Whether a run failed because the CLI cannot adopt the session it was asked to: either
+ * the session is gone, or another still-active write handle owns it — a previous run
+ * that never released it, which no retry of the same session can clear. Both mean the
+ * work never started, and both are answered the same way: start a new session.
  * @param outcome - what the run settled as.
  * @param lines - everything the run printed.
- * @returns true when the session is gone rather than the work having failed.
+ * @returns true when the session cannot be adopted rather than the work having failed.
  */
 export function sessionIsGone(outcome: RunOutcome, lines: readonly RunLine[]): boolean {
   if (outcome.code === 0 || outcome.code === null) return false
-  return lines.some(entry => /does not exist; omit --session-id/u.test(entry.line.text))
+  return lines.some(entry =>
+    /does not exist; omit --session-id/u.test(entry.line.text)
+    || /is already owned by an active write handle/u.test(entry.line.text))
 }
 
 /** What one run settled as. */

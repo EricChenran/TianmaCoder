@@ -485,8 +485,12 @@ describe('the CLI runner', () => {
       line: { at: '2026-10-15T04:03:55.123Z', level: 'warn', text },
     })
     const gone = 'dsh: session "dsh-session-gone" does not exist; omit --session-id to start a new Session'
+    const owned = 'dsh: session "session-7d747633-c58d-4c1b-ba05-471f6a81de4c" is already owned by an active write handle'
 
     expect(sessionIsGone({ kind: 'exited', code: 1 }, [line(gone)])).toBe(true)
+    // A session another still-active handle owns is as unusable as a gone one: the work
+    // never started, and only a new session can run it.
+    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line(owned)])).toBe(true)
     expect(sessionIsGone({ kind: 'exited', code: 1 }, [line('build failed')])).toBe(false)
     expect(sessionIsGone({ kind: 'exited', code: 0 }, [line(gone)])).toBe(false)
     expect(sessionIsGone({ kind: 'exited', code: null }, [line(gone)])).toBe(false)
