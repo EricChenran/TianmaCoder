@@ -120,6 +120,11 @@ export interface MpsNodeConfig {
   saved: MpsNodeDeployment
   /** Whether a secret is stored for the next launch, and where it comes from. */
   secretSet: MpsNodeConfigSource
+  /**
+   * This machine's LAN IPv4 addresses, so the operator can see which subnet
+   * the node sits on and check it against the platform's address.
+   */
+  lanAddresses: string[]
   /** What the next launch would run with, per field. */
   effective: {
     platformHost: MpsNodeConfigEntry
@@ -163,4 +168,9 @@ export interface MpsNodeProbeResult {
   latencyMs?: number | undefined
   /** What happened, as the settings surface shows it. */
   detail: string
+  /**
+   * Whether the probed address is this machine's own loopback, which in a
+   * production deployment means the node is dialing itself, not the platform.
+   */
+  loopback?: boolean | undefined
 }

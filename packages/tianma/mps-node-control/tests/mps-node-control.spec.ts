@@ -235,6 +235,7 @@ describe('the deployment parameters the Settings form owns', () => {
     const ctx = await control()
 
     const before = await ctx.mpsNodeControl.config()
+    expect(Array.isArray(before.lanAddresses)).toBe(true)
     expect(before.saved).toEqual({})
     expect(before.effective.platformHost).toEqual({ value: '127.0.0.1', source: 'default' })
     // The protocol's own defaults show wherever neither the form nor the
@@ -374,6 +375,9 @@ describe('the deployment parameters the Settings form owns', () => {
       expect(probe.httpStatus).toBe(401)
       expect(probe.latencyMs).toBeDefined()
       expect(probe.detail).toMatch(/401/u)
+      // The test server sits on this machine's loopback, so the probe says so.
+      expect(probe.loopback).toBe(true)
+      expect(probe.detail).toMatch(/loopback/u)
     } finally {
       await new Promise<void>((resolve) => { server.close(() => { resolve() }) })
     }
@@ -387,6 +391,7 @@ describe('the deployment parameters the Settings form owns', () => {
     expect(refused.reachable).toBe(false)
     expect(refused.httpStatus).toBeUndefined()
     expect(refused.detail).toMatch(/could not reach/u)
+    expect(refused.loopback).toBe(true)
 
     // With nothing stated anywhere, the probe dials the node's own fallback
     // address, which is what a launch would dial too.

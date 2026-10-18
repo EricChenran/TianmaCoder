@@ -20,6 +20,7 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { networkInterfaces } from 'node:os'
 import { join } from 'node:path'
 import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -230,6 +231,32 @@ function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
 }
 
 /**
+ * This machine's LAN IPv4 addresses: the non-internal ones a platform on the
+ * same LAN would dial back, so an operator can check the node sits on the
+ * platform's subnet.
+ * @returns the addresses, possibly none on an offline machine.
+ */
+export function lanIpv4Addresses(): string[] {
+  const addresses: string[] = []
+  for (const interfaces of Object.values(networkInterfaces())) {
+    for (const entry of interfaces ?? []) {
+      if (entry.family === 'IPv4' && !entry.internal) addresses.push(entry.address)
+    }
+  }
+  return [...new Set(addresses)]
+}
+
+/**
+ * Whether one dial target is this machine's own loopback — in a production
+ * deployment a node dialing it is dialing itself, not the platform.
+ * @param host - the address about to be dialed.
+ * @returns true for every loopback spelling.
+ */
+export function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/u.test(host)
+}
+
+/**
  * One probe failure in a shape a settings page shows.
  * @param error - what the fetch threw.
  * @returns the message, with the timeout named as such.
@@ -389,6 +416,7 @@ export class MpsNodeControlService extends TypertRemoteService {
       secretSet: stored.nodeSecret !== undefined ? 'saved'
         : process.env.MPS_NODE_SECRET !== undefined && process.env.MPS_NODE_SECRET !== '' ? 'environment'
           : 'unset',
+      lanAddresses: lanIpv4Addresses(),
       effective,
     }
   }
@@ -448,6 +476,12 @@ export class MpsNodeControlService extends TypertRemoteService {
     }
     const basePath = (pick(form.platformBasePath, 'platformBasePath') ?? '/exec/v1').replace(/\/+$/u, '')
     const url = `${scheme}://${host}:${String(port)}${basePath}/auth/token`
+    // A production platform runs on another machine of this LAN: a loopback
+    // target means the node is dialing itself, whatever the answer says.
+    const loopback = isLoopbackHost(host)
+    const loopbackNote = loopback
+      ? ' — this is this machine\'s own loopback; a production platform runs on another machine of this LAN'
+      : ''
     const startedAt = Date.now()
     try {
       const response = await fetch(url, {
@@ -463,12 +497,17 @@ export class MpsNodeControlService extends TypertRemoteService {
         reachable: true,
         httpStatus: response.status,
         latencyMs,
-        detail: response.status === 401
+        ...(loopback ? { loopback: true } : {}),
+        detail: (response.status === 401
           ? `the platform answered 401 in ${String(latencyMs)} ms, which is the healthy shape`
-          : `the platform answered ${String(response.status)} in ${String(latencyMs)} ms`,
+          : `the platform answered ${String(response.status)} in ${String(latencyMs)} ms`) + loopbackNote,
       }
     } catch (error) {
-      return { reachable: false, detail: `could not reach ${url}: ${toErrorMessage(error)}` }
+      return {
+        reachable: false,
+        ...(loopback ? { loopback: true } : {}),
+        detail: `could not reach ${url}: ${toErrorMessage(error)}${loopbackNote}`,
+      }
     }
   }
 

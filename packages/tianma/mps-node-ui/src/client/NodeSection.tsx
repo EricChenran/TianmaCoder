@@ -84,6 +84,9 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
     <div className={css.group}>
       <span className={css.groupTitle}>{t('configTitle')}</span>
       <p className={css.notice}>{t('configDescription')}</p>
+      {config !== undefined && (config.lanAddresses.length > 0
+        ? <p className={css.notice}>{t('lanNotice', { addresses: config.lanAddresses.join(', ') })}</p>
+        : <p className={css.notice}>{t('lanNone')}</p>)}
       {config === undefined
         ? <span className={css.notice}>{t('sourceUnset')}</span>
         : editing
