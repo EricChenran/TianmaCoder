@@ -85,6 +85,12 @@ export interface MpsNodeDeployment {
   /** How many workspaces the node can hold at once; at least 1. */
   slotsTotal?: number | undefined
   /**
+   * Proxy the node's own git and network calls go through, such as
+   * `http://127.0.0.1:7897`; injected as `HTTPS_PROXY`/`HTTP_PROXY` at the next
+   * launch, with the platform's own host kept off the proxy.
+   */
+  networkProxy?: string | undefined
+  /**
    * The node's platform secret, injected as `MPS_NODE_SECRET` at the next
    * launch. Stored beside the profile and never echoed back to the settings
    * surface: reads report only whether it is set.
@@ -136,6 +142,7 @@ export interface MpsNodeConfig {
     nodeHost: MpsNodeConfigEntry
     workspaceRoot: MpsNodeConfigEntry
     slotsTotal: MpsNodeConfigEntry
+    networkProxy: MpsNodeConfigEntry
   }
 }
 
@@ -155,6 +162,7 @@ export interface MpsNodeForm {
   nodeHost?: string | undefined
   workspaceRoot?: string | undefined
   slotsTotal?: string | undefined
+  networkProxy?: string | undefined
   nodeSecret?: string | undefined
   /**
    * Explicit instruction to drop the stored secret. A blank `nodeSecret` on

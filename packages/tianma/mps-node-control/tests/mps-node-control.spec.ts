@@ -358,6 +358,31 @@ describe('the deployment parameters the Settings form owns', () => {
     await ctx.mpsNodeControl.stop()
   })
 
+  it('launches the node with the proxy the deployment states, the platform off it', async () => {
+    isolatedHome()
+    const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+    created.push(directory)
+    const path = join(directory, 'echo-proxy.mjs')
+    writeFileSync(path, [
+      "console.log(`proxy=${process.env.HTTPS_PROXY ?? '-'} noproxy=${process.env.NO_PROXY ?? '-'}`)",
+      'setInterval(() => {}, 250)',
+      '',
+    ].join('\n'))
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(MpsNodeControlService, { entry: path, loaders: [] })
+
+    // A workspace fetch has to leave this machine through the proxy; the platform
+    // itself sits on this LAN, so dialing it through the proxy would fail instead.
+    await ctx.mpsNodeControl.saveConfig({ networkProxy: 'http://127.0.0.1:7897', platformHost: 'mps.lan' })
+    await ctx.mpsNodeControl.start()
+    await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
+
+    const lines = await ctx.mpsNodeControl.logs()
+    expect(lines[0]?.text).toBe('proxy=http://127.0.0.1:7897 noproxy=localhost,127.0.0.1,::1,172.17.0.1,mps.lan')
+    await ctx.mpsNodeControl.stop()
+  })
+
   it('fails loudly over a deployment file it cannot read as its own', async () => {
     const home = isolatedHome()
     const directory = join(home, 'profiles', 'mps-node')

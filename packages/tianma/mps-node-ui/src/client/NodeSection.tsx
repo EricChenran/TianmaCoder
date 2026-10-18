@@ -22,6 +22,7 @@ const FIELDS = [
   { key: 'nodeHost', label: 'fieldNodeHost' },
   { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
   { key: 'slotsTotal', label: 'fieldSlotsTotal' },
+  { key: 'networkProxy', label: 'fieldNetworkProxy' },
 ] as const
 
 /**

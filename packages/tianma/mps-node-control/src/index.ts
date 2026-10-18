@@ -126,6 +126,7 @@ const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
   nodeHost: 'MPS_NODE_HOST',
   workspaceRoot: 'MPS_NODE_WORKSPACE',
   slotsTotal: 'MPS_NODE_SLOTS',
+  networkProxy: 'MPS_NETWORK_PROXY',
   nodeSecret: 'MPS_NODE_SECRET',
 }
 
@@ -196,6 +197,9 @@ function parseField(key: keyof MpsNodeDeployment, raw: string): { value?: string
   if (key === 'platformScheme' && text !== 'http' && text !== 'https') {
     return { error: 'platformScheme must be "http" or "https"' }
   }
+  if (key === 'networkProxy' && !/^https?:\/\/\S+$/u.test(text) && !/^socks[45]h?:\/\/\S+$/u.test(text)) {
+    return { error: 'networkProxy must be a proxy URL, such as http://127.0.0.1:7897' }
+  }
   return { value: text }
 }
 
@@ -237,6 +241,24 @@ function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
   for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
     const value = saved[key]
     if (value !== undefined && value !== '') overlay[DEPLOYMENT_ENV[key]] = String(value)
+  }
+  // A stated proxy reaches the node as the environment git and the CLI's
+  // network stack read, so a workspace fetch or push can leave this machine.
+  // The platform itself stays off the proxy: it sits on this LAN or this host,
+  // and dialing a local address through a proxy is a failure nothing caused.
+  const proxy = (saved.networkProxy ?? '').trim() !== ''
+    ? String(saved.networkProxy)
+    : (process.env[DEPLOYMENT_ENV.networkProxy] ?? '').trim() !== ''
+      ? process.env[DEPLOYMENT_ENV.networkProxy] as string
+      : ''
+  if (proxy !== '') {
+    for (const name of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']) overlay[name] = proxy
+    const direct = new Set(['localhost', '127.0.0.1', '::1', '172.17.0.1'])
+    const platformHost = overlay.MPS_PLATFORM_HOST ?? process.env.MPS_PLATFORM_HOST
+    if (platformHost !== undefined) direct.add(platformHost)
+    const existing = process.env.NO_PROXY ?? process.env.no_proxy
+    overlay.NO_PROXY = [...direct, ...(existing === undefined ? [] : existing.split(',').map(entry => entry.trim()).filter(entry => entry !== ''))].join(',')
+    overlay.no_proxy = overlay.NO_PROXY
   }
   return { ...process.env, ...overlay, MPS_NODE_OPS_DIR: opsDir() }
 }
