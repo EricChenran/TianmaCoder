@@ -28,7 +28,9 @@ const FIELDS = [
  * @param props - localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
-export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, t }: MpsNodeSectionProps) {
+export function MpsNodeSection(
+  { useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, cancelTask, t }: MpsNodeSectionProps,
+) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
   const running = phase === 'running' || phase === 'starting'
@@ -166,6 +168,28 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
       <p className={css.notice}>{t('configSecretNote')}</p>
     </div>
     <div className={css.group}>
+      <span className={css.groupTitle}>{t('tasksTitle')}</span>
+      {node.tasks === undefined || node.tasks.length === 0
+        ? <span className={css.notice}>{t('tasksNone')}</span>
+        : <div className={css.tasks}>
+          {node.tasks.slice(0, 10).map(task => <div key={task.task_id} className={css.taskRow}>
+            <span className={task.running ? css.taskRunning : css.taskSettled}>
+              {task.running ? t('taskRunning') : outcomeLabel(task.outcome, t)}
+            </span>
+            <span className={css.taskText}>
+              {task.task_id} · {kindLabel(task.kind, t)} · {task.at}
+              {task.summary === undefined ? '' : ' — ' + task.summary}
+            </span>
+            {task.running && <Button
+              variant="ghost"
+              disabled={node.taskBusy !== undefined}
+              onClick={() => { void cancelTask(task.task_id) }}
+            >{node.taskBusy === task.task_id ? t('taskCancelling') : t('taskCancel')}</Button>}
+          </div>)}
+        </div>}
+      <p className={css.notice}>{t('tasksNote')}</p>
+    </div>
+    <div className={css.group}>
       <span className={css.groupTitle}>{t('logs')}</span>
       {node.lines.length === 0
         ? <span className={css.notice}>{t('noLogs')}</span>
@@ -177,6 +201,29 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
         </div>}
     </div>
   </div>
+}
+
+/**
+ * @param outcome - the settled outcome, when one was recorded.
+ * @param t - the namespace's translation seat.
+ * @returns the localized outcome name.
+ */
+function outcomeLabel(outcome: string | undefined, t: (key: MpsNodeKey) => string): string {
+  if (outcome === 'success') return t('taskSuccess')
+  if (outcome === 'failed') return t('taskFailed')
+  if (outcome === 'blocked') return t('taskBlocked')
+  if (outcome === 'cancelled') return t('taskCancelled')
+  return t('taskEnded')
+}
+
+/**
+ * @param kind - the work-item kind the platform dispatched.
+ * @param t - the namespace's translation seat.
+ * @returns the localized kind name.
+ */
+function kindLabel(kind: string, t: (key: MpsNodeKey) => string): string {
+  if (kind === 'chat_answer' || kind === 'answer') return t('taskKindAnswer')
+  return t('taskKindCoding')
 }
 
 /**

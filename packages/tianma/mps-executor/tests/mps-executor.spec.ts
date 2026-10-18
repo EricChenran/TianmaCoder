@@ -152,6 +152,17 @@ describe('node configuration', () => {
     expect(settings.answerRuntimeSeconds).toBe(DEFAULT_ANSWER_RUNTIME_SECONDS)
   })
 
+  it('keeps its operator directory beside the coding root, or where the GUI points it', () => {
+    const settings = settingsFor({})
+    expect(settings.opsRoot).toBe(join(settings.codingRoot, '.ops'))
+    process.env.MPS_NODE_OPS_DIR = 'C:/ops/for-the-gui'
+    try {
+      expect(settingsFor({}).opsRoot).toBe('C:/ops/for-the-gui')
+    } finally {
+      delete process.env.MPS_NODE_OPS_DIR
+    }
+  })
+
   it('falls back to the CLI shipped beside the node when the PATH holds none', () => {
     const settings = settingsFor({ cliRunner: { command: ['dsh', '--profile', 'headless'], logsDirectory: '', dshHome: '', jsonEvents: false } })
     // On a machine without dsh on its PATH — the packaged GUI's node — the bare

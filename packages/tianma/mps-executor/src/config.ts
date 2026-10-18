@@ -124,6 +124,8 @@ export interface Config {
   workspaceRoot?: string
   /** Directory the node keeps its coding workspaces under; defaults to `coding` inside the workspace root. */
   codingRoot?: string
+  /** Operator directory for the task ledger and operator commands. */
+  opsDir?: string
   /** `user.name` the node commits under; the host's global git configuration is never touched. */
   gitUserName?: string
   /** `user.email` the node commits under. */
@@ -180,6 +182,7 @@ export const Config: z<Config> = z.object({
   secretEnv: z.string().default(DEFAULT_SECRET_ENV),
   workspaceRoot: z.string().default(''),
   codingRoot: z.string().default(''),
+  opsDir: z.string().default(''),
   gitUserName: z.string().default(DEFAULT_GIT_USER_NAME),
   gitUserEmail: z.string().default(DEFAULT_GIT_USER_EMAIL),
   maxArtifactBytes: z.number().step(1).min(1).default(DEFAULT_MAX_ARTIFACT_BYTES),
@@ -236,6 +239,8 @@ export interface ExecutorSettings {
   workspaceRoot: string
   /** Directory the node keeps its coding workspaces under. */
   codingRoot: string
+  /** Directory the task ledger and operator commands live under. */
+  opsRoot: string
   /** `user.name` injected into every commit the node makes. */
   gitUserName: string
   /** `user.email` injected into every commit the node makes. */
@@ -368,6 +373,7 @@ export const EXECUTOR_ENV = {
   nodeHost: 'MPS_NODE_HOST',
   nodeSlots: 'MPS_NODE_SLOTS',
   workspaceRoot: 'MPS_NODE_WORKSPACE',
+  opsDir: 'MPS_NODE_OPS_DIR',
   secret: 'MPS_NODE_SECRET',
   dshBin: 'MPS_DSH_BIN',
   dshHome: 'MPS_DSH_HOME',
@@ -449,15 +455,23 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
   const workspaceRoot = config.workspaceRoot === undefined || config.workspaceRoot.trim() === ''
     ? process.cwd()
     : config.workspaceRoot.trim()
+  const codingRoot = config.codingRoot === undefined || config.codingRoot.trim() === ''
+    ? join(workspaceRoot, 'coding')
+    : config.codingRoot.trim()
+  // The supervised GUI points the node at its profile directory, so both
+  // halves share one operator directory; a standalone node keeps it beside
+  // its coding workspaces.
+  const opsRoot = config.opsDir?.trim()
+    || process.env[EXECUTOR_ENV.opsDir]?.trim()
+    || join(codingRoot, '.ops')
   return {
     endpoint,
     nodeId,
     nodeName: config.nodeName === undefined || config.nodeName.trim() === '' ? nodeId : config.nodeName.trim(),
     nodeHost,
     workspaceRoot,
-    codingRoot: config.codingRoot === undefined || config.codingRoot.trim() === ''
-      ? join(workspaceRoot, 'coding')
-      : config.codingRoot.trim(),
+    codingRoot,
+    opsRoot,
     gitUserName: config.gitUserName ?? DEFAULT_GIT_USER_NAME,
     gitUserEmail: config.gitUserEmail ?? DEFAULT_GIT_USER_EMAIL,
     maxArtifactBytes: config.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES,

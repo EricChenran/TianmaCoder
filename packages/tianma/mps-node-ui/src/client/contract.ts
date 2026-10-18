@@ -6,7 +6,7 @@
  * @module @tianma/dsh-mps-node-ui/contract
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeConfig, MpsNodeForm, MpsNodeLogLine, MpsNodeProbeResult, MpsNodeStatus } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeConfig, MpsNodeForm, MpsNodeLogLine, MpsNodeProbeResult, MpsNodeStatus, MpsNodeTaskView } from '@tianma/dsh-mps-node-control/types'
 
 /** The form's own shape: one text field per deployment parameter. */
 export type MpsNodeFormInput = MpsNodeForm
@@ -29,6 +29,10 @@ export interface MpsNodeSnapshot {
   probeBusy: boolean
   /** What the last probe found, until the next one runs. */
   probe: MpsNodeProbeResult | undefined
+  /** Tasks this node took, newest first, absent until the first read answers. */
+  tasks: MpsNodeTaskView[] | undefined
+  /** The task an operator command is in flight for, when one is. */
+  taskBusy: string | undefined
   /**
    * Failure to show: the Host's own message, or an empty string when the call
    * failed without one — the section then renders localized copy.
@@ -62,4 +66,6 @@ export interface MpsNodeInjected {
    * undefined when it was cancelled or no chooser is composed.
    */
   browse: () => Promise<string | undefined>
+  /** Cancel one running task through the Host; re-reads the task list after. */
+  cancelTask: (taskId: string) => Promise<void>
 }

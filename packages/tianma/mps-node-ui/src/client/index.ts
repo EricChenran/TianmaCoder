@@ -46,6 +46,8 @@ export function apply(ctx: Context): void {
     configSaved: false,
     probeBusy: false,
     probe: undefined,
+    tasks: undefined,
+    taskBusy: undefined,
     error: undefined,
     configError: undefined,
     unreadable: false,
@@ -60,10 +62,11 @@ export function apply(ctx: Context): void {
   // then renders its localized copy.
   const failure = (error: { message?: string }): string => error.message ?? ''
   const refresh = async (): Promise<void> => {
-    const [status, lines, config] = await Promise.all([
+    const [status, lines, config, tasks] = await Promise.all([
       ctx.remote.mpsNodeControl.status(),
       ctx.remote.mpsNodeControl.logs(),
       ctx.remote.mpsNodeControl.config(),
+      ctx.remote.mpsNodeControl.tasks(),
     ])
     if (!status.ok) {
       publish({ unreadable: true, error: failure(status.error) })
@@ -73,6 +76,7 @@ export function apply(ctx: Context): void {
       status: status.value,
       lines: lines.ok ? lines.value : [],
       config: config.ok ? config.value : undefined,
+      tasks: tasks.ok ? tasks.value : undefined,
       configError: config.ok ? undefined : failure(config.error),
       unreadable: false,
       error: undefined,
@@ -118,6 +122,12 @@ export function apply(ctx: Context): void {
       publish({ probeBusy: true })
       const result = await ctx.remote.mpsNodeControl.probe(form)
       publish({ probeBusy: false, probe: result.ok ? result.value : { reachable: false, detail: failure(result.error) } })
+    },
+    async cancelTask(taskId) {
+      publish({ taskBusy: taskId })
+      const result = await ctx.remote.mpsNodeControl.taskCommand({ action: 'cancel', task_id: taskId })
+      publish({ taskBusy: undefined, ...(result.ok ? {} : { configError: failure(result.error) }) })
+      await refresh()
     },
     // The workspace UI service is read lazily rather than injected, so this
     // surface still mounts in a composition without the directory picker.

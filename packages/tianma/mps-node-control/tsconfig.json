@@ -8,6 +8,8 @@
   "references": [
     { "path": "../../typert/protocol" },
     { "path": "../../util/home-paths" },
+    { "path": "../mps-exec-core" },
+    { "path": "../mps-executor" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/schemastery" }
   ]

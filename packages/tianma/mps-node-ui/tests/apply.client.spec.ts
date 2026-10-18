@@ -28,6 +28,11 @@ const RUNNING: MpsNodeStatus = {
 const LINE: MpsNodeLogLine = { stream: 'stdout', at: '2026-10-16T09:00:01.000Z', text: 'registered at the platform' }
 
 /** One deployment-parameter reading the Host can return. */
+const TASKS = [
+  { task_id: 'wi_run', kind: 'answer', attempt: 1, running: true, at: '2026-10-18T04:00:00.000Z' },
+  { task_id: 'wi_done', kind: 'coding', attempt: 2, running: false, at: '2026-10-18T04:00:05.000Z', outcome: 'success', summary: 'done' },
+]
+
 const CONFIG = {
   saved: { platformHost: 'mps.example.com' },
   secretSet: 'unset',
@@ -58,6 +63,8 @@ async function surface(options: {
   config?: () => Promise<unknown>
   saveConfig?: (form: unknown) => Promise<unknown>
   probe?: (form: unknown) => Promise<unknown>
+  tasks?: () => Promise<unknown>
+  taskCommand?: (command: unknown) => Promise<unknown>
 } = {}): Promise<{ registered: Registered[]; operations: () => Record<string, (...args: never[]) => Promise<unknown>> }> {
   const ctx = new Context()
   const registered: Registered[] = []
@@ -70,6 +77,8 @@ async function surface(options: {
       config: options.config ?? (() => Promise.resolve({ ok: true, value: CONFIG })),
       saveConfig: options.saveConfig ?? ((form: unknown) => Promise.resolve({ ok: true, value: { ...CONFIG, saved: form } })),
       probe: options.probe ?? (() => Promise.resolve({ ok: true, value: { reachable: true, httpStatus: 401, latencyMs: 12, detail: 'answered 401 in 12 ms' } })),
+      tasks: options.tasks ?? (() => Promise.resolve({ ok: true, value: TASKS })),
+      taskCommand: options.taskCommand ?? (() => Promise.resolve({ ok: true, value: undefined })),
     },
   }
   ctx.provide('slots', {
@@ -107,7 +116,8 @@ describe('the node apply owns the Settings section', () => {
     const hooks = operations() as unknown as { hooks: { mpsNode: { getSnapshot: () => unknown } } }
 
     await vi.waitFor(() => {
-      expect(hooks.hooks.mpsNode.getSnapshot()).toMatchObject({ status: RUNNING, lines: [LINE], config: CONFIG, unreadable: false })
+      expect(hooks.hooks.mpsNode.getSnapshot())
+        .toMatchObject({ status: RUNNING, lines: [LINE], config: CONFIG, tasks: TASKS, unreadable: false })
     })
   })
 

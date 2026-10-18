@@ -26,6 +26,8 @@ import type {
   ExecSlots,
 } from '@tianma/dsh-mps-exec-core'
 import { drainingMarker } from './draining.ts'
+import { operatorCommands } from './operator-commands.ts'
+import { taskLedger } from './task-ledger.ts'
 import type { DrainingMarker } from './draining.ts'
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
@@ -194,6 +196,7 @@ export class MpsExecutorRuntime {
       client: this.client,
       settings: this.settings,
       runner,
+      ledger: taskLedger(this.settings.opsRoot),
       // Answer tasks ride the same CLI the coding runner resolved to, in a
       // throwaway directory; without a resolved command there is no chat runner and
       // an answer dispatch is reported failed at once.
@@ -722,7 +725,27 @@ export class MpsExecutorRuntime {
    * and anything else waits for the next period.
    */
   #tick(): void {
+    this.#applyOperatorCommands()
     this.heartbeatOnce().catch((error: unknown) => { this.#recover(error) })
+  }
+
+  /**
+   * Take the commands the operator surface left in the file and apply them,
+   * the same way the platform's own commands are applied. The file is taken, so
+   * one command is applied once even when this tick races the next.
+   */
+  #applyOperatorCommands(): void {
+    for (const command of operatorCommands(this.settings.opsRoot).take()) {
+      if (command.action !== 'cancel' || command.task_id === '') {
+        this.#report({ level: 'warn', message: `operator command cannot be applied: ${JSON.stringify(command)}` })
+        continue
+      }
+      if (this.#tasks?.abort(command.task_id, 'the operator cancelled this task') !== true) {
+        this.#report({ level: 'warn', message: `operator cancelled ${command.task_id}, which this node is not running` })
+      } else {
+        this.#report({ level: 'info', message: `operator cancelled ${command.task_id}` })
+      }
+    }
   }
 
   /**

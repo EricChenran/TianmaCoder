@@ -14716,6 +14716,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@tianma/dsh-mps-executor':
+        specifier: workspace:~
+        version: link:../mps-executor
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

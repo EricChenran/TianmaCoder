@@ -104,3 +104,30 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.taskRow {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.taskRunning {
+  min-width: 64px;
+  color: var(--dsh-color-success, #389e0d);
+}
+
+.taskSettled {
+  min-width: 64px;
+  opacity: 0.7;
+}
+
+.taskText {
+  word-break: break-all;
+  flex: 1;
+}

@@ -369,6 +369,29 @@ describe('the deployment parameters the Settings form owns', () => {
     await expect(ctx.mpsNodeControl.start()).rejects.toThrow(/mps-node-control\.json/u)
   })
 
+  it('reads the task ledger and leaves a cancel for the node to take', async () => {
+    const home = isolatedHome()
+    // One claim still running and one settled task, as the node writes them.
+    const { taskLedger } = await import('@tianma/dsh-mps-executor')
+    const ledger = taskLedger(join(home, 'profiles', 'mps-node', 'ops'))
+    ledger.append({ at: '2026-10-18T04:00:00.000Z', event: 'claimed', task_id: 'wi_run', kind: 'answer', attempt: 1 })
+    ledger.append({ at: '2026-10-18T04:00:05.000Z', event: 'settled', task_id: 'wi_done', kind: 'coding', attempt: 2, outcome: 'success', summary: 'done', session: 's_1', workspace: 'C:/ws' })
+    const ctx = await control()
+
+    const tasks = await ctx.mpsNodeControl.tasks()
+    expect(tasks).toHaveLength(2)
+    expect(tasks[0]).toMatchObject({ task_id: 'wi_done', running: false, outcome: 'success', session: 's_1' })
+    expect(tasks[1]).toMatchObject({ task_id: 'wi_run', running: true })
+
+    await ctx.mpsNodeControl.taskCommand({ action: 'cancel', task_id: 'wi_run' })
+    const { operatorCommands } = await import('@tianma/dsh-mps-executor')
+    const pending = operatorCommands(join(home, 'profiles', 'mps-node', 'ops')).take()
+    expect(pending).toMatchObject([{ action: 'cancel', task_id: 'wi_run' }])
+
+    await expect(ctx.mpsNodeControl.taskCommand({ action: 'cancel', task_id: '' }))
+      .rejects.toThrow(/naming a task/u)
+  })
+
   it('reports a platform that answers the probe, whatever status it answers with', async () => {
     const server = createServer((request, response) => {
       // The platform's own note: a 401 on a deliberately wrong credential is the

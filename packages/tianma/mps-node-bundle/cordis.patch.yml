@@ -34,6 +34,10 @@
         nodeHost: !!js process.env.MPS_NODE_HOST ?? ''
         secretEnv: MPS_NODE_SECRET
         workspaceRoot: !!js process.env.MPS_NODE_WORKSPACE ?? process.cwd()
+        # The supervised GUI points the node at its profile directory so both halves
+        # share the operator directory (task ledger, operator commands); a standalone
+        # node keeps it beside its coding workspaces.
+        opsDir: !!js process.env.MPS_NODE_OPS_DIR ?? ''
         slotsTotal: !!js Number(process.env.MPS_NODE_SLOTS ?? 1)
         # Empty means "both work kinds this build ships runners for" (coding and
         # chat_answer); state a subset only to keep a node off one of them.

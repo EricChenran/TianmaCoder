@@ -26,10 +26,12 @@ import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { operatorCommands, taskLedger } from '@tianma/dsh-mps-executor'
 import z from '@deepseek-ai/schemastery'
 import type {
   MpsNodeConfig, MpsNodeConfigEntry, MpsNodeDeployment, MpsNodeExit,
   MpsNodeForm, MpsNodeLogLine, MpsNodePhase, MpsNodeProbeResult, MpsNodeStatus,
+  MpsNodeTaskCommand, MpsNodeTaskView,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -221,13 +223,22 @@ function effectiveEntry(key: keyof MpsNodeDeployment, saved: MpsNodeDeployment):
  * @param saved - the form's stored parameters.
  * @returns the child's environment.
  */
+/**
+ * The operator directory the supervised node and this surface share: the task
+ * ledger is read here, and operator commands are left here.
+ * @returns the directory path, which may not exist yet.
+ */
+function opsDir(): string {
+  return join(resolveDshHome(), 'profiles', 'mps-node', 'ops')
+}
+
 function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
   const overlay: NodeJS.ProcessEnv = {}
   for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
     const value = saved[key]
     if (value !== undefined && value !== '') overlay[DEPLOYMENT_ENV[key]] = String(value)
   }
-  return { ...process.env, ...overlay }
+  return { ...process.env, ...overlay, MPS_NODE_OPS_DIR: opsDir() }
 }
 
 /**
@@ -521,6 +532,44 @@ export class MpsNodeControlService extends TypertRemoteService {
         detail: `could not reach ${url}: ${toErrorMessage(error)}${loopbackNote}`,
       }
     }
+  }
+
+  /**
+   * The tasks this node took, newest first: the ledger lines the node writes
+   * under the shared operator directory, folded to one line per task. A task
+   * whose latest line is a claim is running; anything else has settled.
+   * @returns the task views, newest first, bounded by the ledger's own cap.
+   */
+  @Remote
+  async tasks(): Promise<MpsNodeTaskView[]> {
+    const folded = new Map<string, MpsNodeTaskView>()
+    for (const entry of taskLedger(opsDir()).recent()) {
+      folded.set(entry.task_id, {
+        task_id: entry.task_id,
+        kind: entry.kind,
+        attempt: entry.attempt,
+        running: entry.event === 'claimed',
+        at: entry.at,
+        ...(entry.outcome === undefined ? {} : { outcome: entry.outcome }),
+        ...(entry.summary === undefined ? {} : { summary: entry.summary }),
+        ...(entry.session === undefined ? {} : { session: entry.session }),
+        ...(entry.workspace === undefined ? {} : { workspace: entry.workspace }),
+      })
+    }
+    return [...folded.values()].slice(-50).reverse()
+  }
+
+  /**
+   * Leave one operator command for the node: the file this surface writes is
+   * taken by the node's next heartbeat, so a command lands once.
+   * @param command - what the operator asked for.
+   */
+  @Remote
+  async taskCommand(command: MpsNodeTaskCommand): Promise<void> {
+    if (command.action !== 'cancel' || command.task_id === '') {
+      throw new Error('mps-node-control: only a cancel naming a task can be left for the node')
+    }
+    operatorCommands(opsDir()).leave([{ action: 'cancel', task_id: command.task_id, at: new Date().toISOString() }])
   }
 
   /**

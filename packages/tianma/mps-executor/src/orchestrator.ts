@@ -39,6 +39,7 @@ import type {
 import { ArtifactTooLargeError } from './artifacts.ts'
 import type { ExecutorSettings } from './config.ts'
 import { logSpool } from './log-spool.ts'
+import type { TaskLedger } from './task-ledger.ts'
 import type { LogSpool } from './log-spool.ts'
 import { resultSpool } from './result-spool.ts'
 import type { ResultSpool } from './result-spool.ts'
@@ -201,6 +202,11 @@ export interface TaskOrchestratorOptions {
    * revision may lower it.
    */
   logBatchMaxLines?: (() => number) | undefined
+  /**
+   * The task ledger an operator surface reads. Without one, the node keeps
+   * no local record of what it took and how each attempt settled.
+   */
+  ledger?: TaskLedger | undefined
   /** The node this orchestrator reports through. */
   hooks: TaskOrchestratorHooks
   /** Report node events; defaults to silence. */
@@ -223,6 +229,10 @@ interface RunningAttempt {
   published?: PublishedChanges | undefined
   /** Artifact the platform stored the attempt's bundle under, in `read_only` mode. */
   bundleArtifactId?: string | undefined
+  /** Session reference the attempt reported, once one arrived. */
+  sessionRef?: string | undefined
+  /** Directory the attempt worked in, when it worked in one. */
+  workspaceDirectory?: string | undefined
   renewTimer?: NodeJS.Timeout | undefined
   limitTimer?: NodeJS.Timeout | undefined
 }
@@ -263,6 +273,7 @@ export class TaskOrchestrator {
   readonly #logBatchMaxLines: () => number
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
+  readonly #ledger: TaskLedger | undefined
   readonly #report: (report: ExecutorReport) => void
   /** The last wording reported for each repeating failure, so a repeat is not reported. */
   readonly #reportedFailures = new Map<string, string>()
@@ -287,6 +298,7 @@ export class TaskOrchestrator {
     this.#sessions = options.sessions
     this.#artifacts = options.artifacts
     this.#hooks = options.hooks
+    this.#ledger = options.ledger
     this.#report = options.report ?? (() => {})
     this.#spool = logSpool({
       root: options.settings.codingRoot,
@@ -475,6 +487,13 @@ export class TaskOrchestrator {
       timedOut: false,
     }
     this.#attempts.set(assignment.task_id, running)
+    this.#ledger?.append({
+      at: formatRfc3339(startedAt),
+      event: 'claimed',
+      task_id: assignment.task_id,
+      kind: assignment.kind,
+      attempt: assignment.attempt,
+    })
     this.#hooks.taskStarted({
       task_id: assignment.task_id,
       attempt: assignment.attempt,
@@ -570,6 +589,7 @@ export class TaskOrchestrator {
         const workspace = chat || this.#workspaces === undefined
           ? undefined
           : await this.#workspaces.prepare(running.assignment)
+        running.workspaceDirectory = workspace?.directory
         if (running.superseded) return
         const runner = chat ? this.#chatRunner : this.#runner
         if (runner === undefined) {
@@ -599,7 +619,10 @@ export class TaskOrchestrator {
         result = { outcome: 'failed', summary: attemptFailureSummary(error) }
       }
       this.#clearTimers(running)
-      if (running.superseded) return
+      if (running.superseded) {
+        this.#ledgerSettled(running, 'cancelled', { summary: 'the platform withdrew the lease; no result submitted' })
+        return
+      }
       let outcome = result.outcome
       if (running.aborted) outcome = strongerOutcome(outcome, 'cancelled')
       if (running.timedOut) outcome = strongerOutcome(outcome, 'failed')
@@ -608,6 +631,7 @@ export class TaskOrchestrator {
       // result refers to is whole by the time that result arrives.
       await this.#spool.flush()
       await this.#submit(running, outcome, result, startedAt)
+      this.#ledgerSettled(running, outcome, result)
     } finally {
       this.#settle(running)
     }
@@ -694,6 +718,7 @@ export class TaskOrchestrator {
     workspace: TaskWorkspace | undefined,
     sessionRef: string,
   ): Promise<void> {
+    running.sessionRef = sessionRef
     const checkout = workspace?.checkout
     if (this.#sessions === undefined || workspace === undefined || checkout === undefined) {
       throw new Error('this attempt has no prepared workspace to report a session for')
@@ -881,6 +906,21 @@ export class TaskOrchestrator {
       pushed: published?.pushed ?? false,
       ...(running.bundleArtifactId === undefined ? {} : { patch_artifact_id: running.bundleArtifactId }),
     }
+  }
+
+  /** Write the settled line of one attempt, whatever way it settled. */
+  #ledgerSettled(running: RunningAttempt, outcome: TaskOutcome, result: { summary: string }): void {
+    this.#ledger?.append({
+      at: formatRfc3339(this.#now()),
+      event: 'settled',
+      task_id: running.assignment.task_id,
+      kind: running.assignment.kind,
+      attempt: running.assignment.attempt,
+      outcome,
+      summary: result.summary.slice(0, 300),
+      ...(running.sessionRef === undefined ? {} : { session: running.sessionRef }),
+      ...(running.workspaceDirectory === undefined ? {} : { workspace: running.workspaceDirectory }),
+    })
   }
 
   #settle(running: RunningAttempt): void {

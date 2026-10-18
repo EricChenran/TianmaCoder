@@ -180,3 +180,33 @@ export interface MpsNodeProbeResult {
    */
   loopback?: boolean | undefined
 }
+
+/** One task the node took, as the settings surface reads it back. */
+export interface MpsNodeTaskView {
+  /** Protocol task id, which is the platform's work-item id. */
+  task_id: string
+  /** Work-item kind as the platform dispatched it. */
+  kind: string
+  /** Attempt number of the latest line. */
+  attempt: number
+  /** Whether the latest line is a claim still running here. */
+  running: boolean
+  /** When the latest line was written, as an RFC 3339 string. */
+  at: string
+  /** Outcome of a settled attempt. */
+  outcome?: string | undefined
+  /** Operator-visible summary of a settled attempt. */
+  summary?: string | undefined
+  /** Session reference the attempt used, once one was reported. */
+  session?: string | undefined
+  /** Directory the attempt worked in, when it worked in one. */
+  workspace?: string | undefined
+}
+
+/** What one operator command asked for. */
+export interface MpsNodeTaskCommand {
+  /** The command; only `cancel` is implemented. */
+  action: 'cancel'
+  /** The task it addresses. */
+  task_id: string
+}
