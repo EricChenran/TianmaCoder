@@ -12,7 +12,7 @@ import { describe, expect, it, afterEach } from 'vitest'
 import {
   exitCodeOf,
   readRunEvent,
-  sessionIsGone,
+  sessionAdoptionFailure,
   runFailureSummary,
   shellFor,
   stopPlan,
@@ -479,7 +479,35 @@ describe('the CLI runner', () => {
     expect(result.notes).toContain('answer: 新会话完成')
   })
 
-  it('reads whether a failure was a session the CLI does not hold', () => {
+  it('starts a new session when another run still owns the one the platform named', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment({
+      spec: { raw_instruction: INSTRUCTION },
+      limits: { session_hint: { previous_session_ref: 'dsh-session-owned' } },
+    }))
+    const runner = tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'session-owned'],
+      logsDirectory: logs,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+      jsonEvents: true,
+    })
+
+    const result = await runner.run(context)
+
+    expect(result.outcome).toBe('success')
+    expect(reported(context)).toContain('stdout:args=session-owned --json --session-id dsh-session-owned ' + INSTRUCTION)
+    expect(reported(context)).toContain('stdout:args=session-owned --json ' + INSTRUCTION)
+    // The operator reads the reason it actually was: a handle another run still holds,
+    // not a session that no longer exists.
+    expect(reported(context)).toContain(
+      'runner:session dsh-session-owned is still owned by another write handle; starting a new one',
+    )
+    expect(context.sessions).toEqual(['dsh-session-owned', 'dsh-session-fresh'])
+    expect(result.notes).toContain('answer: 新会话完成')
+  })
+
+  it('reads which session failure stopped a run', () => {
     const line = (text: string): RunLine => ({
       stream: 'stderr',
       line: { at: '2026-10-15T04:03:55.123Z', level: 'warn', text },
@@ -487,13 +515,13 @@ describe('the CLI runner', () => {
     const gone = 'dsh: session "dsh-session-gone" does not exist; omit --session-id to start a new Session'
     const owned = 'dsh: session "session-7d747633-c58d-4c1b-ba05-471f6a81de4c" is already owned by an active write handle'
 
-    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line(gone)])).toBe(true)
+    expect(sessionAdoptionFailure({ kind: 'exited', code: 1 }, [line(gone)])).toBe('missing')
     // A session another still-active handle owns is as unusable as a gone one: the work
     // never started, and only a new session can run it.
-    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line(owned)])).toBe(true)
-    expect(sessionIsGone({ kind: 'exited', code: 1 }, [line('build failed')])).toBe(false)
-    expect(sessionIsGone({ kind: 'exited', code: 0 }, [line(gone)])).toBe(false)
-    expect(sessionIsGone({ kind: 'exited', code: null }, [line(gone)])).toBe(false)
+    expect(sessionAdoptionFailure({ kind: 'exited', code: 1 }, [line(owned)])).toBe('owned')
+    expect(sessionAdoptionFailure({ kind: 'exited', code: 1 }, [line('build failed')])).toBeUndefined()
+    expect(sessionAdoptionFailure({ kind: 'exited', code: 0 }, [line(gone)])).toBeUndefined()
+    expect(sessionAdoptionFailure({ kind: 'exited', code: null }, [line(gone)])).toBeUndefined()
   })
 
   it('reports a run that exited non-zero with the line it failed on', async () => {

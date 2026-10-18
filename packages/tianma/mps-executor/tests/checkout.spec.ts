@@ -40,7 +40,7 @@ class RecordingGit implements GitRunner {
   async run(_directory: string, args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
     const command = args.join(' ')
     this.calls.push(command)
-    if (this.failures.has(command)) throw new GitError(`-C workspace ${command}`, 128, 'fatal: not a git repository')
+    if (this.failures.has(command)) throw new GitError(`-C workspace ${command}`, 128, 'fatal: not a git repository', '')
     return { stdout: this.answers.get(command) ?? '', stderr: '' }
   }
 }
@@ -105,6 +105,7 @@ describe('checkout preparation', () => {
 
     expect(git.calls).toEqual([
       'init --quiet',
+      'config core.quotepath false',
       'remote get-url origin',
       'remote add origin https://example.invalid/r.git',
       'fetch --quiet origin main',
@@ -213,6 +214,7 @@ describe('checkout preparation', () => {
     // The clear comes before the checkout: `checkout -B` refuses to overwrite what a failed
     // attempt left in the tree, so leaving the tree alone would fail every re-dispatch.
     expect(git.calls).toEqual([
+      'config core.quotepath false',
       'remote get-url origin',
       'fetch --quiet origin main',
       'fetch --quiet origin +refs/heads/*:refs/remotes/origin/*',

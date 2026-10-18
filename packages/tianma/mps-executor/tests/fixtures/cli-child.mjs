@@ -35,7 +35,17 @@ if (mode === 'fail') {
   process.exit(3)
 }
 
-if (mode === 'session-gone') {
+if (mode === 'session-owned') {
+  // The same refusal a run meets when the previous run of this CLI never exited: the
+  // write handle lives in that process, so only a new session can run the work.
+  const asked = process.argv.find(value => value.startsWith('--session-id'))
+  if (asked !== undefined) {
+    console.error(`dsh: session "${asked.slice('--session-id'.length + 1)}" is already owned by an active write handle`)
+    process.exit(1)
+  }
+  console.log(JSON.stringify({ type: 'session', sessionId: 'dsh-session-fresh' }))
+  console.log(JSON.stringify({ type: 'final', text: '新会话完成' }))
+} else if (mode === 'session-gone') {
   const asked = process.argv.find(value => value.startsWith('--session-id'))
   if (asked !== undefined) {
     console.error(`dsh: session "${asked.slice('--session-id'.length + 1)}" does not exist; omit --session-id to start a new Session`)

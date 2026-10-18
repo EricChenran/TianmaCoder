@@ -5,7 +5,8 @@
  * that every change stays inside the workspace once symlinks resolve, and that no
  * changed text file carries a credential. Work the attempt committed itself is handed
  * back as it stands. Both checks run before the commit, so a refused attempt leaves
- * nothing behind to push.
+ * nothing behind to push. Every path list comes from git with `-z`, so a deliverable
+ * named outside ASCII reaches the filesystem, the checks, and the report as itself.
  * @module @tianma/dsh-mps-executor/publish
  */
 
@@ -79,9 +80,17 @@ export interface CheckoutPublisherOptions {
   identity: GitIdentity
 }
 
-/** Split git's newline-separated output into paths. */
-function pathsOf(output: string): string[] {
-  return output.split(/\r?\n/u).map(line => line.trim()).filter(line => line !== '')
+/**
+ * Split one git path listing into the paths it holds. Every listing this module reads
+ * is asked for with `-z`, so git separates entries with NUL and quotes nothing: a name
+ * with a space, a parenthesis, or Chinese characters arrives as the name it is. A
+ * line-separated listing would arrive as `"\345\212\251..."` — a string no filesystem
+ * can open, and one whose leading quote makes every path check below it meaningless.
+ * @param output - the command's standard output.
+ * @returns the paths, in the order git listed them.
+ */
+function listedPaths(output: string): string[] {
+  return output.split('\0').filter(path => path !== '')
 }
 
 /**
@@ -98,9 +107,9 @@ export async function changedFiles(
   against: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const tracked = await git.run(directory, ['diff', '--name-only', against], signal)
-  const untracked = await git.run(directory, ['ls-files', '--others', '--exclude-standard'], signal)
-  return [...new Set([...pathsOf(tracked.stdout), ...pathsOf(untracked.stdout)])].sort()
+  const tracked = await git.run(directory, ['diff', '--name-only', '-z', against], signal)
+  const untracked = await git.run(directory, ['ls-files', '--others', '--exclude-standard', '-z'], signal)
+  return [...new Set([...listedPaths(tracked.stdout), ...listedPaths(untracked.stdout)])].sort()
 }
 
 /**
@@ -215,7 +224,7 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
     await git.run(directory, ['add', '--all'], signal)
     // A path git will not stage — a submodule whose worktree is dirty, say — would leave
     // the commit empty too; name the paths instead of letting git fail with a bare code.
-    const staged = pathsOf((await git.run(directory, ['diff', '--cached', '--name-only'], signal)).stdout)
+    const staged = listedPaths((await git.run(directory, ['diff', '--cached', '--name-only', '-z'], signal)).stdout)
     if (staged.length === 0) {
       throw new Error(`git staged none of the changes the attempt left uncommitted: ${pending.join(', ')}`)
     }

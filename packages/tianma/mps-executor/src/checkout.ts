@@ -100,6 +100,10 @@ export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<
   const workBranch = required(repository.work_branch, 'work branch')
 
   if (!existsSync(join(directory, '.git'))) await git.run(directory, ['init', '--quiet'])
+  // The cache outlives this task, and the setting is written into it rather than passed
+  // per command: whoever runs git in this workspace afterwards — the attempt's own shell,
+  // a person looking at a failed run — reads paths the same way the node does.
+  await git.run(directory, ['config', 'core.quotepath', 'false'])
   const origin = await tryRun(git, directory, ['remote', 'get-url', 'origin'])
   if (origin === undefined) await git.run(directory, ['remote', 'add', 'origin', url])
   else if (origin.stdout.trim() !== url) await git.run(directory, ['remote', 'set-url', 'origin', url])

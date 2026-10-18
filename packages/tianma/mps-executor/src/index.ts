@@ -70,7 +70,7 @@ export type {
   TaskWorkspace,
   TaskWorkspaceAllocator,
 } from './runner.ts'
-export { GitError, cliGit } from './git.ts'
+export { GIT_DIAGNOSTIC_MAX_CHARS, GIT_PATH_ARGS, GitError, cliGit } from './git.ts'
 export type { GitOutput, GitRunner } from './git.ts'
 export { checkoutAllocator, prepareCheckout } from './checkout.ts'
 export type { CheckoutAllocatorOptions, PrepareCheckoutOptions } from './checkout.ts'
@@ -90,13 +90,13 @@ export {
   stopPlan,
   exitCodeOf,
   readRunEvent,
-  sessionIsGone,
+  sessionAdoptionFailure,
   runFailureSummary,
   shellFor,
   stopRun,
   tianmaCliRunner,
 } from './cli-runner.ts'
-export type { RunEvent, RunLine, StoppableRun, StopPlan } from './cli-runner.ts'
+export type { RunEvent, RunLine, SessionAdoptionFailure, StoppableRun, StopPlan } from './cli-runner.ts'
 export { AGENT_PERMISSION_MODE, agentRunEnv, DEFAULT_CLI_COMMAND, DEFAULT_DISK_MIN_GB, DEFAULT_SHUTDOWN_GRACE_SECONDS } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export {

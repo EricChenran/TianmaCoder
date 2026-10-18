@@ -212,13 +212,17 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         },
       })
       let outcome = await attempt(true)
-      if (hint !== undefined && sessionIsGone(outcome, lines)) {
-        // The platform named a session this CLI no longer holds, which is what a wiped
-        // profile looks like: start a new one, report it, and let the platform follow.
+      const adoption = sessionAdoptionFailure(outcome, lines)
+      if (hint !== undefined && adoption !== undefined) {
+        // Neither reason is this task's failure: a wiped profile leaves no session, and a
+        // run that never exited leaves its write handle owned. Only a new session can run
+        // the work, so the node starts one and reports it for the platform to follow.
         await context.reportLog('runner', [{
           at: now().toISOString(),
           level: 'warn',
-          text: `session ${hint} is gone; starting a new one`,
+          text: adoption === 'owned'
+            ? `session ${hint} is still owned by another write handle; starting a new one`
+            : `session ${hint} is gone; starting a new one`,
         }])
         session = undefined
         outcome = await attempt(false)
@@ -531,20 +535,26 @@ function stringOf(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
 
+/** The two ways a stated session cannot be adopted, as the runner reports them. */
+export type SessionAdoptionFailure = 'missing' | 'owned'
+
 /**
- * Whether a run failed because the CLI cannot adopt the session it was asked to: either
- * the session is gone, or another still-active write handle owns it — a previous run
- * that never released it, which no retry of the same session can clear. Both mean the
- * work never started, and both are answered the same way: start a new session.
+ * Why a run could not adopt the session it was asked to. Either the session is gone, or
+ * another still-active write handle owns it — a previous run of this CLI that never
+ * exited, whose handle lives in that process's memory and outlives the attempt that
+ * started it. Both mean the work never started, and both are answered the same way:
+ * start a new session, and let the platform follow the one that is actually used.
  * @param outcome - what the run settled as.
  * @param lines - everything the run printed.
- * @returns true when the session cannot be adopted rather than the work having failed.
+ * @returns which failure it was, or undefined when the session was not the reason.
  */
-export function sessionIsGone(outcome: RunOutcome, lines: readonly RunLine[]): boolean {
-  if (outcome.code === 0 || outcome.code === null) return false
-  return lines.some(entry =>
-    /does not exist; omit --session-id/u.test(entry.line.text)
-    || /is already owned by an active write handle/u.test(entry.line.text))
+export function sessionAdoptionFailure(outcome: RunOutcome, lines: readonly RunLine[]): SessionAdoptionFailure | undefined {
+  if (outcome.code === 0 || outcome.code === null) return undefined
+  for (const entry of lines) {
+    if (/does not exist; omit --session-id/u.test(entry.line.text)) return 'missing'
+    if (/is already owned by an active write handle/u.test(entry.line.text)) return 'owned'
+  }
+  return undefined
 }
 
 /** What one run settled as. */

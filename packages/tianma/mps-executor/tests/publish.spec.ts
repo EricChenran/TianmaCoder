@@ -81,10 +81,18 @@ const CHECKOUT = { base_commit: 'a1b2c3d', work_branch: 'feature/tsk_1' }
 describe('changed files', () => {
   it('reports tracked and untracked paths once each, sorted', async () => {
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'src/b.ts\nsrc/a.ts\n')
-    git.answers.set('ls-files --others --exclude-standard', 'src/a.ts\n报告.md\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'src/b.ts\0src/a.ts\0')
+    git.answers.set('ls-files --others --exclude-standard -z', 'src/a.ts\0报告.md\0')
 
     expect(await changedFiles(git, 'coding/ws_1', 'a1b2c3d')).toEqual(['src/a.ts', 'src/b.ts', '报告.md'])
+  })
+
+  it('keeps a name with spaces and Chinese characters as the name it is', async () => {
+    const git = new RecordingGit()
+    git.answers.set('diff --name-only -z a1b2c3d', '交付 物(初稿)/说明.md\0')
+    git.answers.set('ls-files --others --exclude-standard -z', '助手介绍.md\0交付 物(初稿)/说明.md\0')
+
+    expect(await changedFiles(git, 'coding/ws_1', 'a1b2c3d')).toEqual(['交付 物(初稿)/说明.md', '助手介绍.md'])
   })
 })
 
@@ -145,10 +153,10 @@ describe('publishing an attempt', () => {
     const workspace = temporary('mps-publish-')
     mkdirSync(join(workspace, 'src'), { recursive: true })
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'src/a.ts\n')
-    git.answers.set('ls-files --others --exclude-standard', '')
-    git.answers.set('diff --name-only HEAD', 'src/a.ts\n')
-    git.answers.set('diff --cached --name-only', 'src/a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'src/a.ts\0')
+    git.answers.set('ls-files --others --exclude-standard -z', '')
+    git.answers.set('diff --name-only -z HEAD', 'src/a.ts\0')
+    git.answers.set('diff --cached --name-only -z', 'src/a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({
@@ -161,12 +169,12 @@ describe('publishing an attempt', () => {
     })
 
     expect(git.calls).toEqual([
-      'diff --name-only a1b2c3d',
-      'ls-files --others --exclude-standard',
-      'diff --name-only HEAD',
-      'ls-files --others --exclude-standard',
+      'diff --name-only -z a1b2c3d',
+      'ls-files --others --exclude-standard -z',
+      'diff --name-only -z HEAD',
+      'ls-files --others --exclude-standard -z',
       'add --all',
-      'diff --cached --name-only',
+      'diff --cached --name-only -z',
       '-c user.name=tianma-mps-executor -c user.email=node@example.invalid commit --quiet -m 增加批量下载',
       'rev-parse HEAD',
       'push origin feature/tsk_1',
@@ -177,9 +185,9 @@ describe('publishing an attempt', () => {
   it('names the commit after the task when the payload states no summary', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
-    git.answers.set('diff --name-only HEAD', 'a.ts\n')
-    git.answers.set('diff --cached --name-only', 'a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'a.ts\0')
+    git.answers.set('diff --name-only -z HEAD', 'a.ts\0')
+    git.answers.set('diff --cached --name-only -z', 'a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     await publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git })
@@ -190,9 +198,9 @@ describe('publishing an attempt', () => {
   it('commits without pushing when the task does not require a push', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
-    git.answers.set('diff --name-only HEAD', 'a.ts\n')
-    git.answers.set('diff --cached --name-only', 'a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'a.ts\0')
+    git.answers.set('diff --name-only -z HEAD', 'a.ts\0')
+    git.answers.set('diff --cached --name-only -z', 'a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({
@@ -215,7 +223,7 @@ describe('publishing an attempt', () => {
     // The deliverable against the base is non-empty, but the tree matches HEAD: the
     // path is committed, not pending. This is the state a retry or a self-committing
     // attempt leaves, and it used to make `git commit` fail with exit code 1.
-    git.answers.set('diff --name-only a1b2c3d', 'src/a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'src/a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git })
@@ -228,8 +236,8 @@ describe('publishing an attempt', () => {
   it('refuses changes git will not stage instead of committing nothing', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'submodule\n')
-    git.answers.set('diff --name-only HEAD', 'submodule\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'submodule\0')
+    git.answers.set('diff --name-only -z HEAD', 'submodule\0')
     // `diff --cached` answers nothing: git took the path but staged no change.
 
     await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
@@ -251,17 +259,17 @@ describe('publishing an attempt', () => {
     const workspace = temporary('mps-publish-')
     writeFileSync(join(workspace, 'leak.txt'), 'password: hunter2\n', 'utf8')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'leak.txt\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'leak.txt\0')
 
     await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
       .rejects.toThrow(/refusing to publish credentials in leak.txt/)
-    expect(git.calls).toEqual(['diff --name-only a1b2c3d', 'ls-files --others --exclude-standard'])
+    expect(git.calls).toEqual(['diff --name-only -z a1b2c3d', 'ls-files --others --exclude-standard -z'])
   })
 
   it('refuses a change that leaves the workspace before it commits anything', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', '../outside.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', '../outside.ts\0')
 
     await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
       .rejects.toThrow(/not a path inside the workspace/)
@@ -270,7 +278,7 @@ describe('publishing an attempt', () => {
   it('skips the workspace check only when the task states it does not need it', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', '../outside.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', '../outside.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({
@@ -288,7 +296,7 @@ describe('publishing an attempt', () => {
   it('bundles a read_only attempt instead of pushing it', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
     // The recording git writes nothing, so the bundle the publisher digests is here.
     mkdirSync(join(workspace, '.bundles'), { recursive: true })
@@ -315,7 +323,7 @@ describe('publishing an attempt', () => {
   it('hands a runner the same publish step through the port', async () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
-    git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
+    git.answers.set('diff --name-only -z a1b2c3d', 'a.ts\0')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
     const publisher = checkoutPublisher({ git, identity: IDENTITY })
 
@@ -344,6 +352,60 @@ describe('publishing against real repositories', () => {
     await git.run(workspace, ['checkout', '--quiet', '-b', 'feature/tsk_1'])
     return { workspace, bare }
   }
+
+  it('delivers a path outside ASCII as the name it is', async () => {
+    const git = cliGit()
+    const { workspace } = await workspaceWithChange(git)
+    // git quotes such a name as "\345\212\251..." on a line listing by default; forcing
+    // the setting on proves the node's own reading does not depend on it.
+    await git.run(workspace, ['config', 'core.quotepath', 'true'])
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    mkdirSync(join(workspace, '交付 物(初稿)'), { recursive: true })
+    writeFileSync(join(workspace, '交付 物(初稿)', '说明.md'), '# 说明\n', 'utf8')
+    writeFileSync(join(workspace, '助手介绍.md'), '# 介绍\n', 'utf8')
+
+    const files = await changedFiles(git, workspace, base)
+
+    expect(files).toEqual(['交付 物(初稿)/说明.md', '助手介绍.md'])
+    // The confinement check opens the parent directory of every path it is given, which
+    // is where a quoted name used to fail with ENOENT.
+    await expect(assertChangesInside(workspace, files)).resolves.toBeUndefined()
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: { summary: '中文交付物' },
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    })
+
+    expect(published.changed_files).toEqual(files)
+    const committed = (await git.run(workspace, ['show', '--name-only', '-z', '--format=', 'HEAD']))
+      .stdout.split('\0').filter(name => name !== '').sort()
+    expect(committed).toEqual([...files].sort())
+  })
+
+  it('quotes what git wrote to standard output when a command refuses', async () => {
+    const git = cliGit()
+    const { workspace } = await workspaceWithChange(git)
+    writeFileSync(join(workspace, 'unstaged.md'), '# 没有暂存\n', 'utf8')
+
+    const failure = await git.run(workspace, [
+      '-c', 'user.name=Node', '-c', 'user.email=node@example.invalid',
+      'commit', '--quiet', '-m', 'nothing staged',
+    ]).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(GitError)
+    if (!(failure instanceof GitError)) throw new Error('the commit was expected to fail')
+    // This refusal is spelled out on standard output; stderr stays empty, which is why
+    // the node's summary used to carry nothing but the exit code.
+    expect(failure.stderr).toBe('')
+    expect(failure.stdout).toContain('nothing added to commit')
+    expect(failure.message).toContain('nothing added to commit')
+    // Every command carries the setting, so a listing is read the same everywhere.
+    expect(failure.command).toContain('-c core.quotepath=false')
+  })
 
   it('commits under the injected identity and pushes to the remote', async () => {
     const git = cliGit()

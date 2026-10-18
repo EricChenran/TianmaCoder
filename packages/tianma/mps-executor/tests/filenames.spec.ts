@@ -38,7 +38,7 @@ describe('cleanStatedPath', () => {
   })
 
   it('drops segments that say nothing', () => {
-    expect(cleanStatedPath('./docs//report.md')).toBe('docs/report.md')
+    expect(cleanStatedPath('./src//helper.ts')).toBe('src/helper.ts')
     expect(cleanStatedPath('""')).toBe('')
   })
 })
