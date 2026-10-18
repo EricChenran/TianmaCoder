@@ -300,6 +300,28 @@ function resolveCliRunner(stated: CliRunnerConfig | undefined, workspaceRoot: st
 }
 
 /**
+ * The permission mode every agent run starts with. A node's runs have no person to
+ * answer an approval, and the base profile pairs its sandbox presets with `ask`, so a
+ * run that needs an approval is refused mid-task — a deterministic failure nothing in
+ * the task caused. Full access with approvals off is the only mode an unattended run
+ * can settle in; the workspace the agent writes in stays the node's own boundary.
+ */
+export const AGENT_PERMISSION_MODE = 'danger-full-access'
+
+/**
+ * The environment one agent run starts with: its own profile directory, when the
+ * configuration states one, and the permission mode above.
+ * @param dshHome - the `DSH_HOME` the configuration stated, if any.
+ * @returns the extra environment for the run.
+ */
+export function agentRunEnv(dshHome: string | undefined): Record<string, string> {
+  return {
+    ...(dshHome === undefined ? {} : { DSH_HOME: dshHome }),
+    DSH_PERMISSION_MODE: AGENT_PERMISSION_MODE,
+  }
+}
+
+/**
  * The command one run starts, taken as stated when it names a path or a name
  * the PATH holds. A bare name nothing resolves — the packaged GUI's node, a clean
  * machine without the CLI on its PATH — falls back to the dsh CLI shipped beside

@@ -13,7 +13,7 @@ import { tianmaCliRunner } from './cli-runner.ts'
 import { probeAgentVersion } from './capabilities.ts'
 import { resourceReader } from './resources.ts'
 import { appendNodeLog } from './node-log.ts'
-import { readNodeSecret, resolveExecutorSettings } from './config.ts'
+import { agentRunEnv, readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
 import type { ExecutorReport } from './runtime.ts'
@@ -97,7 +97,7 @@ export {
   tianmaCliRunner,
 } from './cli-runner.ts'
 export type { RunEvent, RunLine, StoppableRun, StopPlan } from './cli-runner.ts'
-export { DEFAULT_CLI_COMMAND, DEFAULT_DISK_MIN_GB, DEFAULT_SHUTDOWN_GRACE_SECONDS } from './config.ts'
+export { AGENT_PERMISSION_MODE, agentRunEnv, DEFAULT_CLI_COMMAND, DEFAULT_DISK_MIN_GB, DEFAULT_SHUTDOWN_GRACE_SECONDS } from './config.ts'
 export { TASK_BOOK_FILE, TASK_BOOK_POINTER, taskBook, writeTaskBook } from './task-book.ts'
 export {
   EVIDENCE_DIRECTORY,
@@ -237,7 +237,7 @@ export function apply(ctx: Context, config: Config): void {
   const ownRunner = tianmaCliRunner({
     command: settings.cliRunner.command,
     logsDirectory: settings.cliRunner.logsDirectory,
-    env: settings.cliRunner.dshHome === undefined ? undefined : { DSH_HOME: settings.cliRunner.dshHome },
+    env: agentRunEnv(settings.cliRunner.dshHome),
     jsonEvents: settings.cliRunner.jsonEvents,
   })
   const runtime = new MpsExecutorRuntime({

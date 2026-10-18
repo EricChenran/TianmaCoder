@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import {
-  Config, DEFAULT_ANSWER_RUNTIME_SECONDS, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
+  Config, DEFAULT_ANSWER_RUNTIME_SECONDS, DEFAULT_SECRET_ENV, MpsExecutorRuntime, UNKNOWN_AGENT_VERSION, WORKSPACE_STATE_FILE, WORKSPACE_STATE_VERSION, apply, autoStartNode, createReportSink, TASK_RUNNER_SERVICE, readNodeSecret, registerStopEffect, resolveExecutorSettings, WorkspaceStore, agentRunEnv, executorConfigFromEnv } from '@tianma/dsh-mps-executor'
 import type {
   ExecHttpRequest,
   ExecHttpResponse,
@@ -198,6 +198,13 @@ describe('node configuration', () => {
     expect(config.platformScheme).toBe('https')
     expect(config.platformBasePath).toBe('/mps')
     expect(config.autoStart).toBe(false)
+  })
+
+  it('starts every agent run at full access, with approvals off', () => {
+    // A node's runs have no person to answer an approval, so the base profile's
+    // workspace-write + ask pairing would refuse a run mid-task.
+    expect(agentRunEnv(undefined)).toEqual({ DSH_PERMISSION_MODE: 'danger-full-access' })
+    expect(agentRunEnv('C:\\node-home')).toEqual({ DSH_HOME: 'C:\\node-home', DSH_PERMISSION_MODE: 'danger-full-access' })
   })
 
   it('resolves the address, identity, and capacity the node runs with', () => {

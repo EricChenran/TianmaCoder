@@ -29,6 +29,7 @@ import { drainingMarker } from './draining.ts'
 import { operatorCommands } from './operator-commands.ts'
 import { taskLedger } from './task-ledger.ts'
 import type { DrainingMarker } from './draining.ts'
+import { agentRunEnv } from './config.ts'
 import type { ExecutorSettings } from './config.ts'
 import { checkoutAllocator } from './checkout.ts'
 import { chatAnswerRunner } from './chat-runner.ts'
@@ -206,9 +207,7 @@ export class MpsExecutorRuntime {
           chatRunner: chatAnswerRunner({
             command: this.settings.cliRunner.command,
             logsDirectory: this.settings.cliRunner.logsDirectory,
-            ...(this.settings.cliRunner.dshHome === undefined ? {} : {
-              env: { DSH_HOME: this.settings.cliRunner.dshHome },
-            }),
+            env: agentRunEnv(this.settings.cliRunner.dshHome),
             jsonEvents: this.settings.cliRunner.jsonEvents,
           }),
         }),
