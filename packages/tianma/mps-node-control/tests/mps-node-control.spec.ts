@@ -236,7 +236,7 @@ describe('the deployment parameters the Settings form owns', () => {
 
     const before = await ctx.mpsNodeControl.config()
     expect(before.saved).toEqual({})
-    expect(before.effective.platformHost.source).toBe('unset')
+    expect(before.effective.platformHost).toEqual({ value: '127.0.0.1', source: 'default' })
     // The protocol's own defaults show wherever neither the form nor the
     // environment states a value, so a blank field never reads as missing.
     expect(before.effective.platformPort).toEqual({ value: '8791', source: 'default' })
@@ -388,8 +388,10 @@ describe('the deployment parameters the Settings form owns', () => {
     expect(refused.httpStatus).toBeUndefined()
     expect(refused.detail).toMatch(/could not reach/u)
 
-    const absent = await ctx.mpsNodeControl.probe({})
+    // With nothing stated anywhere, the probe dials the node's own fallback
+    // address, which is what a launch would dial too.
+    const absent = await ctx.mpsNodeControl.probe({ platformPort: '1' })
     expect(absent.reachable).toBe(false)
-    expect(absent.detail).toMatch(/no platform address/u)
+    expect(absent.detail).toMatch(/127\.0\.0\.1:1/u)
   })
 })

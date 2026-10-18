@@ -105,6 +105,7 @@ const PROBE_TIMEOUT_MS = 8_000
  * than "missing". These are the same defaults the node's bundle patch applies.
  */
 const FIELD_DEFAULTS: Readonly<Partial<Record<keyof MpsNodeDeployment, string>>> = {
+  platformHost: '127.0.0.1',
   platformPort: '8791',
   platformScheme: 'http',
   platformBasePath: '/exec/v1',
