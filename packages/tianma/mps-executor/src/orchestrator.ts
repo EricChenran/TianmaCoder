@@ -14,10 +14,10 @@ import {
   logBatchId,
   redactSecretText,
   requestRetryDelayMs,
+  isChatAnswerTask,
   strongerOutcome,
   taskRepository,
   taskRuntimeLimitMs,
-  WORK_KIND_CHAT_ANSWER,
 } from '@tianma/dsh-mps-exec-core'
 import type {
   ExecAbortAckRequest,
@@ -336,7 +336,7 @@ export class TaskOrchestrator {
   chatAnswerCount(): number {
     let count = 0
     for (const attempt of this.#attempts.values()) {
-      if (attempt.assignment.kind === WORK_KIND_CHAT_ANSWER) count += 1
+      if (isChatAnswerTask(attempt.assignment)) count += 1
     }
     return count
   }
@@ -400,7 +400,7 @@ export class TaskOrchestrator {
       })
       return false
     }
-    if (assignment.kind !== WORK_KIND_CHAT_ANSWER && this.#hooks.availableSlots() <= 0) {
+    if (!isChatAnswerTask(assignment) && this.#hooks.availableSlots() <= 0) {
       this.#report({
         level: 'warn',
         message: `the platform dispatched ${assignment.task_id} while every coding slot was busy; leaving it to its lease rather than starting it`,
@@ -489,7 +489,7 @@ export class TaskOrchestrator {
     // An answer attempt runs inside the platform's soft answer deadline, which its own
     // engine enforces after the node's ceiling: a node still working past the deadline
     // would answer a question the platform has already taken back.
-    const defaultLimit = assignment.kind === WORK_KIND_CHAT_ANSWER
+    const defaultLimit = isChatAnswerTask(assignment)
       ? this.#settings.answerRuntimeSeconds * 1000
       : this.#settings.taskRuntimeSeconds * 1000
     const limitMs = taskRuntimeLimitMs(assignment.payload) ?? defaultLimit
@@ -564,7 +564,7 @@ export class TaskOrchestrator {
         // An answer task owns no workspace: it asks one question in a throwaway
         // directory, so preparing one would both wait on a slot it does not need and
         // hold a checkout it must never touch.
-        const chat = running.assignment.kind === WORK_KIND_CHAT_ANSWER
+        const chat = isChatAnswerTask(running.assignment)
         // Nothing to prepare without an allocator, so the attempt starts without
         // yielding; otherwise the runner waits for its workspace.
         const workspace = chat || this.#workspaces === undefined

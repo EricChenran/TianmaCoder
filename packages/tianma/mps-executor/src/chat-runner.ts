@@ -12,7 +12,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { chatAnswerOf, WORK_KIND_CHAT_ANSWER } from '@tianma/dsh-mps-exec-core'
+import { chatAnswerOf, isChatAnswerTask } from '@tianma/dsh-mps-exec-core'
 import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
 import { RUNNER_STOP_GRACE_MS, readRunEvent, runFailureSummary, runProcess, writeRawLog } from './cli-runner.ts'
 import type { RunOutcome } from './cli-runner.ts'
@@ -60,8 +60,8 @@ export function chatAnswerRunner(options: ChatRunnerOptions): TaskRunner {
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
       const task = context.task
-      if (task.kind !== WORK_KIND_CHAT_ANSWER) {
-        throw new Error(`the chat runner answers ${WORK_KIND_CHAT_ANSWER} tasks, not ${JSON.stringify(task.kind)}`)
+      if (!isChatAnswerTask(task)) {
+        throw new Error(`the chat runner answers chat tasks, not ${JSON.stringify(task.kind)}`)
       }
       const answer = chatAnswerOf(task.payload)
       if (answer === undefined) {

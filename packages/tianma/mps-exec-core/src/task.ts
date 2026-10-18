@@ -259,6 +259,21 @@ export interface ChatAnswerTask {
  * @param payload - the payload a claim returned.
  * @returns the answer task, or undefined when the payload states none.
  */
+/**
+ * Whether one claimed task is a chat answer, read the way the platform
+ * actually states it: the claim's top-level kind carries the work item's
+ * type ('answer'), while the protocol's 'chat_answer' spelling rides
+ * payload.kind — so both are accepted, and a claim that states the kind at
+ * the top level keeps working.
+ * @param task - the claimed assignment.
+ * @returns true when this task is answered in the result summary.
+ */
+export function isChatAnswerTask(task: { kind: string; payload: Record<string, unknown> }): boolean {
+  return task.kind === WORK_KIND_CHAT_ANSWER
+    || task.kind === 'answer'
+    || task.payload['kind'] === WORK_KIND_CHAT_ANSWER
+}
+
 export function chatAnswerOf(payload: Record<string, unknown>): ChatAnswerTask | undefined {
   const answer = payload['answer']
   if (!isRecord(answer)) return undefined

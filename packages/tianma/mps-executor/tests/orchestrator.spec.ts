@@ -676,6 +676,28 @@ describe('task lifecycle', () => {
     expect(orchestrator.chatAnswerCount()).toBe(0)
   })
 
+  it('takes an answer dispatch the platform spells with its work-item type', async () => {
+    const platform = new FakePlatform()
+    // The platform fills the claim's top-level kind from the work item's type
+    // ("answer"); the protocol's "chat_answer" spelling rides payload.kind.
+    platform.assignments.push(assignment({
+      kind: 'answer',
+      payload: {
+        kind: 'chat_answer',
+        answer: { chat_id: 'wr1', message_id: 9, question: '在吗？' },
+      },
+    }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: runnerOf(async () => ({ outcome: 'success', summary: '在的。' })),
+    })
+
+    expect(await orchestrator.claimOnce()).toBe(true)
+    await orchestrator.drain()
+    expect(platform.results[0]).toMatchObject({ outcome: 'success', summary: '在的。' })
+  })
+
   it('reports an answer task as failed at once when no chat runner is composed', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment({ kind: 'chat_answer', payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } } }))

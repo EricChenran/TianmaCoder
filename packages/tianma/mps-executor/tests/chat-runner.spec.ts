@@ -100,7 +100,7 @@ describe('chat answer runner', () => {
   it('refuses a task that is not an answer task', async () => {
     const runner = chatAnswerRunner({ command: [process.execPath, answerStub()], logsDirectory: logsDirectory() })
 
-    await expect(runner.run(contextOf({ spec: { raw_instruction: '写代码' } }, 'coding'))).rejects.toThrow(/chat_answer/u)
+    await expect(runner.run(contextOf({ spec: { raw_instruction: '写代码' } }, 'coding'))).rejects.toThrow(/chat tasks/u)
   })
 
   it('fails a run that exits without printing an answer', async () => {

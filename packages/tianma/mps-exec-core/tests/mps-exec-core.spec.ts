@@ -37,6 +37,7 @@ import {
   strongerOutcome,
   taskAttemptDelayMs,
   chatAnswerOf,
+  isChatAnswerTask,
   taskInstruction,
   taskPolicy,
   taskRepository,
@@ -1115,6 +1116,13 @@ describe('chat answer payload', () => {
     expect(chatAnswerOf({})).toBeUndefined()
     expect(chatAnswerOf({ answer: { chat_id: 'wr1' } })).toBeUndefined()
     expect(chatAnswerOf({ answer: 'not an object' })).toBeUndefined()
+  })
+
+  it('reads the work kind the way the platform states it', () => {
+    expect(isChatAnswerTask({ kind: 'answer', payload: { kind: 'chat_answer' } })).toBe(true)
+    expect(isChatAnswerTask({ kind: 'chat_answer', payload: {} })).toBe(true)
+    expect(isChatAnswerTask({ kind: 'coding', payload: {} })).toBe(false)
+    expect(isChatAnswerTask({ kind: '', payload: { kind: 'coding' } })).toBe(false)
   })
 
   it('names both work kinds the platform dispatches', () => {
