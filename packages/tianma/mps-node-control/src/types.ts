@@ -156,6 +156,12 @@ export interface MpsNodeForm {
   workspaceRoot?: string | undefined
   slotsTotal?: string | undefined
   nodeSecret?: string | undefined
+  /**
+   * Explicit instruction to drop the stored secret. A blank `nodeSecret` on
+   * its own keeps what is stored, so saving unrelated fields never wipes the
+   * credential; only `'true'` here does.
+   */
+  clearNodeSecret?: string | undefined
 }
 
 /** What one connectivity probe found, in the form's own words to show. */

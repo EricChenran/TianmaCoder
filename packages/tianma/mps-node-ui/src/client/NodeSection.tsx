@@ -116,10 +116,19 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
                   type='password'
                   value={form.nodeSecret ?? ''}
                   placeholder={secretPlaceholder(config.secretSet, t)}
-                  onChange={(event) => { setForm({ ...form, nodeSecret: event.target.value }) }}
+                  onChange={(event) => { setForm({ ...form, nodeSecret: event.target.value, clearNodeSecret: '' }) }}
                   autoComplete='new-password'
                 />
               </div>
+              {config.secretSet === 'saved'
+                ? <label className={css.fieldLabel}>
+                  <input
+                    type='checkbox'
+                    checked={form.clearNodeSecret === 'true'}
+                    onChange={(event) => { setForm({ ...form, clearNodeSecret: event.target.checked ? 'true' : '' }) }}
+                  />{' '}{t('secretClear')}
+                </label>
+                : <span className={css.fieldLabel}>{t('secretKeepHint')}</span>}
             </label>
             <div className={css.actions}>
               <Button variant="primary" onClick={submit} disabled={node.configBusy}>
@@ -194,7 +203,7 @@ function savedForm(config: MpsNodeConfig | undefined): MpsNodeFormInput {
  * @returns the placeholder text.
  */
 function secretPlaceholder(source: 'saved' | 'environment' | 'default' | 'unset' | undefined, t: (key: MpsNodeKey) => string): string {
-  if (source === 'saved') return t('secretSavedHere')
+  if (source === 'saved') return t('secretKeepHint')
   if (source === 'environment') return t('sourceEnvironment')
   return t('sourceUnset')
 }

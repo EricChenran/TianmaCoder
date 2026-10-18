@@ -430,8 +430,20 @@ export class MpsNodeControlService extends TypertRemoteService {
    */
   @Remote
   async saveConfig(form: MpsNodeForm): Promise<MpsNodeConfig> {
+    const previous = readDeployment(this.profileDir())
     const saved: MpsNodeDeployment = {}
     for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
+      // The secret is kept when the form leaves it blank: a save that edits
+      // unrelated fields must never wipe the credential. Only the explicit
+      // instruction drops it.
+      if (key === 'nodeSecret') {
+        const stated = form.nodeSecret?.trim() ?? ''
+        if (stated !== '') saved.nodeSecret = stated
+        else if (form.clearNodeSecret !== 'true' && previous.nodeSecret !== undefined) {
+          saved.nodeSecret = previous.nodeSecret
+        }
+        continue
+      }
       const parsed = parseField(key, form[key] ?? '')
       if ('error' in parsed) {
         throw new Error(`mps-node-control: ${parsed.error}`)
@@ -487,7 +499,7 @@ export class MpsNodeControlService extends TypertRemoteService {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ nodeId: 'connectivity-probe', secret: 'wrong-on-purpose' }),
+        body: JSON.stringify({ node_id: 'connectivity-probe', secret: 'wrong-on-purpose' }),
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       })
       const latencyMs = Date.now() - startedAt

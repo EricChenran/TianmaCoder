@@ -283,6 +283,19 @@ describe('the deployment parameters the Settings form owns', () => {
       expect((await ctx.mpsNodeControl.logs())[0]?.text).toBe('stored-secret from=saved.example.com')
       await ctx.mpsNodeControl.stop()
 
+      // Saving the form without restating the secret keeps what is stored:
+      // editing another field must never wipe the credential.
+      const kept = await ctx.mpsNodeControl.saveConfig({ platformHost: 'other.example.com' })
+      expect(kept.secretSet).toBe('saved')
+      expect(JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')).nodeSecret)
+        .toBe('stored-secret')
+
+      // The explicit instruction alone drops it.
+      const dropped = await ctx.mpsNodeControl.saveConfig({ nodeSecret: '', clearNodeSecret: 'true' })
+      expect(dropped.secretSet).toBe('environment')
+      expect(JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')).nodeSecret)
+        .toBeUndefined()
+
       // Saving the field empty clears what this page stored.
       const cleared = await ctx.mpsNodeControl.saveConfig({ nodeSecret: '' })
       expect(cleared.secretSet).toBe('environment')

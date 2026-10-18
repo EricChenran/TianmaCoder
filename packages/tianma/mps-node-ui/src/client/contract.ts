@@ -6,10 +6,10 @@
  * @module @tianma/dsh-mps-node-ui/contract
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeConfig, MpsNodeDeployment, MpsNodeLogLine, MpsNodeProbeResult, MpsNodeStatus } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeConfig, MpsNodeForm, MpsNodeLogLine, MpsNodeProbeResult, MpsNodeStatus } from '@tianma/dsh-mps-node-control/types'
 
 /** The form's own shape: one text field per deployment parameter. */
-export type MpsNodeFormInput = Partial<Record<keyof MpsNodeDeployment, string>>
+export type MpsNodeFormInput = MpsNodeForm
 
 /** Everything the node surface renders. */
 export interface MpsNodeSnapshot {
