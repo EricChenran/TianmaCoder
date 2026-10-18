@@ -129,6 +129,16 @@ export function apply(ctx: Context): void {
       publish({ taskBusy: undefined, ...(result.ok ? {} : { configError: failure(result.error) }) })
       await refresh()
     },
+    async taskCommand(command) {
+      publish({ taskBusy: command.task_id })
+      const result = await ctx.remote.mpsNodeControl.taskCommand(command)
+      publish({ taskBusy: undefined, ...(result.ok ? {} : { configError: failure(result.error) }) })
+      await refresh()
+    },
+    openSession(sessionId) {
+      const workspace = ctx.get('uiWorkspace') as { openSession(target: string): void } | undefined
+      workspace?.openSession(sessionId)
+    },
     // The workspace UI service is read lazily rather than injected, so this
     // surface still mounts in a composition without the directory picker.
     async browse() {

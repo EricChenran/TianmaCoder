@@ -16,9 +16,11 @@ export const OPERATOR_COMMANDS_FILE = '.operator-commands.json'
 /** One command the operator surface left for the node. */
 export interface OperatorCommand {
   /** Which command this is. */
-  action: 'cancel'
+  action: 'cancel' | 'takeover' | 'complete'
   /** The task it addresses. */
   task_id: string
+  /** What a completed takeover wants the result to say. */
+  summary?: string | undefined
   /** When the operator issued it, as an RFC 3339 string. */
   at?: string | undefined
 }

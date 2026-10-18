@@ -21,7 +21,7 @@ export interface TaskLedgerEntry {
   /** When the event happened, as an RFC 3339 string. */
   at: string
   /** Which event this line carries. */
-  event: 'claimed' | 'settled'
+  event: 'claimed' | 'held' | 'settled'
   /** Protocol task id, which is the platform's work-item id. */
   task_id: string
   /** Work-item kind as the platform dispatched it. */

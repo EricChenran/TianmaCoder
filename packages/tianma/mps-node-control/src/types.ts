@@ -191,6 +191,8 @@ export interface MpsNodeTaskView {
   attempt: number
   /** Whether the latest line is a claim still running here. */
   running: boolean
+  /** Whether the latest line says an operator holds the task. */
+  held: boolean
   /** When the latest line was written, as an RFC 3339 string. */
   at: string
   /** Outcome of a settled attempt. */
@@ -205,8 +207,10 @@ export interface MpsNodeTaskView {
 
 /** What one operator command asked for. */
 export interface MpsNodeTaskCommand {
-  /** The command; only `cancel` is implemented. */
-  action: 'cancel'
+  /** The command: cancel the task, take it over, or finish a held one. */
+  action: 'cancel' | 'takeover' | 'complete'
   /** The task it addresses. */
   task_id: string
+  /** What a completed takeover wants the result to say. */
+  summary?: string | undefined
 }

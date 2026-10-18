@@ -698,6 +698,28 @@ describe('task lifecycle', () => {
     expect(platform.results[0]).toMatchObject({ outcome: 'success', summary: '在的。' })
   })
 
+  it('holds a running attempt for the operator and submits only when they finish it', async () => {
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment())
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: waitingRunner(() => ({ outcome: 'success', summary: 'kept going' })),
+    })
+
+    await orchestrator.claimOnce()
+    expect(orchestrator.hold('tsk_1')).toBe(true)
+    // The abort the hold issued ends the runner; the attempt stays held — in
+    // the running set, submitting nothing — until the operator finishes it.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(platform.results).toEqual([])
+    expect(orchestrator.runningTaskIds()).toEqual(['tsk_1'])
+    expect(orchestrator.hold('tsk_1')).toBe(false)
+
+    await orchestrator.completeHeld('tsk_1', ' 人工已处理 ')
+    expect(platform.results[0]).toMatchObject({ outcome: 'success', summary: '人工已处理' })
+    expect(orchestrator.runningTaskIds()).toEqual([])
+  })
+
   it('reports an answer task as failed at once when no chat runner is composed', async () => {
     const platform = new FakePlatform()
     platform.assignments.push(assignment({ kind: 'chat_answer', payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } } }))

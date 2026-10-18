@@ -549,6 +549,7 @@ export class MpsNodeControlService extends TypertRemoteService {
         kind: entry.kind,
         attempt: entry.attempt,
         running: entry.event === 'claimed',
+        held: entry.event === 'held',
         at: entry.at,
         ...(entry.outcome === undefined ? {} : { outcome: entry.outcome }),
         ...(entry.summary === undefined ? {} : { summary: entry.summary }),
@@ -566,10 +567,15 @@ export class MpsNodeControlService extends TypertRemoteService {
    */
   @Remote
   async taskCommand(command: MpsNodeTaskCommand): Promise<void> {
-    if (command.action !== 'cancel' || command.task_id === '') {
-      throw new Error('mps-node-control: only a cancel naming a task can be left for the node')
+    if (command.task_id === '') {
+      throw new Error('mps-node-control: an operator command has to name its task')
     }
-    operatorCommands(opsDir()).leave([{ action: 'cancel', task_id: command.task_id, at: new Date().toISOString() }])
+    operatorCommands(opsDir()).leave([{
+      action: command.action,
+      task_id: command.task_id,
+      at: new Date().toISOString(),
+      ...(command.summary === undefined ? {} : { summary: command.summary }),
+    }])
   }
 
   /**

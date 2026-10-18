@@ -389,7 +389,7 @@ describe('the deployment parameters the Settings form owns', () => {
     expect(pending).toMatchObject([{ action: 'cancel', task_id: 'wi_run' }])
 
     await expect(ctx.mpsNodeControl.taskCommand({ action: 'cancel', task_id: '' }))
-      .rejects.toThrow(/naming a task/u)
+      .rejects.toThrow(/name its task/u)
   })
 
   it('reports a platform that answers the probe, whatever status it answers with', async () => {

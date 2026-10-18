@@ -231,6 +231,10 @@ interface RunningAttempt {
   bundleArtifactId?: string | undefined
   /** Session reference the attempt reported, once one arrived. */
   sessionRef?: string | undefined
+  /** The prepared workspace, kept so a held attempt can still be delivered. */
+  prepared?: TaskWorkspace | undefined
+  /** An operator took the attempt over: no result until they finish it. */
+  held?: boolean | undefined
   /** Directory the attempt worked in, when it worked in one. */
   workspaceDirectory?: string | undefined
   renewTimer?: NodeJS.Timeout | undefined
@@ -439,6 +443,63 @@ export class TaskOrchestrator {
     return true
   }
 
+  /**
+   * Hand one running attempt to the operator: the agent run stops, the runtime
+   * ceiling is lifted, and no result is submitted until {@link completeHeld}. The
+   * lease keeps being renewed, so the platform sees the task as still held here.
+   * @param taskId - the task to take over.
+   * @returns whether a running attempt was handed over.
+   */
+  hold(taskId: string): boolean {
+    const running = this.#attempts.get(taskId)
+    if (running === undefined || running.held === true) return false
+    running.held = true
+    if (running.limitTimer !== undefined) {
+      clearTimeout(running.limitTimer)
+      running.limitTimer = undefined
+    }
+    running.controller.abort(new Error('the operator took this attempt over'))
+    this.#ledger?.append({
+      at: formatRfc3339(this.#now()),
+      event: 'held',
+      task_id: taskId,
+      kind: running.assignment.kind,
+      attempt: running.assignment.attempt,
+      ...(running.sessionRef === undefined ? {} : { session: running.sessionRef }),
+    })
+    this.#report({ level: 'info', message: `task ${taskId} was taken over by the operator; no result is submitted until they finish it` })
+    return true
+  }
+
+  /**
+   * Finish an attempt the operator took over: a coding attempt is published the
+   * way the runner would have published it, and the result carries the summary
+   * the operator stated (or a plain statement that they delivered it).
+   * @param taskId - the held task.
+   * @param summary - what the operator wants the result to say.
+   */
+  async completeHeld(taskId: string, summary: string): Promise<void> {
+    const running = this.#attempts.get(taskId)
+    if (running === undefined || running.held !== true) return
+    running.held = false
+    let result: TaskRunResult
+    try {
+      if (this.#publisher !== undefined && running.prepared?.checkout !== undefined) {
+        await this.#publish(running, running.prepared)
+      }
+      result = {
+        outcome: 'success',
+        summary: summary.trim() === '' ? 'delivered by the operator' : summary.trim(),
+      }
+    } catch (error: unknown) {
+      result = { outcome: 'failed', summary: attemptFailureSummary(error) }
+    }
+    this.#clearTimers(running)
+    await this.#submit(running, result.outcome, result, this.#now())
+    this.#ledgerSettled(running, result.outcome, { summary: `${result.summary} (operator)` })
+    this.#settle(running)
+  }
+
   async #claimLoop(): Promise<void> {
     while (this.#claiming) {
       // Offer anything the platform has not taken yet — a task's log, and the outcome of an
@@ -590,6 +651,7 @@ export class TaskOrchestrator {
           ? undefined
           : await this.#workspaces.prepare(running.assignment)
         running.workspaceDirectory = workspace?.directory
+        running.prepared = workspace
         if (running.superseded) return
         const runner = chat ? this.#chatRunner : this.#runner
         if (runner === undefined) {
@@ -619,6 +681,9 @@ export class TaskOrchestrator {
         result = { outcome: 'failed', summary: attemptFailureSummary(error) }
       }
       this.#clearTimers(running)
+      // A held attempt stops here: the operator owns the work now, the result is
+      // submitted when they finish it, and the lease keeps being renewed.
+      if (running.held === true) return
       if (running.superseded) {
         this.#ledgerSettled(running, 'cancelled', { summary: 'the platform withdrew the lease; no result submitted' })
         return
@@ -633,7 +698,7 @@ export class TaskOrchestrator {
       await this.#submit(running, outcome, result, startedAt)
       this.#ledgerSettled(running, outcome, result)
     } finally {
-      this.#settle(running)
+      if (running.held !== true) this.#settle(running)
     }
   }
 

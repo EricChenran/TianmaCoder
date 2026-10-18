@@ -736,14 +736,24 @@ export class MpsExecutorRuntime {
    */
   #applyOperatorCommands(): void {
     for (const command of operatorCommands(this.settings.opsRoot).take()) {
-      if (command.action !== 'cancel' || command.task_id === '') {
+      if (command.task_id === '') {
         this.#report({ level: 'warn', message: `operator command cannot be applied: ${JSON.stringify(command)}` })
         continue
       }
-      if (this.#tasks?.abort(command.task_id, 'the operator cancelled this task') !== true) {
-        this.#report({ level: 'warn', message: `operator cancelled ${command.task_id}, which this node is not running` })
+      if (command.action === 'cancel') {
+        if (this.#tasks?.abort(command.task_id, 'the operator cancelled this task') !== true) {
+          this.#report({ level: 'warn', message: `operator cancelled ${command.task_id}, which this node is not running` })
+        } else {
+          this.#report({ level: 'info', message: `operator cancelled ${command.task_id}` })
+        }
+      } else if (command.action === 'takeover') {
+        if (this.#tasks?.hold(command.task_id) !== true) {
+          this.#report({ level: 'warn', message: `operator took over ${command.task_id}, which this node is not running` })
+        }
+      } else if (command.action === 'complete') {
+        void this.#tasks?.completeHeld(command.task_id, command.summary ?? '')
       } else {
-        this.#report({ level: 'info', message: `operator cancelled ${command.task_id}` })
+        this.#report({ level: 'warn', message: `operator command cannot be applied: ${JSON.stringify(command)}` })
       }
     }
   }

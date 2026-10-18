@@ -68,4 +68,8 @@ export interface MpsNodeInjected {
   browse: () => Promise<string | undefined>
   /** Cancel one running task through the Host; re-reads the task list after. */
   cancelTask: (taskId: string) => Promise<void>
+  /** Take one running task over, or finish a held one with the stated summary. */
+  taskCommand: (command: { action: 'takeover' | 'complete'; task_id: string; summary?: string }) => Promise<void>
+  /** Open one of the node's task sessions in the workspace UI, when it is composed. */
+  openSession: (sessionId: string) => void
 }

@@ -29,7 +29,7 @@ const FIELDS = [
  * @returns the execution-node settings section.
  */
 export function MpsNodeSection(
-  { useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, cancelTask, t }: MpsNodeSectionProps,
+  { useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, cancelTask, taskCommand, openSession, t }: MpsNodeSectionProps,
 ) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
@@ -44,6 +44,7 @@ export function MpsNodeSection(
   const config = node.config
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<MpsNodeFormInput>({})
+  const [finish, setFinish] = useState<Record<string, string>>({})
   const beginEdit = (): void => {
     const saved: MpsNodeFormInput = {}
     for (const field of FIELDS) {
@@ -174,17 +175,40 @@ export function MpsNodeSection(
         : <div className={css.tasks}>
           {node.tasks.slice(0, 10).map(task => <div key={task.task_id} className={css.taskRow}>
             <span className={task.running ? css.taskRunning : css.taskSettled}>
-              {task.running ? t('taskRunning') : outcomeLabel(task.outcome, t)}
+              {task.held ? t('taskHeld') : task.running ? t('taskRunning') : outcomeLabel(task.outcome, t)}
             </span>
             <span className={css.taskText}>
               {task.task_id} · {kindLabel(task.kind, t)} · {task.at}
               {task.summary === undefined ? '' : ' — ' + task.summary}
             </span>
-            {task.running && <Button
+            {task.running && !task.held && <Button
+              variant="ghost"
+              disabled={node.taskBusy !== undefined}
+              onClick={() => { void taskCommand({ action: 'takeover', task_id: task.task_id }) }}
+            >{t('taskTakeover')}</Button>}
+            {task.held && <span className={css.fieldLabel}>
+              <input
+                type="text"
+                placeholder={t('taskFinishSummary')}
+                onChange={(event) => { setFinish({ ...finish, [task.task_id]: event.target.value }) }}
+              />{' '}
+              <Button
+                variant="ghost"
+                disabled={node.taskBusy !== undefined}
+                onClick={() => {
+                  void taskCommand({ action: 'complete', task_id: task.task_id, summary: finish[task.task_id] ?? '' })
+                }}
+              >{t('taskFinish')}</Button>{' '}
+            </span>}
+            {(task.running || task.held) && <Button
               variant="ghost"
               disabled={node.taskBusy !== undefined}
               onClick={() => { void cancelTask(task.task_id) }}
             >{node.taskBusy === task.task_id ? t('taskCancelling') : t('taskCancel')}</Button>}
+            {task.session !== undefined && <Button
+              variant="ghost"
+              onClick={() => { openSession(task.session as string) }}
+            >{t('taskOpenSession')}</Button>}
           </div>)}
         </div>}
       <p className={css.notice}>{t('tasksNote')}</p>
