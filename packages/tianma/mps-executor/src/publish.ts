@@ -144,6 +144,31 @@ export function assertBranchAllowed(branch: string, pattern: string | undefined)
 }
 
 /**
+ * Check that the attempt is still on the branch it hands back. A run works with the
+ * CLI's own permissions, so it can check out another branch or detach HEAD; the commit
+ * would then land on a ref the push does not carry, and the reported commit and changed
+ * paths would describe a tree the platform never receives.
+ * @param git - the git runner.
+ * @param directory - the workspace directory.
+ * @param branch - the branch the task works on.
+ * @param signal - caller cancellation.
+ * @throws Error when HEAD is a detached or a different branch.
+ */
+export async function assertOnWorkBranch(
+  git: GitRunner,
+  directory: string,
+  branch: string,
+  signal?: AbortSignal | undefined,
+): Promise<void> {
+  // `--abbrev-ref` prints `HEAD` for a detached one, which is the one case a name cannot express.
+  const current = (await git.run(directory, ['rev-parse', '--abbrev-ref', 'HEAD'], signal)).stdout.trim()
+  if (current === branch) return
+  throw new Error(current === 'HEAD'
+    ? `refusing to hand back work from a detached HEAD: the task works on ${branch}`
+    : `refusing to hand back work from ${current}: the task works on ${branch}`)
+}
+
+/**
  * Check that every change stays inside the workspace once symlinks resolve.
  * @param directory - the workspace directory.
  * @param files - the changed paths.
@@ -192,7 +217,8 @@ export async function filesCarryingSecrets(directory: string, files: readonly st
  * @returns the changed paths, the commit, and whether the branch was pushed.
  * @throws Error when the task asks for an access mode this node does not implement,
  * when a change leaves the workspace, when a change carries a credential, when the
- * branch name is refused, when git cannot stage changes it reports, or when git fails.
+ * branch name is refused, when the attempt moved off the task's branch, when git cannot
+ * stage changes it reports, or when git fails.
  */
 export async function publishChanges(options: PublishChangesOptions): Promise<PublishedChanges> {
   const { directory, checkout, policy, identity, git, signal } = options
@@ -200,6 +226,10 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
   // commits but never pushes.
   const readOnly = policy.access_mode === 'read_only'
   assertBranchAllowed(checkout.work_branch, policy.branch_pattern)
+  // The branch the attempt hands back is the one the task named, whatever the run did to
+  // HEAD inside: a commit on another ref would be pushed as nothing, and the reported
+  // commit would name a tree the platform never receives.
+  await assertOnWorkBranch(git, directory, checkout.work_branch, signal)
   const files = await changedFiles(git, directory, checkout.base_commit, signal)
   const secrets = await filesCarryingSecrets(directory, files)
   if (secrets.length > 0) {

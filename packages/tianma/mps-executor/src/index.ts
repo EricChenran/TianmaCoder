@@ -77,6 +77,7 @@ export type { CheckoutAllocatorOptions, PrepareCheckoutOptions } from './checkou
 export {
   PUBLISH_SCAN_MAX_BYTES,
   assertBranchAllowed,
+  assertOnWorkBranch,
   BUNDLE_DIRECTORY,
   assertChangesInside,
   changedFiles,

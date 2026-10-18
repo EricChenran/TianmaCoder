@@ -49,6 +49,10 @@ class RecordingGit implements GitRunner {
   async run(_directory: string, args: readonly string[]): Promise<{ stdout: string; stderr: string }> {
     const command = args.join(' ')
     this.calls.push(command)
+    // Every attempt is on the task's work branch unless a test states otherwise.
+    if (command === 'rev-parse --abbrev-ref HEAD' && !this.answers.has(command)) {
+      return { stdout: 'feature/tsk_1\n', stderr: '' }
+    }
     return { stdout: this.answers.get(command) ?? '', stderr: '' }
   }
 }
@@ -169,6 +173,7 @@ describe('publishing an attempt', () => {
     })
 
     expect(git.calls).toEqual([
+      'rev-parse --abbrev-ref HEAD',
       'diff --name-only -z a1b2c3d',
       'ls-files --others --exclude-standard -z',
       'diff --name-only -z HEAD',
@@ -263,7 +268,31 @@ describe('publishing an attempt', () => {
 
     await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
       .rejects.toThrow(/refusing to publish credentials in leak.txt/)
-    expect(git.calls).toEqual(['diff --name-only -z a1b2c3d', 'ls-files --others --exclude-standard -z'])
+    expect(git.calls).toEqual([
+      'rev-parse --abbrev-ref HEAD',
+      'diff --name-only -z a1b2c3d',
+      'ls-files --others --exclude-standard -z',
+    ])
+  })
+
+  it('refuses work from a branch the attempt moved off', async () => {
+    const workspace = temporary('mps-publish-')
+    const git = new RecordingGit()
+    git.answers.set('rev-parse --abbrev-ref HEAD', 'main\n')
+
+    await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
+      .rejects.toThrow(/refusing to hand back work from main: the task works on feature\/tsk_1/)
+    // Nothing was read, staged, or committed from the wrong branch.
+    expect(git.calls).toEqual(['rev-parse --abbrev-ref HEAD'])
+  })
+
+  it('refuses work from a detached HEAD', async () => {
+    const workspace = temporary('mps-publish-')
+    const git = new RecordingGit()
+    git.answers.set('rev-parse --abbrev-ref HEAD', 'HEAD\n')
+
+    await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
+      .rejects.toThrow(/refusing to hand back work from a detached HEAD: the task works on feature\/tsk_1/)
   })
 
   it('refuses a change that leaves the workspace before it commits anything', async () => {
@@ -384,6 +413,27 @@ describe('publishing against real repositories', () => {
     const committed = (await git.run(workspace, ['show', '--name-only', '-z', '--format=', 'HEAD']))
       .stdout.split('\0').filter(name => name !== '').sort()
     expect(committed).toEqual([...files].sort())
+  })
+
+  it('refuses a delivery whose run moved HEAD to another branch', async () => {
+    const git = cliGit()
+    const { workspace } = await workspaceWithChange(git)
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    writeFileSync(join(workspace, 'report.md'), '# 报告\n', 'utf8')
+    // A run with full permissions can leave HEAD anywhere. A commit made here would be
+    // pushed as nothing, and the reported commit would name a tree the platform never gets.
+    await git.run(workspace, ['checkout', '--quiet', '-b', 'scratch'])
+
+    await expect(publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: {},
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    })).rejects.toThrow(/refusing to hand back work from scratch: the task works on feature\/tsk_1/)
+    // Nothing was committed, so the work branch still holds exactly the dispatched base.
+    expect((await git.run(workspace, ['rev-parse', 'feature/tsk_1'])).stdout.trim()).toBe(base)
   })
 
   it('quotes what git wrote to standard output when a command refuses', async () => {
