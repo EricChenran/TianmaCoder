@@ -73,7 +73,7 @@ export interface TaskWorkspaceAllocator {
 
 /** What an attempt handed back through {@link TaskRunContext.publish}. */
 export interface PublishedChanges {
-  /** Paths the attempt changed, relative to the workspace. */
+  /** Paths the deliverable changes against the dispatched base, relative to the workspace. */
   changed_files: string[]
   /** Commit the work branch now points at. */
   head_commit: string
@@ -134,9 +134,10 @@ export interface TaskRunContext {
    */
   reportSession(sessionRef: string): Promise<void>
   /**
-   * Hand this attempt's work back: the node commits the changes under its robot
-   * identity and pushes the work branch, after checking that every change stays
-   * inside the workspace and carries no credential.
+   * Hand this attempt's work back: the node commits what the attempt left
+   * uncommitted under its robot identity and pushes the work branch, after checking
+   * that every change stays inside the workspace and carries no credential. Work the
+   * attempt committed itself is handed back as it stands.
    * @returns the changed paths, the commit, and whether the branch was pushed.
    */
   publish(): Promise<PublishedChanges>

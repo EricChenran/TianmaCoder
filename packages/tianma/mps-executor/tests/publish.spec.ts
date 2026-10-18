@@ -147,6 +147,8 @@ describe('publishing an attempt', () => {
     const git = new RecordingGit()
     git.answers.set('diff --name-only a1b2c3d', 'src/a.ts\n')
     git.answers.set('ls-files --others --exclude-standard', '')
+    git.answers.set('diff --name-only HEAD', 'src/a.ts\n')
+    git.answers.set('diff --cached --name-only', 'src/a.ts\n')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({
@@ -161,7 +163,10 @@ describe('publishing an attempt', () => {
     expect(git.calls).toEqual([
       'diff --name-only a1b2c3d',
       'ls-files --others --exclude-standard',
+      'diff --name-only HEAD',
+      'ls-files --others --exclude-standard',
       'add --all',
+      'diff --cached --name-only',
       '-c user.name=tianma-mps-executor -c user.email=node@example.invalid commit --quiet -m 增加批量下载',
       'rev-parse HEAD',
       'push origin feature/tsk_1',
@@ -173,6 +178,8 @@ describe('publishing an attempt', () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
     git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
+    git.answers.set('diff --name-only HEAD', 'a.ts\n')
+    git.answers.set('diff --cached --name-only', 'a.ts\n')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     await publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git })
@@ -184,6 +191,8 @@ describe('publishing an attempt', () => {
     const workspace = temporary('mps-publish-')
     const git = new RecordingGit()
     git.answers.set('diff --name-only a1b2c3d', 'a.ts\n')
+    git.answers.set('diff --name-only HEAD', 'a.ts\n')
+    git.answers.set('diff --cached --name-only', 'a.ts\n')
     git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
 
     const published = await publishChanges({
@@ -197,6 +206,35 @@ describe('publishing an attempt', () => {
 
     expect(published.pushed).toBe(false)
     expect(git.calls.some(call => call.startsWith('push'))).toBe(false)
+  })
+
+  it('hands back work the attempt already committed without committing again', async () => {
+    const workspace = temporary('mps-publish-')
+    mkdirSync(join(workspace, 'src'), { recursive: true })
+    const git = new RecordingGit()
+    // The deliverable against the base is non-empty, but the tree matches HEAD: the
+    // path is committed, not pending. This is the state a retry or a self-committing
+    // attempt leaves, and it used to make `git commit` fail with exit code 1.
+    git.answers.set('diff --name-only a1b2c3d', 'src/a.ts\n')
+    git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
+
+    const published = await publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git })
+
+    expect(published).toEqual({ changed_files: ['src/a.ts'], head_commit: 'b2c3d4e', pushed: true })
+    expect(git.calls).not.toContain('add --all')
+    expect(git.calls.some(call => call.includes(' commit '))).toBe(false)
+  })
+
+  it('refuses changes git will not stage instead of committing nothing', async () => {
+    const workspace = temporary('mps-publish-')
+    const git = new RecordingGit()
+    git.answers.set('diff --name-only a1b2c3d', 'submodule\n')
+    git.answers.set('diff --name-only HEAD', 'submodule\n')
+    // `diff --cached` answers nothing: git took the path but staged no change.
+
+    await expect(publishChanges({ directory: workspace, checkout: CHECKOUT, policy: {}, identity: IDENTITY, taskId: 'tsk_1', git }))
+      .rejects.toThrow(/git staged none of the changes the attempt left uncommitted: submodule/)
+    expect(git.calls.some(call => call.includes(' commit '))).toBe(false)
   })
 
   it('leaves an attempt that changed nothing alone', async () => {
@@ -330,6 +368,58 @@ describe('publishing against real repositories', () => {
     expect((await git.run(workspace, ['config', '--local', '--get', 'user.name']).catch(() => ({ stdout: '' }))).stdout).toBe('')
     const pushed = (await git.run(bare, ['rev-parse', 'feature/tsk_1'])).stdout.trim()
     expect(pushed).toBe(published.head_commit)
+  })
+
+  it('hands back an attempt that committed and pushed its own work', async () => {
+    const git = cliGit()
+    const { workspace, bare } = await workspaceWithChange(git)
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    writeFileSync(join(workspace, 'readme.md'), 'base\ncommitted by the attempt\n', 'utf8')
+    await git.run(workspace, ['add', 'readme.md'])
+    await git.run(workspace, ['-c', 'user.name=Agent', '-c', 'user.email=agent@example.invalid', 'commit', '--quiet', '-m', 'the attempt committed this'])
+    const head = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    // A task can tell the run to commit and push its own result.
+    await git.run(workspace, ['push', '--quiet', 'origin', 'feature/tsk_1'])
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: { summary: 'the node commit message' },
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    })
+
+    expect(published).toEqual({ changed_files: ['readme.md'], head_commit: head, pushed: true })
+    // No empty commit was added: the subject and the count are still the attempt's.
+    expect((await git.run(workspace, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('the attempt committed this')
+    expect((await git.run(workspace, ['rev-list', '--count', `${base}..HEAD`])).stdout.trim()).toBe('1')
+    expect((await git.run(bare, ['rev-parse', 'feature/tsk_1'])).stdout.trim()).toBe(head)
+  })
+
+  it('commits what an attempt left uncommitted after its own commit', async () => {
+    const git = cliGit()
+    const { workspace, bare } = await workspaceWithChange(git)
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    writeFileSync(join(workspace, 'readme.md'), 'base\nagent part\n', 'utf8')
+    await git.run(workspace, ['add', 'readme.md'])
+    await git.run(workspace, ['-c', 'user.name=Agent', '-c', 'user.email=agent@example.invalid', 'commit', '--quiet', '-m', 'agent part'])
+    writeFileSync(join(workspace, 'report.md'), '# 报告\n', 'utf8')
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: { summary: '增加批量下载' },
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    })
+
+    expect(published.changed_files).toEqual(['readme.md', 'report.md'])
+    expect(published.pushed).toBe(true)
+    expect((await git.run(workspace, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('增加批量下载')
+    expect((await git.run(workspace, ['log', '-2', '--format=%s'])).stdout.trim().split('\n')[1]).toBe('agent part')
+    expect((await git.run(bare, ['rev-parse', 'feature/tsk_1'])).stdout.trim()).toBe(published.head_commit)
   })
 
   it('hands a read_only attempt back as a bundle the platform can fetch', async () => {

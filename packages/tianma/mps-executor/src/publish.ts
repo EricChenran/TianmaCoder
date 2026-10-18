@@ -1,10 +1,11 @@
 /**
- * Handing one attempt's work back. The node commits what the attempt changed under
- * the robot identity injected per command — never in the host's global git
+ * Handing one attempt's work back. The node commits what the attempt left uncommitted
+ * under the robot identity injected per command — never in the host's global git
  * configuration — after checking the two things the platform cannot check for it:
  * that every change stays inside the workspace once symlinks resolve, and that no
- * changed text file carries a credential. Both checks run before the commit, so a
- * refused attempt leaves nothing behind to push.
+ * changed text file carries a credential. Work the attempt committed itself is handed
+ * back as it stands. Both checks run before the commit, so a refused attempt leaves
+ * nothing behind to push.
  * @module @tianma/dsh-mps-executor/publish
  */
 
@@ -63,7 +64,7 @@ export interface TaskPublishRequest {
 /** Hands one attempt's work back to the platform. */
 export interface TaskPublisher {
   /**
-   * Commit the attempt's changes and push the work branch.
+   * Commit the changes the attempt left uncommitted and push the work branch.
    * @param request - the attempt, its workspace, and its checkout.
    * @returns the paths, the commit, and whether the branch was pushed.
    */
@@ -84,20 +85,20 @@ function pathsOf(output: string): string[] {
 }
 
 /**
- * The paths one attempt changed, both tracked and not yet tracked.
+ * The paths that differ from one commit, both tracked and not yet tracked.
  * @param git - the git runner.
  * @param directory - the workspace directory.
- * @param baseCommit - the commit the attempt started from.
+ * @param against - the commit to compare the tree with, or `HEAD` for uncommitted work.
  * @param signal - caller cancellation.
  * @returns the workspace-relative paths, sorted.
  */
 export async function changedFiles(
   git: GitRunner,
   directory: string,
-  baseCommit: string,
+  against: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const tracked = await git.run(directory, ['diff', '--name-only', baseCommit], signal)
+  const tracked = await git.run(directory, ['diff', '--name-only', against], signal)
   const untracked = await git.run(directory, ['ls-files', '--others', '--exclude-standard'], signal)
   return [...new Set([...pathsOf(tracked.stdout), ...pathsOf(untracked.stdout)])].sort()
 }
@@ -176,12 +177,13 @@ export async function filesCarryingSecrets(directory: string, files: readonly st
 }
 
 /**
- * Commit one attempt's changes and push its work branch.
+ * Commit what one attempt left uncommitted, push its work branch, and report the
+ * deliverable against the base the platform dispatched.
  * @param options - the workspace, the checkout, the payload's policy, and the identity.
  * @returns the changed paths, the commit, and whether the branch was pushed.
  * @throws Error when the task asks for an access mode this node does not implement,
  * when a change leaves the workspace, when a change carries a credential, when the
- * branch name is refused, or when git fails.
+ * branch name is refused, when git cannot stage changes it reports, or when git fails.
  */
 export async function publishChanges(options: PublishChangesOptions): Promise<PublishedChanges> {
   const { directory, checkout, policy, identity, git, signal } = options
@@ -203,12 +205,26 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
   if (files.length === 0) {
     return { changed_files: [], head_commit: checkout.base_commit, pushed: false }
   }
-  await git.run(directory, ['add', '--all'], signal)
-  await git.run(directory, [
-    '-c', `user.name=${identity.name}`,
-    '-c', `user.email=${identity.email}`,
-    'commit', '--quiet', '-m', policy.summary ?? `task ${options.taskId}`,
-  ], signal)
+  // The commit decision compares the tree with HEAD, not with the base: an attempt may
+  // commit its own work (a task can tell it to), and a retry starts from the dispatched
+  // base while its work branch already holds earlier commits. Against the base those
+  // committed paths look pending, the index stays empty, and git answers the commit with
+  // exit code 1 — the failure this node used to report with no diagnostic at all.
+  const pending = await changedFiles(git, directory, 'HEAD', signal)
+  if (pending.length > 0) {
+    await git.run(directory, ['add', '--all'], signal)
+    // A path git will not stage — a submodule whose worktree is dirty, say — would leave
+    // the commit empty too; name the paths instead of letting git fail with a bare code.
+    const staged = pathsOf((await git.run(directory, ['diff', '--cached', '--name-only'], signal)).stdout)
+    if (staged.length === 0) {
+      throw new Error(`git staged none of the changes the attempt left uncommitted: ${pending.join(', ')}`)
+    }
+    await git.run(directory, [
+      '-c', `user.name=${identity.name}`,
+      '-c', `user.email=${identity.email}`,
+      'commit', '--quiet', '-m', policy.summary ?? `task ${options.taskId}`,
+    ], signal)
+  }
   const head = (await git.run(directory, ['rev-parse', 'HEAD'], signal)).stdout.trim()
   if (readOnly) {
     return {
