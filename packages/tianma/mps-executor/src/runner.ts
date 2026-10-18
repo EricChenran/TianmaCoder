@@ -12,6 +12,7 @@ import type {
   ExecLogLine,
   ExecResource,
   ExecResultEvidence,
+  ExecResultError,
   ExecTaskAssignment,
   TaskOutcome,
   TaskProgress,
@@ -23,6 +24,18 @@ export interface TaskRunResult {
   outcome: TaskOutcome
   /** Operator-visible summary of the attempt. */
   summary: string
+  /**
+   * Why the attempt failed, as a code the platform classifies with and the diagnostics it
+   * stores whole. A runner that knows a specific reason states it here rather than leaving
+   * the platform to read a sentence.
+   */
+  error?: ExecResultError | undefined
+  /**
+   * Commit the attempt reached, reported even when handing the work back failed. The
+   * platform keeps it as the previous attempt's head, which is what tells a later repeat
+   * that the work is already delivered.
+   */
+  headCommit?: string | undefined
   /**
    * Evidence the attempt collected that the node's own facts do not carry: the build,
    * the end-to-end run, and the report. The node fills the delivery facts.

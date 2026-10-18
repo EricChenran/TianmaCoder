@@ -38,6 +38,11 @@ import {
   taskAttemptDelayMs,
   chatAnswerOf,
   isChatAnswerTask,
+  isRepeatDispatch,
+  lastAttemptHeadCommit,
+  taskBaseSource,
+  taskDispatchReason,
+  taskSessionHint,
   taskInstruction,
   taskPolicy,
   taskRepository,
@@ -1131,5 +1136,38 @@ describe('chat answer payload', () => {
   it('names both work kinds the platform dispatches', () => {
     expect(WORK_KIND_CODING).toBe('coding')
     expect(WORK_KIND_CHAT_ANSWER).toBe('chat_answer')
+  })
+})
+
+describe('the fields that steer a node', () => {
+  it('reads the session hint, and starts fresh when the platform says so', () => {
+    const reuse = { limits: { session_hint: { mode: 'reuse', previous_session_ref: 'dsh-s-1' } } }
+    expect(taskSessionHint(reuse)).toBe('dsh-s-1')
+    // A platform that wants a fresh session has written the reference off; adopting it
+    // anyway is how a node works in a session nobody is following.
+    expect(taskSessionHint({ limits: { session_hint: { mode: 'fresh', previous_session_ref: 'dsh-s-1' } } })).toBeUndefined()
+    // A payload that states no mode means the older protocol, which reuses.
+    expect(taskSessionHint({ limits: { session_hint: { previous_session_ref: 'dsh-s-1' } } })).toBe('dsh-s-1')
+    expect(taskSessionHint({ limits: {} })).toBeUndefined()
+  })
+
+  it('reads where the dispatched base came from', () => {
+    expect(taskBaseSource({ context: { base_source: 'work_branch' } })).toBe('work_branch')
+    expect(taskBaseSource({ context: { base_source: 'base_branch' } })).toBe('base_branch')
+    // Anything else is a platform this node does not know, which it judges the older way.
+    expect(taskBaseSource({ context: { base_source: 'somewhere' } })).toBeUndefined()
+    expect(taskBaseSource({})).toBeUndefined()
+  })
+
+  it('tells a repeat dispatch from a task\u2019s first', () => {
+    expect(taskDispatchReason({ context: { dispatch_reason: 'retry' } })).toBe('retry')
+    expect(isRepeatDispatch({ context: { dispatch_reason: 'retry' } })).toBe(true)
+    expect(isRepeatDispatch({ context: { dispatch_reason: 'requeue' } })).toBe(true)
+    expect(isRepeatDispatch({ context: { dispatch_reason: 'initial' } })).toBe(false)
+    // No reason stated is a platform that does not distinguish them, and an empty delivery
+    // from it is a first attempt that did no work.
+    expect(isRepeatDispatch({})).toBe(false)
+    expect(lastAttemptHeadCommit({ context: { last_attempt: { head_commit: 'b2c3d4e' } } })).toBe('b2c3d4e')
+    expect(lastAttemptHeadCommit({ context: {} })).toBeUndefined()
   })
 })

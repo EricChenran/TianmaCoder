@@ -12,8 +12,9 @@
 
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { containsSecretPattern, sha256Of, taskPolicy } from '@tianma/dsh-mps-exec-core'
+import { containsSecretPattern, isRepeatDispatch, lastAttemptHeadCommit, sha256Of, taskPolicy } from '@tianma/dsh-mps-exec-core'
 import type { ExecTaskAssignment, TaskPolicy } from '@tianma/dsh-mps-exec-core'
+import { FAILURE_CODES, AttemptRefusal, attemptFailure } from './failures.ts'
 import type { GitRunner } from './git.ts'
 import { excludeFromRepository, resolveWithinWorkspace } from './paths.ts'
 import type { PublishedChanges, TaskBundle, TaskCheckout } from './runner.ts'
@@ -44,6 +45,13 @@ export interface PublishChangesOptions {
   identity: GitIdentity
   /** The task the commit belongs to, which names it when the payload states no summary. */
   taskId: string
+  /**
+   * Whether this dispatch repeats work an earlier attempt of the same task may already
+   * have delivered. With nothing left to commit, a repeat re-pushes the branch it already
+   * holds and reports that push, which is the delivery the platform's gate reads; a first
+   * dispatch that changed nothing has delivered nothing.
+   */
+  repeat?: boolean | undefined
   /** git on this host. */
   git: GitRunner
   /** Caller cancellation. */
@@ -136,10 +144,10 @@ export function assertBranchAllowed(branch: string, pattern: string | undefined)
   try {
     expression = new RegExp(pattern, 'u')
   } catch (error) {
-    throw new Error(`the task's branch pattern ${JSON.stringify(pattern)} is not usable: ${String(error)}`)
+    throw new AttemptRefusal(FAILURE_CODES.branchNotAllowed, `the task's branch pattern ${JSON.stringify(pattern)} is not usable: ${String(error)}`)
   }
   if (!expression.test(branch)) {
-    throw new Error(`refusing to push ${branch}: it does not match the task's branch pattern ${JSON.stringify(pattern)}`)
+    throw new AttemptRefusal(FAILURE_CODES.branchNotAllowed, `refusing to push ${branch}: it does not match the task's branch pattern ${JSON.stringify(pattern)}`)
   }
 }
 
@@ -163,7 +171,7 @@ export async function assertOnWorkBranch(
   // `--abbrev-ref` prints `HEAD` for a detached one, which is the one case a name cannot express.
   const current = (await git.run(directory, ['rev-parse', '--abbrev-ref', 'HEAD'], signal)).stdout.trim()
   if (current === branch) return
-  throw new Error(current === 'HEAD'
+  throw new AttemptRefusal(FAILURE_CODES.branchMoved, current === 'HEAD'
     ? `refusing to hand back work from a detached HEAD: the task works on ${branch}`
     : `refusing to hand back work from ${current}: the task works on ${branch}`)
 }
@@ -233,7 +241,7 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
   const files = await changedFiles(git, directory, checkout.base_commit, signal)
   const secrets = await filesCarryingSecrets(directory, files)
   if (secrets.length > 0) {
-    throw new Error(`refusing to publish credentials in ${secrets.join(', ')}`)
+    throw new AttemptRefusal(FAILURE_CODES.credentials, `refusing to publish credentials in ${secrets.join(', ')}`)
   }
   // A payload may state that the task does not need the confinement check; absent,
   // the node applies it, because handing back changes from outside the workspace is
@@ -242,6 +250,14 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
     await assertChangesInside(directory, files, policy.forbidden_paths)
   }
   if (files.length === 0) {
+    // A repeat with nothing new to commit is work the platform already has: push the branch
+    // it points at and report the push, rather than reporting a failure for a delivery that
+    // is on the remote. A first dispatch that changed nothing delivered nothing.
+    if (options.repeat === true && !readOnly && policy.push_required !== false) {
+      const head = (await git.run(directory, ['rev-parse', 'HEAD'], signal)).stdout.trim()
+      await pushWorkBranch({ git, directory, branch: checkout.work_branch, head, signal })
+      return { changed_files: [], head_commit: head, pushed: true }
+    }
     return { changed_files: [], head_commit: checkout.base_commit, pushed: false }
   }
   // The commit decision compares the tree with HEAD, not with the base: an attempt may
@@ -256,7 +272,7 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
     // the commit empty too; name the paths instead of letting git fail with a bare code.
     const staged = listedPaths((await git.run(directory, ['diff', '--cached', '--name-only', '-z'], signal)).stdout)
     if (staged.length === 0) {
-      throw new Error(`git staged none of the changes the attempt left uncommitted: ${pending.join(', ')}`)
+      throw new AttemptRefusal(FAILURE_CODES.changesNotStaged, `git staged none of the changes the attempt left uncommitted: ${pending.join(', ')}`)
     }
     await git.run(directory, [
       '-c', `user.name=${identity.name}`,
@@ -276,8 +292,35 @@ export async function publishChanges(options: PublishChangesOptions): Promise<Pu
   if (policy.push_required === false) {
     return { changed_files: files, head_commit: head, pushed: false }
   }
-  await git.run(directory, ['push', 'origin', checkout.work_branch], signal)
+  await pushWorkBranch({ git, directory, branch: checkout.work_branch, head, signal })
   return { changed_files: files, head_commit: head, pushed: true }
+}
+
+/**
+ * Push the work branch, telling a refusal apart from every other git failure. A remote
+ * branch that already holds commits this attempt does not is the failure a node meets in
+ * the field, and the platform retries it differently from a hook or a protected branch —
+ * so the refusal carries the code, git's own words, and the commit the attempt reached,
+ * which the platform keeps as the previous attempt's head.
+ * @param options - the runner, the workspace, the branch, the commit, and cancellation.
+ * @throws AttemptRefusal naming why the push did not happen.
+ */
+async function pushWorkBranch(options: {
+  git: GitRunner
+  directory: string
+  branch: string
+  head: string
+  signal?: AbortSignal
+}): Promise<void> {
+  try {
+    await options.git.run(options.directory, ['push', 'origin', options.branch], options.signal)
+  } catch (error: unknown) {
+    const failure = attemptFailure(error)
+    throw new AttemptRefusal(failure.error.code, failure.summary, {
+      headCommit: options.head,
+      detail: failure.error.detail ?? '',
+    })
+  }
 }
 
 /**
@@ -323,6 +366,10 @@ export function checkoutPublisher(options: CheckoutPublisherOptions): TaskPublis
         policy: taskPolicy(request.assignment.payload),
         identity: options.identity,
         taskId: request.assignment.task_id,
+        // A repeat that names the head an earlier attempt reached is work the platform
+        // already has; committing nothing then is idempotence, not an empty attempt.
+        repeat: isRepeatDispatch(request.assignment.payload)
+          && lastAttemptHeadCommit(request.assignment.payload) !== undefined,
         git: options.git,
         signal: request.signal,
       })

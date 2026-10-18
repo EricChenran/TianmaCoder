@@ -505,6 +505,9 @@ describe('the CLI runner', () => {
     )
     expect(context.sessions).toEqual(['dsh-session-owned', 'dsh-session-fresh'])
     expect(result.notes).toContain('answer: 新会话完成')
+    // The platform acts on this one: the reference it holds is stuck, so it resets the
+    // workspace's session rather than handing the same one back to be failed on again.
+    expect(result.error?.code).toBe('session_in_use')
   })
 
   it('reads which session failure stopped a run', () => {
@@ -547,6 +550,22 @@ describe('the CLI runner', () => {
 
     expect(result.outcome).toBe('failed')
     expect(result.summary).toBe('the run finished without changing any file')
+    expect(result.error?.code).toBe('no_changes')
+  })
+
+  it('hands back a repeat whose work the branch already holds', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment())
+    // The publisher re-pushed the branch the task already delivered on: nothing new to
+    // commit is idempotence, not an attempt that did no work.
+    context.publishResult = { changed_files: [], head_commit: 'b2c3d4e', pushed: true }
+
+    const result = await runnerFor(logs, 'ok').run(context)
+
+    expect(result.outcome).toBe('success')
+    expect(result.summary).toContain('no new changes: the branch already holds what this task delivered')
+    expect(result.error).toBeUndefined()
   })
 
   it('stops a run when the node cancels the attempt', async () => {

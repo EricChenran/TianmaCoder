@@ -273,6 +273,29 @@ export class WorkspaceStore {
   }
 
   /**
+   * Forget the session serving one workspace, which the platform asks for when the
+   * reference it holds can no longer be adopted. The directory and the binding stay: only
+   * the reference goes, so the next attempt starts a session and reports it.
+   * @param workspaceId - the platform's workspace id.
+   * @returns whether this node held that workspace and had a session recorded for it.
+   * @throws TypeError when the id could name something outside the coding root.
+   */
+  async clearSession(workspaceId: string): Promise<boolean> {
+    await this.load()
+    const id = checkedWorkspaceId(workspaceId)
+    const record = this.#records.get(id)
+    if (record?.session === undefined) return false
+    this.#records.set(id, {
+      workspace_id: record.workspace_id,
+      directory: record.directory,
+      last_used_at: record.last_used_at,
+      last_task_id: record.last_task_id,
+    })
+    await this.save()
+    return true
+  }
+
+  /**
    * Remove one workspace and forget it, which only a platform release does.
    * @param workspaceId - the platform's workspace id.
    * @returns whether this node held that workspace.

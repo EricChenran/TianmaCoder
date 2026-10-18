@@ -575,6 +575,14 @@ export class MpsExecutorRuntime {
         }
         continue
       }
+      if (command.command === 'reset_session') {
+        if (command.workspace_id === undefined) {
+          this.#report({ level: 'warn', message: 'the platform reset no session: the command names no workspace' })
+        } else {
+          await this.#resetSession(command.workspace_id)
+        }
+        continue
+      }
       this.#report({
         level: 'warn',
         message: `ignoring the ${command.command} command: this node does not implement it yet`,
@@ -612,6 +620,29 @@ export class MpsExecutorRuntime {
       this.#report({
         level: 'error',
         message: `could not release workspace ${workspaceId}: ${toError(error).message}`,
+      })
+    }
+  }
+
+  /**
+   * Forget the session serving one workspace, which the platform asks for when the
+   * reference it holds can no longer be adopted. The coding directory and the binding stay;
+   * the next attempt starts a session and reports it, and the platform follows that one.
+   * @param workspaceId - the workspace whose session the platform reset.
+   */
+  async #resetSession(workspaceId: string): Promise<void> {
+    try {
+      const cleared = await this.#workspaces.clearSession(workspaceId)
+      this.#report({
+        level: 'info',
+        message: cleared
+          ? `forgot the session of coding workspace ${workspaceId}, as the platform asked`
+          : `coding workspace ${workspaceId} holds no session to forget`,
+      })
+    } catch (error) {
+      this.#report({
+        level: 'warn',
+        message: `could not forget the session of ${workspaceId}: ${toError(error).message}`,
       })
     }
   }

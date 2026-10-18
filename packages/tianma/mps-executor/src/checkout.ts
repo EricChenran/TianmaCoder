@@ -13,8 +13,8 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { taskRepository, taskWorkspaceId } from '@tianma/dsh-mps-exec-core'
-import type { ExecTaskAssignment, TaskRepository } from '@tianma/dsh-mps-exec-core'
+import { taskBaseSource, taskRepository, taskWorkspaceId } from '@tianma/dsh-mps-exec-core'
+import type { ExecTaskAssignment, TaskBaseSource, TaskRepository } from '@tianma/dsh-mps-exec-core'
 import type { GitOutput, GitRunner } from './git.ts'
 import type { TaskCheckout, TaskWorkspace, TaskWorkspaceAllocator } from './runner.ts'
 import type { WorkspaceStore } from './workspace.ts'
@@ -33,6 +33,12 @@ export interface PrepareCheckoutOptions {
    * not the workspace's first task.
    */
   heldBaseCommit?: string | undefined
+  /**
+   * Which ref the platform took the dispatched base from. A base taken from the work branch
+   * is ahead of the base branch by design, so judging it by the base branch would refuse to
+   * start; a payload that states nothing keeps the older rule.
+   */
+  baseSource?: TaskBaseSource | undefined
 }
 
 /** Options for {@link checkoutAllocator}. */
@@ -82,6 +88,34 @@ async function holdsCommit(git: GitRunner, directory: string, commit: string): P
 }
 
 /**
+ * Which ref a dispatched base commit is judged against. A platform that states the work
+ * branch is believed while that branch is really there; a branch it names and does not
+ * have is judged against the base branch instead, which is what the older dispatch means.
+ * @param git - the runner every git command goes through.
+ * @param directory - the repository cache.
+ * @param source - the source the payload stated, when it stated one.
+ * @param workBranch - the branch the task works on.
+ * @param baseBranch - the branch the platform dispatches from.
+ * @returns the ref to compare the base commit against.
+ * @throws Error when neither ref is on the origin, so the base cannot be judged at all.
+ */
+async function baseRefToJudge(
+  git: GitRunner,
+  directory: string,
+  source: TaskBaseSource | undefined,
+  workBranch: string,
+  baseBranch: string,
+): Promise<string> {
+  const fallback = `origin/${baseBranch}`
+  const named = source === 'work_branch' ? `origin/${workBranch}` : fallback
+  if (await tryRun(git, directory, ['rev-parse', '--verify', '--quiet', named]) !== undefined) return named
+  if (named !== fallback && await tryRun(git, directory, ['rev-parse', '--verify', '--quiet', fallback]) !== undefined) {
+    return fallback
+  }
+  throw new Error(`refusing to work from a base this repository cannot judge: neither ${named} nor ${fallback} is on the origin`)
+}
+
+/**
  * Bring the workspace's repository cache to the dispatched base commit and reset the work
  * branch onto it. The base is the commit the platform dispatched — the base branch's head
  * for a workspace's first task, and the work branch's head for a later one — so what the
@@ -93,7 +127,7 @@ async function holdsCommit(git: GitRunner, directory: string, commit: string): P
  * such commit, or when git fails.
  */
 export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<TaskCheckout> {
-  const { directory, repository, git, heldBaseCommit } = options
+  const { directory, repository, git, heldBaseCommit, baseSource } = options
   const url = required(repository.url, 'repository to fetch')
   const baseBranch = required(repository.base_branch, 'base branch')
   const baseCommit = required(repository.base_commit, 'base commit')
@@ -115,14 +149,15 @@ export async function prepareCheckout(options: PrepareCheckoutOptions): Promise<
   if (await holdsCommit(git, directory, baseCommit) === false) {
     throw new Error(`refusing to work from a base this repository does not hold: the task dispatched ${baseCommit}`)
   }
-  // The dispatched base must contain what the base branch holds. A workspace's later tasks
-  // are dispatched from the work branch's head, which is ahead of the base branch and fine;
-  // a base branch that has moved past the dispatched commit is not, because the platform
-  // then dispatched from before work that is already on the branch.
-  const ancestor = await tryRun(git, directory, ['merge-base', '--is-ancestor', `origin/${baseBranch}`, baseCommit])
+  // The dispatched base must contain what the ref the platform took it from holds. A
+  // workspace's later tasks are dispatched from the work branch's head, which is ahead of
+  // the base branch and fine; a ref that has moved past the dispatched commit is not,
+  // because the platform then dispatched from before work that is already on it.
+  const against = await baseRefToJudge(git, directory, baseSource, workBranch, baseBranch)
+  const ancestor = await tryRun(git, directory, ['merge-base', '--is-ancestor', against, baseCommit])
   if (ancestor === undefined) {
-    const tip = (await git.run(directory, ['rev-parse', `origin/${baseBranch}`])).stdout.trim()
-    throw new Error(`refusing to work from a base that is behind origin/${baseBranch}: the task dispatched ${baseCommit}, and origin/${baseBranch} holds ${tip}`)
+    const tip = (await git.run(directory, ['rev-parse', against])).stdout.trim()
+    throw new Error(`refusing to work from a base that is behind ${against}: the task dispatched ${baseCommit}, and ${against} holds ${tip}`)
   }
   // The platform refreshes the baseline after a BASE_COMMIT_MISMATCH and re-dispatches the
   // task into the workspace that reported it, so that workspace holds a base other than the
@@ -163,7 +198,13 @@ export function checkoutAllocator(options: CheckoutAllocatorOptions): TaskWorksp
         ?.session?.base_commit
       const repository = taskRepository(assignment.payload)
       if (repository === undefined) return { directory }
-      const checkout = await prepareCheckout({ directory, repository, git: options.git, heldBaseCommit })
+      const checkout = await prepareCheckout({
+        directory,
+        repository,
+        git: options.git,
+        heldBaseCommit,
+        baseSource: taskBaseSource(assignment.payload),
+      })
       return { directory, checkout }
     },
   }

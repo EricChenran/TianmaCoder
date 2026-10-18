@@ -273,4 +273,25 @@ describe('coding workspaces', () => {
     await expect(store.release('ws_link')).rejects.toThrow(/does not resolve inside the coding root/)
     expect(existsSync(join(outside, 'keep'))).toBe(true)
   })
+
+  it('forgets a session without forgetting the workspace', async () => {
+    const { store, root } = storeWith()
+    await store.ensure('ws_1', 'tsk_1')
+    await store.setSession('ws_1', { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
+
+    expect(await store.clearSession('ws_1')).toBe(true)
+
+    expect(store.records[0]?.session).toBeUndefined()
+    expect(store.records[0]?.last_task_id).toBe('tsk_1')
+    // Only the reference goes, and it stays gone across a restart.
+    const restarted = new WorkspaceStore({ root })
+    await restarted.load()
+    expect(restarted.records).toHaveLength(1)
+    expect(restarted.records[0]?.session).toBeUndefined()
+    // Nothing to forget twice, nothing for a workspace this node does not hold, and an id
+    // that could name something outside the coding root is refused.
+    expect(await store.clearSession('ws_1')).toBe(false)
+    expect(await store.clearSession('ws_missing')).toBe(false)
+    await expect(store.clearSession('ws/escape')).rejects.toThrow(/one path segment/)
+  })
 })

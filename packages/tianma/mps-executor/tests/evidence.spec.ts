@@ -158,8 +158,24 @@ describe('collecting evidence', () => {
     })
   })
 
-  it('collects a report whose stated name carried the quotes of plan text', async () => {
+  it('reads the report at the name the platform stated, without renaming it', async () => {
     const directory = temporary('mps-evidence-')
+    writeFileSync(join(directory, '助手介绍.md'), '介绍\n', 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_report: true, report_filename: '助手介绍.md' } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toBeUndefined()
+    expect(collected.report_path).toBe('助手介绍.md')
+  })
+
+  it('refuses a stated report name that is not the file the attempt wrote', async () => {
+    const directory = temporary('mps-evidence-')
+    // The stated name is a literal and the platform's gate looks for it, so a quoted one
+    // names no file: the node says so rather than handing back a file under another name.
     writeFileSync(join(directory, '助手介绍.md'), '介绍\n', 'utf8')
 
     const collected = await collectEvidence({
@@ -168,8 +184,7 @@ describe('collecting evidence', () => {
       run: async () => ({ exit_code: 0, output: '' }),
     })
 
-    expect(collected.failure).toBeUndefined()
-    expect(collected.report_path).toBe('助手介绍.md')
+    expect(collected.failure?.message).toContain('the task requires a report at "助手介绍.md"')
   })
 
   it('refuses a report name that leaves the workspace', async () => {

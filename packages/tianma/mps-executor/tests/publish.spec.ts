@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
 import {
+  AttemptRefusal,
   GitError,
   PUBLISH_SCAN_MAX_BYTES,
   assertBranchAllowed,
@@ -258,6 +259,47 @@ describe('publishing an attempt', () => {
 
     expect(published).toEqual({ changed_files: [], head_commit: 'a1b2c3d', pushed: false })
     expect(git.calls.some(call => call.startsWith('add') || call.startsWith('-c'))).toBe(false)
+  })
+
+  it('pushes the branch it already holds when a repeat has nothing new to commit', async () => {
+    const workspace = temporary('mps-publish-')
+    const git = new RecordingGit()
+    // Nothing differs from the dispatched base, and the platform named the head an earlier
+    // attempt reached: its gate reads the push as the delivery, so the node re-pushes the
+    // ref it already has rather than reporting a failure for work that is on the remote.
+    git.answers.set('rev-parse HEAD', 'b2c3d4e\n')
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: CHECKOUT,
+      policy: {},
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+      repeat: true,
+    })
+
+    expect(published).toEqual({ changed_files: [], head_commit: 'b2c3d4e', pushed: true })
+    expect(git.calls).toContain('push origin feature/tsk_1')
+    expect(git.calls.some(call => call.startsWith('add') || call.startsWith('-c'))).toBe(false)
+  })
+
+  it('does not push for a repeat the task does not want pushed', async () => {
+    const workspace = temporary('mps-publish-')
+    const git = new RecordingGit()
+
+    const published = await publishChanges({
+      directory: workspace,
+      checkout: CHECKOUT,
+      policy: { push_required: false },
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+      repeat: true,
+    })
+
+    expect(published).toEqual({ changed_files: [], head_commit: 'a1b2c3d', pushed: false })
+    expect(git.calls.some(call => call.startsWith('push'))).toBe(false)
   })
 
   it('refuses credentials before it commits anything', async () => {
@@ -587,21 +629,61 @@ describe('publishing against real repositories', () => {
     expect(existsSync(join(workspace, 'leak.env'))).toBe(true)
   })
 
-  it('reports a push that the remote refuses', async () => {
+  it('reports a push that the remote refuses, with the code and the commit it reached', async () => {
     const git = cliGit()
     const { workspace } = await workspaceWithChange(git)
     await git.run(workspace, ['remote', 'set-url', 'origin', join(tmpdir(), 'mps-absent-remote')])
     writeFileSync(join(workspace, 'readme.md'), 'changed\n', 'utf8')
+    const head = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
 
-    await expect(publishChanges({
+    const failure = await publishChanges({
       directory: workspace,
-      checkout: { base_commit: (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim(), work_branch: 'feature/tsk_1' },
+      checkout: { base_commit: head, work_branch: 'feature/tsk_1' },
       policy: {},
       identity: IDENTITY,
       taskId: 'tsk_1',
       git,
-    })).rejects.toThrow(GitError)
+    }).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(AttemptRefusal)
+    if (!(failure instanceof AttemptRefusal)) throw new Error('the push was expected to be refused')
+    // The platform classifies the failure from the code, and keeps the commit the attempt
+    // reached even though the push did not happen: a later repeat needs to know it.
+    expect(failure.code).toBe('git_push_rejected')
+    expect(failure.headCommit).not.toBe(head)
+    expect(failure.detail).toContain('mps-absent-remote')
     // The commit happened; only the push failed, which the platform retries.
     expect((await git.run(workspace, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('task tsk_1')
+    expect((await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(failure.headCommit)
+  })
+
+  it('says so when the remote branch already holds commits the attempt does not', async () => {
+    const git = cliGit()
+    const { workspace, bare } = await workspaceWithChange(git)
+    const base = (await git.run(workspace, ['rev-parse', 'HEAD'])).stdout.trim()
+    // Another attempt pushed to the work branch while this one worked from an older base.
+    const other = temporary('mps-other-')
+    await git.run(other, ['clone', '--quiet', bare, '.'])
+    writeFileSync(join(other, 'elsewhere.md'), '# 别处\n', 'utf8')
+    await git.run(other, ['add', '--all'])
+    await git.run(other, ['-c', 'user.name=Other', '-c', 'user.email=other@example.invalid', 'commit', '--quiet', '-m', 'elsewhere'])
+    await git.run(other, ['push', '--quiet', 'origin', 'HEAD:refs/heads/feature/tsk_1'])
+    writeFileSync(join(workspace, 'readme.md'), 'this attempt\n', 'utf8')
+
+    const failure = await publishChanges({
+      directory: workspace,
+      checkout: { base_commit: base, work_branch: 'feature/tsk_1' },
+      policy: {},
+      identity: IDENTITY,
+      taskId: 'tsk_1',
+      git,
+    }).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(AttemptRefusal)
+    if (!(failure instanceof AttemptRefusal)) throw new Error('the push was expected to be refused')
+    expect(failure.code).toBe('git_non_fast_forward')
+    // git spells this one either way, depending on whether the remote moved ahead of the
+    // pushed ref or the ref itself went backwards.
+    expect(failure.detail).toMatch(/non-fast-forward|fetch first/u)
   })
 })

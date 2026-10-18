@@ -36,7 +36,7 @@ import type {
   TaskOutcome,
   TaskProgress,
 } from '@tianma/dsh-mps-exec-core'
-import { ArtifactTooLargeError } from './artifacts.ts'
+import { attemptFailure } from './failures.ts'
 import type { ExecutorSettings } from './config.ts'
 import { logSpool } from './log-spool.ts'
 import type { TaskLedger } from './task-ledger.ts'
@@ -492,7 +492,7 @@ export class TaskOrchestrator {
         summary: summary.trim() === '' ? 'delivered by the operator' : summary.trim(),
       }
     } catch (error: unknown) {
-      result = { outcome: 'failed', summary: attemptFailureSummary(error) }
+      result = failedResult(error)
     }
     this.#clearTimers(running)
     await this.#submit(running, result.outcome, result, this.#now())
@@ -678,7 +678,7 @@ export class TaskOrchestrator {
             })
         }
       } catch (error: unknown) {
-        result = { outcome: 'failed', summary: attemptFailureSummary(error) }
+        result = failedResult(error)
       }
       this.#clearTimers(running)
       // A held attempt stops here: the operator owns the work now, the result is
@@ -907,11 +907,12 @@ export class TaskOrchestrator {
       started_at: formatRfc3339(startedAt),
       finished_at: formatRfc3339(this.#now()),
       summary: result.summary,
+      ...(result.error === undefined ? {} : { error: result.error }),
       // The node's own delivery facts win; what the runner collected — the build, the
       // end-to-end run, the report — is what the node has no other way to know.
       evidence: running.published === undefined
-        ? { ...this.#defaultEvidence(running), ...result.evidence }
-        : { ...result.evidence, ...this.#defaultEvidence(running) },
+        ? { ...this.#defaultEvidence(running, result.headCommit), ...result.evidence }
+        : { ...result.evidence, ...this.#defaultEvidence(running, result.headCommit) },
       ...(result.notes === undefined ? {} : { notes: result.notes }),
     }
     for (let attempt = 1; attempt <= RESULT_SUBMIT_ATTEMPTS; attempt += 1) {
@@ -958,16 +959,17 @@ export class TaskOrchestrator {
    * Evidence a settled attempt reports when the runner collected none: the checkout
    * the task named, with nothing changed and nothing pushed.
    * @param running - the settled attempt.
+   * @param headCommit - the commit the attempt reached, when it failed after making one.
    * @returns the evidence.
    */
-  #defaultEvidence(running: RunningAttempt): ExecResultEvidence {
+  #defaultEvidence(running: RunningAttempt, headCommit?: string): ExecResultEvidence {
     const repo = taskRepository(running.assignment.payload)
     const published = running.published
     return {
       changed_files: published?.changed_files ?? [],
       branch: repo?.work_branch ?? '',
       base_commit: repo?.base_commit ?? '',
-      head_commit: published?.head_commit ?? repo?.base_commit ?? '',
+      head_commit: published?.head_commit ?? headCommit ?? repo?.base_commit ?? '',
       pushed: published?.pushed ?? false,
       ...(running.bundleArtifactId === undefined ? {} : { patch_artifact_id: running.bundleArtifactId }),
     }
@@ -1025,15 +1027,19 @@ export class TaskOrchestrator {
 }
 
 /**
- * How an attempt that threw describes the outcome it reached. An artifact the platform
- * will not store is a delivery that failed, so the summary names the file and its size
- * rather than reading as an unexpected error; every other failure keeps its message.
+ * How an attempt that threw describes the outcome it reached: the sentence an operator
+ * reads, the code and diagnostics the platform classifies with, and the commit the attempt
+ * reached when it got that far — a push the remote refused still happened locally, and a
+ * later repeat needs to know it.
  * @param error - what the attempt threw.
- * @returns the summary the result carries.
+ * @returns the failed result.
  */
-function attemptFailureSummary(error: unknown): string {
-  if (error instanceof ArtifactTooLargeError) {
-    return `the attempt could not deliver ${error.path}: ${error.message}`
+function failedResult(error: unknown): TaskRunResult {
+  const failure = attemptFailure(error)
+  return {
+    outcome: 'failed',
+    summary: failure.summary,
+    error: failure.error,
+    ...(failure.headCommit === undefined ? {} : { headCommit: failure.headCommit }),
   }
-  return `the attempt threw: ${toError(error).message}`
 }

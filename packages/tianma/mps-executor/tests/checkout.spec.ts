@@ -111,6 +111,7 @@ describe('checkout preparation', () => {
       'fetch --quiet origin main',
       'fetch --quiet origin +refs/heads/*:refs/remotes/origin/*',
       'rev-parse --verify --quiet a1b2c3d^{commit}',
+      'rev-parse --verify --quiet origin/main',
       'merge-base --is-ancestor origin/main a1b2c3d',
       'checkout --quiet -B feature/tsk_1 a1b2c3d',
       'reset --quiet --hard a1b2c3d',
@@ -219,6 +220,7 @@ describe('checkout preparation', () => {
       'fetch --quiet origin main',
       'fetch --quiet origin +refs/heads/*:refs/remotes/origin/*',
       'rev-parse --verify --quiet f0f0f0f^{commit}',
+      'rev-parse --verify --quiet origin/main',
       'merge-base --is-ancestor origin/main f0f0f0f',
       'rev-parse --verify --quiet HEAD^{commit}',
       'reset --quiet --hard',
@@ -510,5 +512,55 @@ describe('git on this host', () => {
     await expect(prepareCheckout({ directory: workspace, repository, git, heldBaseCommit: source.commit })).rejects.toThrow(
       /refusing to work from a base that is behind origin\//,
     )
+  })
+})
+
+describe('the ref a dispatched base is judged against', () => {
+  it('judges a base the platform took from the work branch against that branch', async () => {
+    const directory = temporary('mps-flow-')
+    mkdirSync(join(directory, '.git'))
+    const git = new RecordingGit()
+    git.answers.set('remote get-url origin', 'https://example.invalid/r.git\n')
+    git.answers.set('rev-parse origin/main', 'a1b2c3d\n')
+
+    await prepareCheckout({
+      directory,
+      repository: { ...REPOSITORY, base_commit: 'b2c3d4e' },
+      git,
+      baseSource: 'work_branch',
+    })
+
+    // A base taken from the work branch is ahead of the base branch by design, so the
+    // work branch is what it has to contain.
+    expect(git.calls).toContain('rev-parse --verify --quiet origin/feature/tsk_1')
+    expect(git.calls).toContain('merge-base --is-ancestor origin/feature/tsk_1 b2c3d4e')
+  })
+
+  it('falls back to the base branch when the work branch it names is not on the origin', async () => {
+    const directory = temporary('mps-flow-')
+    mkdirSync(join(directory, '.git'))
+    const git = new RecordingGit()
+    git.answers.set('remote get-url origin', 'https://example.invalid/r.git\n')
+    git.answers.set('rev-parse origin/main', 'a1b2c3d\n')
+    // A first dispatch names the work branch it is about to create, which the origin does
+    // not have yet.
+    git.failures.add('rev-parse --verify --quiet origin/feature/tsk_1')
+
+    await prepareCheckout({ directory, repository: REPOSITORY, git, baseSource: 'work_branch' })
+
+    expect(git.calls).toContain('merge-base --is-ancestor origin/main a1b2c3d')
+  })
+
+  it('refuses a base it cannot judge against either ref', async () => {
+    const directory = temporary('mps-flow-')
+    mkdirSync(join(directory, '.git'))
+    const git = new RecordingGit()
+    git.answers.set('remote get-url origin', 'https://example.invalid/r.git\n')
+    git.answers.set('rev-parse origin/main', 'a1b2c3d\n')
+    git.failures.add('rev-parse --verify --quiet origin/feature/tsk_1')
+    git.failures.add('rev-parse --verify --quiet origin/main')
+
+    await expect(prepareCheckout({ directory, repository: REPOSITORY, git, baseSource: 'work_branch' }))
+      .rejects.toThrow(/cannot judge/)
   })
 })

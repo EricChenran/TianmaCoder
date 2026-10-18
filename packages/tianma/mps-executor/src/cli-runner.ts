@@ -20,7 +20,8 @@ import type { TaskEvidence } from './runner.ts'
 import { EVIDENCE_DIRECTORY, collectEvidence } from './evidence.ts'
 import type { CollectedEvidence, EvidenceCommandOutcome } from './evidence.ts'
 import { toError } from './report.ts'
-import type { ExecLogLine } from '@tianma/dsh-mps-exec-core'
+import { FAILURE_CODES } from './failures.ts'
+import type { ExecLogLine, ExecResultError } from '@tianma/dsh-mps-exec-core'
 import type { PublishedChanges, TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
 import { fetchMaterials } from './materials.ts'
 import { excludeFromRepository } from './paths.ts'
@@ -212,6 +213,7 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         },
       })
       let outcome = await attempt(true)
+      let sessionInUse: ExecResultError | undefined
       const adoption = sessionAdoptionFailure(outcome, lines)
       if (hint !== undefined && adoption !== undefined) {
         // Neither reason is this task's failure: a wiped profile leaves no session, and a
@@ -224,6 +226,15 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
             ? `session ${hint} is still owned by another write handle; starting a new one`
             : `session ${hint} is gone; starting a new one`,
         }])
+        // An owned session is the one reason the platform can act on: it resets the
+        // workspace's session for this node rather than leaving the same reference to be
+        // failed on again.
+        if (adoption === 'owned') {
+          sessionInUse = {
+            code: FAILURE_CODES.sessionInUse,
+            detail: `the session ${hint} was owned by another write handle, so this attempt started a new one`,
+          }
+        }
         session = undefined
         outcome = await attempt(false)
       }
@@ -234,20 +245,42 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         ? `raw log: ${rawLog}`
         : `raw log: ${rawLog}\nanswer: ${answer}`
 
+      // The result the platform reads: the code that stopped the attempt when one did, and
+      // otherwise the session it could not adopt, which is a fact about the workspace rather
+      // than about this attempt's work.
+      const settled = (result: TaskRunResult): TaskRunResult => {
+        if (sessionInUse === undefined) return { ...result, notes }
+        if (result.error !== undefined) {
+          return { ...result, notes: `${notes}\n${sessionInUse.detail ?? sessionInUse.code}` }
+        }
+        return { ...result, error: sessionInUse, notes }
+      }
+
       assertStarted(outcome, bin)
       if (outcome.kind === 'stopped') {
-        return { outcome: 'failed', summary: 'the node stopped this run', notes }
+        return settled({
+          outcome: 'failed',
+          summary: 'the node stopped this run',
+          error: { code: FAILURE_CODES.runStopped, detail: 'the node stopped this run before it exited' },
+        })
       }
       if (outcome.code !== 0) {
-        return {
+        return settled({
           outcome: 'failed',
           summary: runFailureSummary(outcome.code, lastLine(lines, 'stderr')),
-          notes,
-        }
+          error: { code: FAILURE_CODES.runFailed, detail: lastLine(lines, 'stderr') },
+        })
       }
       const published = await context.publish()
-      if (published.changed_files.length === 0) {
-        return { outcome: 'failed', summary: 'the run finished without changing any file', notes }
+      if (published.changed_files.length === 0 && !published.pushed) {
+        // Nothing changed and nothing was handed back: on a first dispatch the run did no
+        // work. A repeat that names the head an earlier attempt reached pushes the branch it
+        // already holds instead, which is the delivery — that path reports `pushed`.
+        return settled({
+          outcome: 'failed',
+          summary: 'the run finished without changing any file',
+          error: { code: FAILURE_CODES.noChanges, detail: 'git reported no change against the dispatched base' },
+        })
       }
       // The evidence comes after the commit: a build writes output the delivered change
       // must not carry, and the platform reads these results against what was pushed.
@@ -266,20 +299,21 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         }),
       })
       if (collected.failure !== undefined) {
-        return {
+        return settled({
           outcome: 'failed',
           summary: `${collected.failure.what} evidence: ${collected.failure.message}`,
-          notes,
-        }
+          error: { code: FAILURE_CODES.attemptFailed, detail: `${collected.failure.what}: ${collected.failure.message}` },
+        })
       }
       const evidence = await uploadEvidence(context, collected)
       await context.reportProgress({ progress: 100, stage: 'uploading', message: 'evidence reported' })
-      return {
+      return settled({
         outcome: 'success',
-        summary: `changed ${String(published.changed_files.length)} file(s)${pushedNote(published)}${evidenceNote(collected)}`,
+        summary: published.changed_files.length === 0
+          ? `no new changes: the branch already holds what this task delivered${evidenceNote(collected)}`
+          : `changed ${String(published.changed_files.length)} file(s)${pushedNote(published)}${evidenceNote(collected)}`,
         ...(evidence === undefined ? {} : { evidence }),
-        notes,
-      }
+      })
     },
   }
 }

@@ -96,13 +96,64 @@ export function taskRuntimeLimitMs(payload: Record<string, unknown>): number | u
 /**
  * Read the session the platform asks the node to continue. The protocol sends the session
  * a previous task in the same workspace used, so a node adopts it when the agent still
- * knows it and starts a new one otherwise.
+ * knows it and starts a new one otherwise. A platform that wants a fresh session says
+ * `mode: fresh`, and a node that adopted it anyway would work in a session the platform
+ * has already written off.
  * @param payload - the payload a claim returned.
  * @returns the session reference, or undefined when the payload states none.
  */
 export function taskSessionHint(payload: Record<string, unknown>): string | undefined {
   const hint = payloadField(payload, 'limits', 'session_hint')
+  if (isRecord(hint) && hint['mode'] === 'fresh') return undefined
   return stringField(hint, 'previous_session_ref')
+}
+
+/** Where the platform took the base commit it dispatched. */
+export type TaskBaseSource = 'work_branch' | 'base_branch'
+
+/**
+ * Read which ref the dispatched base commit came from, which is what a node compares it
+ * against: a base taken from the work branch is ahead of the base branch by design, and
+ * judging it by the base branch would refuse to start.
+ * @param payload - the payload a claim returned.
+ * @returns the source the payload states, or undefined when it states none.
+ */
+export function taskBaseSource(payload: Record<string, unknown>): TaskBaseSource | undefined {
+  const source = payloadField(payload, 'context', 'base_source')
+  return source === 'work_branch' || source === 'base_branch' ? source : undefined
+}
+
+/**
+ * Read why the platform dispatched this attempt: a first dispatch, or work it is handing
+ * back after an earlier attempt settled.
+ * @param payload - the payload a claim returned.
+ * @returns the stated reason, or undefined when the payload states none.
+ */
+export function taskDispatchReason(payload: Record<string, unknown>): string | undefined {
+  const reason = payloadField(payload, 'context', 'dispatch_reason')
+  return typeof reason === 'string' && reason !== '' ? reason : undefined
+}
+
+/**
+ * Whether this attempt repeats work an earlier attempt of the same task may already have
+ * delivered. A platform that re-dispatches says so, and a node that cannot tell a repeat
+ * from a first dispatch reports an empty delivery as a failure.
+ * @param payload - the payload a claim returned.
+ * @returns true when the dispatch is a re-dispatch rather than the task's first.
+ */
+export function isRepeatDispatch(payload: Record<string, unknown>): boolean {
+  const reason = taskDispatchReason(payload)
+  return reason !== undefined && reason !== 'initial'
+}
+
+/**
+ * Read the commit an earlier attempt of this task reached, which is what tells a repeat
+ * apart from a first attempt that did nothing.
+ * @param payload - the payload a claim returned.
+ * @returns the commit, or undefined when the platform states none.
+ */
+export function lastAttemptHeadCommit(payload: Record<string, unknown>): string | undefined {
+  return stringField(payloadField(payload, 'context', 'last_attempt'), 'head_commit')
 }
 
 /**

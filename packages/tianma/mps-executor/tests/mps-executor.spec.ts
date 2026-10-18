@@ -1554,4 +1554,30 @@ describe('a registration the platform keeps failing', () => {
     expect(queue.calls.filter(call => call.request.url.endsWith('/register')).length).toBeGreaterThan(1)
     expect(reports.filter(report => report.message.includes('failed to register'))).toHaveLength(1)
   }, 30_000)
+
+  it('forgets the session of a workspace the platform reset', async () => {
+    const queue = queueTransport([
+      envelope({ token: 'tok', expires_at: 'e', node_id: 'node-1' }),
+      envelope(REGISTERED),
+      envelope({ ...HEARTBEAT, commands: [{ command: 'reset_session', workspace_id: 'ws_1', reason: '会话被占用' }] }),
+    ])
+    const reports: ExecutorReport[] = []
+    const node = new MpsExecutorRuntime({
+      settings: settingsFor(),
+      secret: () => 's',
+      transport: queue.transport,
+      report: (report) => { reports.push(report) },
+    })
+    await node.bootstrap()
+    await node.workspaces.ensure('ws_1', 'tsk_1')
+    await node.workspaces.setSession('ws_1', { ref: 'dsh-session-1', base_commit: 'a1b2c3d', last_task_id: 'tsk_1' })
+
+    await node.heartbeatOnce()
+
+    // The reference goes so the next attempt starts a session it can adopt and reports it;
+    // the coding directory and the binding stay.
+    expect(node.workspaces.records[0]?.session).toBeUndefined()
+    expect(existsSync(node.workspaces.directoryOf('ws_1'))).toBe(true)
+    expect(reports.some(report => report.message.includes('forgot the session of coding workspace ws_1'))).toBe(true)
+  })
 })

@@ -149,21 +149,18 @@ export async function collectEvidence(options: CollectEvidenceOptions): Promise<
     if (stated === undefined) {
       return { ...collected, failure: { what: 'report', message: 'the task requires a report but states no file name' } }
     }
-    // A name the plan text stated may carry the quotes of the sentence it was read from,
-    // which Windows refuses outright; the cleaned path names the file actually written.
-    const cleaned = cleanStatedPath(stated)
-    if (cleaned === '') {
-      return { ...collected, failure: { what: 'report', message: `the task requires a report at ${stated}, which names no usable file name` } }
-    }
+    // The platform states this name as a literal and its gate looks for that name, so the
+    // node reads the file the platform asked for and never renames it. Cleaning belongs to
+    // the paths an attempt writes for itself.
     // A report name that leaves the workspace names no file this node reads.
-    const path = await resolveWithinWorkspace(options.directory, cleaned).catch(() => undefined)
+    const path = await resolveWithinWorkspace(options.directory, stated).catch(() => undefined)
     if (path === undefined || !existsSync(path)) {
       return {
         ...collected,
-        failure: { what: 'report', message: `the task requires a report at ${cleaned}, which the attempt did not write` },
+        failure: { what: 'report', message: `the task requires a report at ${stated}, which the attempt did not write` },
       }
     }
-    collected.report_path = cleaned
+    collected.report_path = stated
   }
   if (deliverables['require_screenshots'] === true) {
     const screenshots = await readScreenshots(options.directory, deliverables)

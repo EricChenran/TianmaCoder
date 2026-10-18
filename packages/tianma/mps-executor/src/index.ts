@@ -71,14 +71,15 @@ export type {
   TaskWorkspaceAllocator,
 } from './runner.ts'
 export { GIT_DIAGNOSTIC_MAX_CHARS, GIT_PATH_ARGS, GitError, cliGit } from './git.ts'
+export { FAILURE_CODES, AttemptRefusal, attemptFailure } from './failures.ts'
+export type { AttemptFailure, AttemptRefusalOptions } from './failures.ts'
 export type { GitOutput, GitRunner } from './git.ts'
 export { checkoutAllocator, prepareCheckout } from './checkout.ts'
 export type { CheckoutAllocatorOptions, PrepareCheckoutOptions } from './checkout.ts'
 export {
   PUBLISH_SCAN_MAX_BYTES,
   assertBranchAllowed,
-  assertOnWorkBranch,
-  BUNDLE_DIRECTORY,
+  assertOnWorkBranch,  BUNDLE_DIRECTORY,
   assertChangesInside,
   changedFiles,
   checkoutPublisher,

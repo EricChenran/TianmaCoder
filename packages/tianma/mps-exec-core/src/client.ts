@@ -394,11 +394,29 @@ export interface ExecResultRequest {
   finished_at: string
   /** Operator-visible summary. */
   summary: string
+  /**
+   * Why the attempt failed, as a code the platform classifies and a detail it stores
+   * whole. A summary is truncated to what an operator reads; this is what retry hints and
+   * failure classes key on, so a node states both rather than packing git's words into a
+   * sentence.
+   */
+  error?: ExecResultError | undefined
   /** Evidence for the outcome. */
   evidence: ExecResultEvidence
   /** Free-form notes. */
   notes?: string | undefined
 }
+
+/** Failure detail a node reports beside an outcome. */
+export interface ExecResultError {
+  /** Stable code the platform classifies the failure with, such as `git_non_fast_forward`. */
+  code: string
+  /** Raw diagnostics, up to {@link RESULT_ERROR_DETAIL_MAX_CHARS} characters. */
+  detail?: string | undefined
+}
+
+/** Longest failure detail a platform keeps; longer text is cut by the node, not by the platform. */
+export const RESULT_ERROR_DETAIL_MAX_CHARS = 8192
 
 /** Result of `POST /tasks/{id}/result`. */
 export interface ExecResultResponse {
