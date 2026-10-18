@@ -12,6 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { ExecResource, ExecTaskAssignment } from '@tianma/dsh-mps-exec-core'
+import { sanitizeFilename } from './filenames.ts'
 import { excludeFromRepository } from './paths.ts'
 
 /** Directory the node keeps a task's materials in, inside its workspace. */
@@ -79,7 +80,9 @@ export function taskMaterials(payload: Record<string, unknown>): string[] {
  * @returns the file name to write.
  */
 export function materialFileName(artifactId: string, fileName?: string | undefined): string {
-  const stated = fileName === undefined ? '' : basename(fileName).replace(/[/\\:]/gu, '').trim()
+  // A stated name arrives from the platform's payload, so it is sanitized: no quote or
+  // separator the sentence it came from may have carried reaches the materials directory.
+  const stated = sanitizeFilename(basename(fileName ?? ''))
   const safe = stated === '' || stated === '.' || stated === '..' ? artifactId : `${artifactId}_${stated}`
   return safe
 }

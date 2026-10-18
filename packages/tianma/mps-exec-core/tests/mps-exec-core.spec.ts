@@ -1049,6 +1049,7 @@ describe('task vocabulary', () => {
         must_stay_in_workspace: true,
         forbidden_paths: ['src/secrets', 7],
         branch_pattern: '^feature/.+',
+        filename_pattern: '^[A-Za-z0-9._-]+$',
       },
       deliverables: { push_required: true },
     })
@@ -1058,6 +1059,7 @@ describe('task vocabulary', () => {
       must_stay_in_workspace: true,
       forbidden_paths: ['src/secrets'],
       branch_pattern: '^feature/.+',
+      filename_pattern: '^[A-Za-z0-9._-]+$',
       push_required: true,
       summary: '增加批量下载',
       deadline: undefined,
@@ -1072,6 +1074,7 @@ describe('task vocabulary', () => {
       must_stay_in_workspace: false,
       forbidden_paths: undefined,
       branch_pattern: undefined,
+      filename_pattern: undefined,
       push_required: undefined,
       summary: undefined,
     })

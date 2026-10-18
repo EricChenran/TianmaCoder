@@ -176,6 +176,8 @@ export interface TaskPolicy {
   forbidden_paths?: string[] | undefined
   /** Pattern the work branch name must match. */
   branch_pattern?: string | undefined
+  /** Pattern the file names an attempt gives its deliverables must match. */
+  filename_pattern?: string | undefined
   /** Whether the platform requires the work branch pushed. */
   push_required?: boolean | undefined
   /** The task's own summary, which names the commit. */
@@ -200,6 +202,7 @@ export function taskPolicy(payload: Record<string, unknown>): TaskPolicy {
     must_stay_in_workspace: payloadField(payload, 'constraints', 'must_stay_in_workspace') === true,
     forbidden_paths: isRecord(constraints) ? stringList(constraints['forbidden_paths']) : undefined,
     branch_pattern: stringField(constraints, 'branch_pattern'),
+    filename_pattern: stringField(constraints, 'filename_pattern'),
     push_required: isRecord(deliverables) ? deliverables['push_required'] === true : undefined,
     summary: stringField(payload, 'summary'),
     deadline: stringField(constraints, 'deadline'),

@@ -13,6 +13,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { cleanStatedPath } from './filenames.ts'
 import { excludeFromRepository, resolveWithinWorkspace } from './paths.ts'
 
 /** Directory inside the workspace where the node keeps the evidence it collected. */
@@ -148,15 +149,21 @@ export async function collectEvidence(options: CollectEvidenceOptions): Promise<
     if (stated === undefined) {
       return { ...collected, failure: { what: 'report', message: 'the task requires a report but states no file name' } }
     }
+    // A name the plan text stated may carry the quotes of the sentence it was read from,
+    // which Windows refuses outright; the cleaned path names the file actually written.
+    const cleaned = cleanStatedPath(stated)
+    if (cleaned === '') {
+      return { ...collected, failure: { what: 'report', message: `the task requires a report at ${stated}, which names no usable file name` } }
+    }
     // A report name that leaves the workspace names no file this node reads.
-    const path = await resolveWithinWorkspace(options.directory, stated).catch(() => undefined)
+    const path = await resolveWithinWorkspace(options.directory, cleaned).catch(() => undefined)
     if (path === undefined || !existsSync(path)) {
       return {
         ...collected,
-        failure: { what: 'report', message: `the task requires a report at ${stated}, which the attempt did not write` },
+        failure: { what: 'report', message: `the task requires a report at ${cleaned}, which the attempt did not write` },
       }
     }
-    collected.report_path = stated
+    collected.report_path = cleaned
   }
   if (deliverables['require_screenshots'] === true) {
     const screenshots = await readScreenshots(options.directory, deliverables)
@@ -218,17 +225,28 @@ async function readScreenshots(
         },
       }
     }
-    const path = await resolveWithinWorkspace(directory, file).catch(() => undefined)
+    // The manifest is written by the attempt, so its file names get the same cleaning a
+    // report name does before they name a file the node reads.
+    const cleaned = cleanStatedPath(file)
+    if (cleaned === '') {
+      return {
+        failure: {
+          what: 'screenshots',
+          message: `${SCREENSHOT_MANIFEST} declares ${file}, which names no usable file name`,
+        },
+      }
+    }
+    const path = await resolveWithinWorkspace(directory, cleaned).catch(() => undefined)
     if (path === undefined || !existsSync(path)) {
       return {
         failure: {
           what: 'screenshots',
-          message: `${SCREENSHOT_MANIFEST} declares ${file}, which the attempt did not write`,
+          message: `${SCREENSHOT_MANIFEST} declares ${cleaned}, which the attempt did not write`,
         },
       }
     }
     screenshots.push({
-      path: file,
+      path: cleaned,
       route,
       caption: text(stated['caption']) ?? route,
       meta: {

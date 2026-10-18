@@ -57,6 +57,8 @@ interface BookFacts {
   forbiddenPaths: string[]
   mustStayInWorkspace: boolean
   branchPattern: string | undefined
+  filenamePattern: string | undefined
+  retryHint: string | undefined
   pushRequired: boolean
   deadline: string | undefined
   buildCommand: string | undefined
@@ -86,6 +88,7 @@ export function taskBook(assignment: ExecTaskAssignment, materials: MaterialFile
     '',
   ]
   section(lines, '需求', facts.instruction === undefined ? [] : [facts.instruction])
+  section(lines, '重试提示', facts.retryHint === undefined ? [] : [facts.retryHint])
   section(lines, '工作区', workspaceLines(facts))
   section(lines, '约束', constraintLines(facts))
   section(lines, '交付要求', deliveryLines(facts))
@@ -179,6 +182,7 @@ function constraintLines(facts: BookFacts): string[] {
   if (facts.mustStayInWorkspace) lines.push('- 改动必须落在本工作区内，不得写到工作区之外')
   if (facts.forbiddenPaths.length > 0) lines.push(`- 禁止改动：${facts.forbiddenPaths.join('、')}`)
   if (facts.branchPattern !== undefined) lines.push(`- 工作分支名需匹配：${facts.branchPattern}`)
+  if (facts.filenamePattern !== undefined) lines.push(`- 交付文件名需匹配：${facts.filenamePattern}（Windows 文件名不得含 " < > | ? * 等字符）`)
   if (facts.deadline !== undefined) lines.push(`- 截止时间：${facts.deadline}`)
   if (facts.runtimeSeconds !== undefined) lines.push(`- 本次运行上限：${String(facts.runtimeSeconds)} 秒`)
   return lines
@@ -252,6 +256,8 @@ function bookFacts(assignment: ExecTaskAssignment): BookFacts {
     forbiddenPaths: [...(policy.forbidden_paths ?? [])],
     mustStayInWorkspace: policy.must_stay_in_workspace === true,
     branchPattern: policy.branch_pattern,
+    filenamePattern: policy.filename_pattern,
+    retryHint: text(context['retry_hint']),
     pushRequired: policy.push_required === true,
     deadline: policy.deadline,
     buildCommand: text(deliverables['build_command']),

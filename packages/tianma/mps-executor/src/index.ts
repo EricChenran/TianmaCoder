@@ -107,6 +107,7 @@ export {
   SCREENSHOT_MIN_WIDTH,
   collectEvidence,
 } from './evidence.ts'
+export { cleanStatedPath, sanitizeFilename } from './filenames.ts'
 export { MATERIALS_DIRECTORY, fetchMaterials, materialFileName, taskMaterials } from './materials.ts'
 export type {
   CollectEvidenceOptions,

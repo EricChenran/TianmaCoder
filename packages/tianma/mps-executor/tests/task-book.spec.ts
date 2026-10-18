@@ -149,10 +149,22 @@ describe('the task book', () => {
     expect(book).toContain('- .materials/art_pdf_需求说明.pdf（art_pdf）')
   })
 
+  it('tells the agent what a retry failed at and what file names must match', () => {
+    const book = taskBook(assignment({
+      spec: { raw_instruction: '写一份 Markdown 介绍' },
+      constraints: { filename_pattern: '^[A-Za-z0-9._-]+$' },
+      context: { retry_hint: '上次因路径含非法字符失败，请使用 ASCII 文件名' },
+    }))
+
+    expect(book).toContain('## 重试提示\n\n上次因路径含非法字符失败，请使用 ASCII 文件名')
+    expect(book).toContain('- 交付文件名需匹配：^[A-Za-z0-9._-]+$（Windows 文件名不得含 " < > | ? * 等字符）')
+  })
+
   it('leaves out every section the payload says nothing about', () => {
     const book = taskBook(assignment({ spec: { raw_instruction: '只做这一件事' } }))
 
     expect(book).toContain('## 需求\n\n只做这一件事')
+    expect(book).not.toContain('## 重试提示')
     expect(book).not.toContain('## 工作区')
     expect(book).not.toContain('## 约束')
     // Delivery is the one thing the node always knows: it commits or it does not.

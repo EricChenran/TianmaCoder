@@ -158,6 +158,20 @@ describe('collecting evidence', () => {
     })
   })
 
+  it('collects a report whose stated name carried the quotes of plan text', async () => {
+    const directory = temporary('mps-evidence-')
+    writeFileSync(join(directory, '助手介绍.md'), '介绍\n', 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_report: true, report_filename: '"助手介绍.md"' } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toBeUndefined()
+    expect(collected.report_path).toBe('助手介绍.md')
+  })
+
   it('refuses a report name that leaves the workspace', async () => {
     const directory = temporary('mps-evidence-')
 

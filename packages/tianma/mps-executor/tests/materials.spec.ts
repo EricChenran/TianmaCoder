@@ -91,6 +91,8 @@ describe('task materials', () => {
     expect(materialFileName('art_1', 'C:\\tmp\\notes.txt')).toBe('art_1_notes.txt')
     expect(materialFileName('art_1', '   ')).toBe('art_1')
     expect(materialFileName('art_1', '..')).toBe('art_1')
+    expect(materialFileName('art_1', '"助手介绍.md"')).toBe('art_1_助手介绍.md')
+    expect(materialFileName('art_1', 'a<b>c?.png')).toBe('art_1_abc.png')
   })
 
   it('brings the materials into the workspace and keeps them out of the repository', async () => {
