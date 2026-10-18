@@ -30,6 +30,7 @@ const LINE: MpsNodeLogLine = { stream: 'stdout', at: '2026-10-16T09:00:01.000Z',
 /** One deployment-parameter reading the Host can return. */
 const CONFIG = {
   saved: { platformHost: 'mps.example.com' },
+  secretSet: 'unset',
   effective: {
     platformHost: { value: 'mps.example.com', source: 'saved' },
     platformPort: { value: '8791', source: 'environment' },

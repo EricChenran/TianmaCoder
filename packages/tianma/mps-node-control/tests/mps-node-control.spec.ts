@@ -4,7 +4,7 @@
  * behind. The child these specs supervise is a real Node process running a stub
  * script, so the launch, the pipes, and the kill are the ones a deployment gets.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -249,6 +249,45 @@ describe('the deployment parameters the Settings form owns', () => {
     expect(after.effective.platformHost).toEqual({ value: 'mps.example.com', source: 'saved' })
     expect(after.effective.platformPort).toEqual({ value: '8791', source: 'saved' })
     expect(after.effective.nodeId.source).toBe('unset')
+  })
+
+  it('stores the secret, reports only whether it is set, and injects it at launch', async () => {
+    const home = isolatedHome()
+    process.env.MPS_NODE_SECRET = 'env-secret'
+    const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
+    created.push(directory)
+    const path = join(directory, 'echo-secret.mjs')
+    writeFileSync(path, [
+      "console.log((process.env.MPS_NODE_SECRET ?? '-') + ' from=' + (process.env.MPS_PLATFORM_HOST ?? '-'))",
+      'setInterval(() => {}, 250)',
+      '',
+    ].join('\n'))
+    const ctx = new Context()
+    contexts.push(ctx)
+    await ctx.plugin(MpsNodeControlService, { entry: path, loaders: [] })
+    try {
+      // The environment's secret shows as set before this page stores one.
+      expect((await ctx.mpsNodeControl.config()).secretSet).toBe('environment')
+
+      const saved = await ctx.mpsNodeControl.saveConfig({ nodeSecret: 'stored-secret', platformHost: 'saved.example.com' })
+      // The saved copy the form reads back carries no secret value.
+      expect(saved.saved.nodeSecret).toBeUndefined()
+      expect(saved.secretSet).toBe('saved')
+      // The stored file does carry it, and the launch injects it over the environment's.
+      const stored = JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8'))
+      expect(stored.nodeSecret).toBe('stored-secret')
+
+      await ctx.mpsNodeControl.start()
+      await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
+      expect((await ctx.mpsNodeControl.logs())[0]?.text).toBe('stored-secret from=saved.example.com')
+      await ctx.mpsNodeControl.stop()
+
+      // Saving the field empty clears what this page stored.
+      const cleared = await ctx.mpsNodeControl.saveConfig({ nodeSecret: '' })
+      expect(cleared.secretSet).toBe('environment')
+    } finally {
+      delete process.env.MPS_NODE_SECRET
+    }
   })
 
   it('ranks a saved field above the environment, which still beats unset', async () => {

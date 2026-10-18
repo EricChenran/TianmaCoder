@@ -122,6 +122,7 @@ const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
   nodeHost: 'MPS_NODE_HOST',
   workspaceRoot: 'MPS_NODE_WORKSPACE',
   slotsTotal: 'MPS_NODE_SLOTS',
+  nodeSecret: 'MPS_NODE_SECRET',
 }
 
 
@@ -372,11 +373,23 @@ export class MpsNodeControlService extends TypertRemoteService {
    */
   @Remote
   async config(): Promise<MpsNodeConfig> {
-    const saved = readDeployment(this.profileDir())
+    const stored = readDeployment(this.profileDir())
+    // The secret never crosses to the settings surface: it is reported only as
+    // its source, and the saved copy the form reads back carries no value.
+    const { nodeSecret: _secret, ...saved } = stored
     const entries = Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>
     const effective = {} as MpsNodeConfig['effective']
-    for (const key of entries) effective[key] = effectiveEntry(key, saved)
-    return { saved, effective }
+    for (const key of entries) {
+      if (key === 'nodeSecret') continue
+      effective[key] = effectiveEntry(key, stored)
+    }
+    return {
+      saved,
+      secretSet: stored.nodeSecret !== undefined ? 'saved'
+        : process.env.MPS_NODE_SECRET !== undefined && process.env.MPS_NODE_SECRET !== '' ? 'environment'
+          : 'unset',
+      effective,
+    }
   }
 
   /**
@@ -416,7 +429,7 @@ export class MpsNodeControlService extends TypertRemoteService {
   @Remote
   async probe(form: MpsNodeForm): Promise<MpsNodeProbeResult> {
     const saved = await this.config()
-    const pick = (formValue: string | undefined, key: keyof MpsNodeDeployment): string | undefined => {
+    const pick = (formValue: string | undefined, key: keyof MpsNodeConfig['effective']): string | undefined => {
       const text = formValue?.trim()
       if (text !== undefined && text !== '') return text
       const effective = saved.effective[key].value

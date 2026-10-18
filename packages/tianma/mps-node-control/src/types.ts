@@ -84,6 +84,12 @@ export interface MpsNodeDeployment {
   workspaceRoot?: string | undefined
   /** How many workspaces the node can hold at once; at least 1. */
   slotsTotal?: number | undefined
+  /**
+   * The node's platform secret, injected as `MPS_NODE_SECRET` at the next
+   * launch. Stored beside the profile and never echoed back to the settings
+   * surface: reads report only whether it is set.
+   */
+  nodeSecret?: string | undefined
 }
 
 /** Where one effective deployment value came from. */
@@ -107,8 +113,13 @@ export interface MpsNodeConfigEntry {
 
 /** The deployment-parameter reading the Settings form renders. */
 export interface MpsNodeConfig {
-  /** What this page has saved; each field may be unset. */
+  /**
+   * What this page has saved, each field possibly unset. The node secret is
+   * never part of this copy: it is reported only as {@link secretSet}.
+   */
   saved: MpsNodeDeployment
+  /** Whether a secret is stored for the next launch, and where it comes from. */
+  secretSet: MpsNodeConfigSource
   /** What the next launch would run with, per field. */
   effective: {
     platformHost: MpsNodeConfigEntry
@@ -139,6 +150,7 @@ export interface MpsNodeForm {
   nodeHost?: string | undefined
   workspaceRoot?: string | undefined
   slotsTotal?: string | undefined
+  nodeSecret?: string | undefined
 }
 
 /** What one connectivity probe found, in the form's own words to show. */

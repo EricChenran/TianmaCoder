@@ -106,6 +106,18 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
                 >{t('browse')}</Button>}
               </div>
             </label>)}
+            <label className={css.field}>
+              <span className={css.fieldLabel}>{t('fieldNodeSecret')}</span>
+              <div className={css.fieldRow}>
+                <Input
+                  type='password'
+                  value={form.nodeSecret ?? ''}
+                  placeholder={secretPlaceholder(config.secretSet, t)}
+                  onChange={(event) => { setForm({ ...form, nodeSecret: event.target.value }) }}
+                  autoComplete='new-password'
+                />
+              </div>
+            </label>
             <div className={css.actions}>
               <Button variant="primary" onClick={submit} disabled={node.configBusy}>
                 {node.configBusy ? t('configSaving') : t('configSave')}
@@ -121,6 +133,7 @@ export function MpsNodeSection({ useMpsNode, start, stop, refresh, saveConfig, p
               label={t(field.label)}
               value={effectiveLabel(config.effective[field.key], t)}
             />)}
+            <Row label={t('fieldNodeSecret')} value={secretPlaceholder(config.secretSet, t)} />
             <div className={css.actions}>
               <Button variant="outline" onClick={beginEdit}>{t('configEdit')}</Button>
               {node.configSaved && <span className={css.notice}>{t('configSaved')}</span>}
@@ -177,6 +190,12 @@ function savedForm(config: MpsNodeConfig | undefined): MpsNodeFormInput {
  * @param t - the namespace's translation seat.
  * @returns the placeholder text.
  */
+function secretPlaceholder(source: 'saved' | 'environment' | 'default' | 'unset' | undefined, t: (key: MpsNodeKey) => string): string {
+  if (source === 'saved') return t('secretSavedHere')
+  if (source === 'environment') return t('sourceEnvironment')
+  return t('sourceUnset')
+}
+
 function placeholder(entry: MpsNodeConfigEntry | undefined, t: (key: MpsNodeKey) => string): string {
   if (entry === undefined) return t('sourceUnset')
   return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceLabel(entry, t)}`

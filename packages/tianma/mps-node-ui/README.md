@@ -67,7 +67,7 @@ Nothing here enters a model request, so this package neither grows nor replaces 
 
 ## Known Limitations and Deferred Work
 
-- **The secret stays in the environment** — the deployment parameters (platform address, node id, coding root, …) are editable on the section and take effect at the next start; the node secret still rides the `MPS_NODE_SECRET` environment variable a deployment states, and the form deliberately never writes it.
+- **The secret is write-only** — the production parameters (platform address, node id, coding root, …) are editable on the section and take effect at the next start, the node secret included: it is stored on this machine, never displayed back, injected as `MPS_NODE_SECRET` at the next launch, and cleared by saving it blank.
 - **Polling, not a stream** — the section re-reads every five seconds while it is open, so a node that dies between two reads shows the older reading until the next one.
 - **The output shown is what the Host keeps** — the ring is bounded by the service's `logLines`, so older lines are only in the node's own log files.
 - **No launcher outside Settings** — the node is reachable from the Settings page only; a sidebar entry or a tray item would be additional surfaces over the same snapshot.
