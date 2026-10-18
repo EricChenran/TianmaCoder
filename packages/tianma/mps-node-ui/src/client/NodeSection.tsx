@@ -1,6 +1,6 @@
 /** Settings section: the node process this GUI supervises, and what it printed. */
 import { useEffect, useState } from 'react'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Checkbox, Input, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MpsNodeConfig, MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
 import type { MpsNodeFormInput, MpsNodeInjected } from './contract.ts'
@@ -66,7 +66,10 @@ export function MpsNodeSection(
     <p className={css.notice}>{t('description')}</p>
     <div className={css.group}>
       <span className={css.groupTitle}>{t('title')}</span>
-      <Row label={t('phase')} value={phaseLabel(phase, t)} />
+      <div className={css.row}>
+        <span className={css.rowLabel}>{t('phase')}</span>
+        <Tag tone={phaseTone(phase)}>{phaseLabel(phase, t)}</Tag>
+      </div>
       <Row label={t('profile')} value={node.status?.profile ?? t('unknown')} />
       <Row label={t('pid')} value={node.status?.pid === undefined ? t('unknown') : String(node.status.pid)} />
       <Row label={t('startedAt')} value={node.status?.startedAt ?? t('unknown')} />
@@ -124,13 +127,11 @@ export function MpsNodeSection(
                 />
               </div>
               {config.secretSet === 'saved'
-                ? <label className={css.fieldLabel}>
-                  <input
-                    type='checkbox'
-                    checked={form.clearNodeSecret === 'true'}
-                    onChange={(event) => { setForm({ ...form, clearNodeSecret: event.target.checked ? 'true' : '' }) }}
-                  />{' '}{t('secretClear')}
-                </label>
+                ? <Checkbox
+                  checked={form.clearNodeSecret === 'true'}
+                  label={t('secretClear')}
+                  onChange={(next) => { setForm({ ...form, clearNodeSecret: next ? 'true' : '' }) }}
+                />
                 : <span className={css.fieldLabel}>{t('secretKeepHint')}</span>}
             </label>
             <div className={css.actions}>
@@ -174,41 +175,45 @@ export function MpsNodeSection(
         ? <span className={css.notice}>{t('tasksNone')}</span>
         : <div className={css.tasks}>
           {node.tasks.slice(0, 10).map(task => <div key={task.task_id} className={css.taskRow}>
-            <span className={task.running ? css.taskRunning : css.taskSettled}>
-              {task.held ? t('taskHeld') : task.running ? t('taskRunning') : outcomeLabel(task.outcome, t)}
-            </span>
-            <span className={css.taskText}>
-              {task.task_id} · {kindLabel(task.kind, t)} · {task.at}
-              {task.summary === undefined ? '' : ' — ' + task.summary}
-            </span>
-            {task.running && !task.held && <Button
-              variant="ghost"
-              disabled={node.taskBusy !== undefined}
-              onClick={() => { void taskCommand({ action: 'takeover', task_id: task.task_id }) }}
-            >{t('taskTakeover')}</Button>}
-            {task.held && <span className={css.fieldLabel}>
-              <input
-                type="text"
+            <div className={css.taskHead}>
+              <StateDot state={taskDot(task)} className={css.taskDot} />
+              <span className={css.taskId}>{task.task_id}</span>
+              <Tag tone={kindTone(task.kind)}>{kindLabel(task.kind, t)}</Tag>
+              <Tag tone={statusTone(task)}>{statusLabel(task, t)}</Tag>
+              <span className={css.taskAt} title={task.at}>{task.at}</span>
+            </div>
+            {task.summary !== undefined
+              && <p className={css.taskSummary}>{task.summary}</p>}
+            {task.held && <div className={css.taskFinish}>
+              <Input
+                value={finish[task.task_id] ?? ''}
                 placeholder={t('taskFinishSummary')}
                 onChange={(event) => { setFinish({ ...finish, [task.task_id]: event.target.value }) }}
-              />{' '}
+              />
               <Button
-                variant="ghost"
+                variant="primary"
                 disabled={node.taskBusy !== undefined}
                 onClick={() => {
                   void taskCommand({ action: 'complete', task_id: task.task_id, summary: finish[task.task_id] ?? '' })
                 }}
-              >{t('taskFinish')}</Button>{' '}
-            </span>}
-            {(task.running || task.held) && <Button
-              variant="ghost"
-              disabled={node.taskBusy !== undefined}
-              onClick={() => { void cancelTask(task.task_id) }}
-            >{node.taskBusy === task.task_id ? t('taskCancelling') : t('taskCancel')}</Button>}
-            {task.session !== undefined && <Button
-              variant="ghost"
-              onClick={() => { openSession(task.session as string) }}
-            >{t('taskOpenSession')}</Button>}
+              >{t('taskFinish')}</Button>
+            </div>}
+            <div className={css.taskActions}>
+              {task.running && !task.held && <Button
+                variant="outline"
+                disabled={node.taskBusy !== undefined}
+                onClick={() => { void taskCommand({ action: 'takeover', task_id: task.task_id }) }}
+              >{t('taskTakeover')}</Button>}
+              {(task.running || task.held) && <Button
+                variant="ghost"
+                disabled={node.taskBusy !== undefined}
+                onClick={() => { void cancelTask(task.task_id) }}
+              >{node.taskBusy === task.task_id ? t('taskCancelling') : t('taskCancel')}</Button>}
+              {task.session !== undefined && <Button
+                variant="ghost"
+                onClick={() => { openSession(task.session as string) }}
+              >{t('taskOpenSession')}</Button>}
+            </div>
           </div>)}
         </div>}
       <p className={css.notice}>{t('tasksNote')}</p>
@@ -238,6 +243,47 @@ function outcomeLabel(outcome: string | undefined, t: (key: MpsNodeKey) => strin
   if (outcome === 'blocked') return t('taskBlocked')
   if (outcome === 'cancelled') return t('taskCancelled')
   return t('taskEnded')
+}
+
+/** What one task row's status tag and dot read. */
+interface TaskStatusReading {
+  running: boolean
+  held?: boolean | undefined
+  outcome?: string | undefined
+}
+
+/**
+ * @param task - one task row's reading.
+ * @param t - the namespace's translation seat.
+ * @returns the localized status the row's tag carries: running, held, or the outcome.
+ */
+function statusLabel(task: TaskStatusReading, t: (key: MpsNodeKey) => string): string {
+  if (task.held === true) return t('taskHeld')
+  if (task.running) return t('taskRunning')
+  return outcomeLabel(task.outcome, t)
+}
+
+/** One task row's tag tone: colour says what became of the work. */
+function statusTone(task: TaskStatusReading): 'success' | 'danger' | 'warning' | 'info' | 'neutral' {
+  if (task.held === true) return 'warning'
+  if (task.running) return 'info'
+  if (task.outcome === 'success') return 'success'
+  if (task.outcome === 'failed') return 'danger'
+  return 'neutral'
+}
+
+/** One task row's state dot: the running one spins, each settled one lands on its colour. */
+function taskDot(task: TaskStatusReading): 'ongoing' | 'warning' | 'done' | 'error' | 'idle' {
+  if (task.held === true) return 'warning'
+  if (task.running) return 'ongoing'
+  if (task.outcome === 'success') return 'done'
+  if (task.outcome === 'failed') return 'error'
+  return 'idle'
+}
+
+/** One task row's kind tag tone: classification, not health. */
+function kindTone(kind: string): 'neutral' | 'quiet' {
+  return kind === 'chat_answer' || kind === 'answer' ? 'quiet' : 'neutral'
 }
 
 /**
@@ -323,8 +369,15 @@ function Row({ label, value }: { label: string; value: string }) {
  * @param t - the namespace's translation seat.
  * @returns the localized phase name.
  */
-function phaseLabel(phase: string | undefined, t: (key: MpsNodeKey) => string): string {
-  if (phase === 'running') return t('phaseRunning')
+/** The node phase as a tag tone: colour says health, not classification. */
+function phaseTone(phase: string | undefined): 'success' | 'info' | 'danger' | 'neutral' {
+  if (phase === 'running') return 'success'
+  if (phase === 'starting') return 'info'
+  if (phase === 'failed') return 'danger'
+  return 'neutral'
+}
+
+function phaseLabel(phase: string | undefined, t: (key: MpsNodeKey) => string): string {  if (phase === 'running') return t('phaseRunning')
   if (phase === 'starting') return t('phaseStarting')
   if (phase === 'failed') return t('phaseFailed')
   if (phase === 'stopped') return t('phaseStopped')

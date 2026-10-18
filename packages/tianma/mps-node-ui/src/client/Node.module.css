@@ -108,26 +108,64 @@
 .tasks {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
+/* One task as a card: the header names it, the summary explains it, and the
+   actions sit on their own line so a long summary never pushes buttons away. */
 .taskRow {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsh-color-border, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  background: var(--dsh-color-surface, transparent);
+}
+
+.taskHead {
+  display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.taskRunning {
-  min-width: 64px;
-  color: var(--dsh-color-success, #389e0d);
+.taskDot {
+  flex-shrink: 0;
 }
 
-.taskSettled {
-  min-width: 64px;
-  opacity: 0.7;
+.taskId {
+  font-family: var(--dsh-font-mono, ui-monospace, monospace);
+  font-size: 12px;
 }
 
-.taskText {
+.taskAt {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.taskSummary {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.75;
   word-break: break-all;
+}
+
+.taskFinish {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.taskFinish > :first-child {
   flex: 1;
+}
+
+.taskActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
