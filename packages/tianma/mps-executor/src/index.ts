@@ -248,10 +248,16 @@ export function apply(ctx: Context, config: Config): void {
     probeAgentVersion: async () => await probeAgentVersion({ bin: settings.cliRunner.bin }),
     probeResources: resourceReader({ root: settings.codingRoot }).read,
     // Both sinks, always: the logger is what a host shows, and the file is what a
-    // deployment can read when the host shows nothing.
+    // deployment can read when the host shows nothing. Warnings and errors also
+    // go to stderr, because a supervised node's supervisor — the GUI's Settings
+    // page, a service manager, a console — reads its process output and nothing
+    // else; a node that dies quietly looks like one that never started.
     report: (report) => {
       createReportSink(ctx.logger('mps-executor'))(report)
       appendNodeLog(settings.codingRoot, report)
+      if (report.level === 'warn' || report.level === 'error') {
+        process.stderr.write(`[mps-node ${settings.nodeId}] ${report.level}: ${report.message}\n`)
+      }
     },
   })
   ctx.provide('mpsExecutor', runtime)
