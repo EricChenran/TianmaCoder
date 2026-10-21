@@ -31,7 +31,12 @@ export interface Config {
   /** Sidebar-browser workspace key whose login state the agent guests reuse. */
   workspaceKey: string
   /** On-screen size for the guest; when set the human watches the guest work live. */
-  watch?: { readonly width: number; readonly height: number }
+  watch?: {
+    /** Guest viewport width in CSS pixels. */
+    readonly width: number
+    /** Guest viewport height in CSS pixels. */
+    readonly height: number
+  }
 }
 
 /** Loader validation; the workspace key is an explicit deployment choice. */

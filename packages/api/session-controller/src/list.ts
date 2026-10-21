@@ -164,7 +164,7 @@ export class ApiSessionList {
     return items
   }
 
-  private summarizeCold({ header, formatStatus }: SessionRecord): SessionSummary {
+  private summarizeCold({ header, formatStatus }: Pick<SessionRecord, 'header' | 'formatStatus'>): SessionSummary {
     const projections = this.projectionsFor(header, undefined)
     const metadata = projections?.values.sessionListMetadata
     return {
@@ -178,6 +178,15 @@ export class ApiSessionList {
       ...listFields(header),
       ...(projections === undefined ? {} : { projections }),
     }
+  }
+
+  /**
+   * Build the list summary of one stored Session without activating it.
+   * @param record - stored header and its format status.
+   * @returns the summary this Session contributes to the list.
+   */
+  summaryOfStored(record: Pick<SessionRecord, 'header' | 'formatStatus'>): SessionSummary {
+    return this.summarizeCold(record)
   }
 
   /**

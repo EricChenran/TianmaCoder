@@ -22,6 +22,7 @@ import {
 import { SessionCommandController } from './commands.ts'
 import { SessionControlController } from './control.ts'
 import { SessionHistoryController } from './history.ts'
+import { ExternalSessionWatch } from './discovery.ts'
 import { SessionFileReferences } from './file-references.ts'
 import { ApiSessionList } from './list.ts'
 import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
@@ -82,10 +83,15 @@ export interface Config {
   readonly nativeOpen?: boolean
   /** Positive integral milliseconds of list work before yielding between complete rows. */
   readonly listWorkSliceMs?: number
+  /**
+   * Positive integral milliseconds between scans for Sessions another process
+   * stored under this home; `0` disables discovery.
+   */
+  readonly externalSessionScanMs?: number
 }
 
 /** Deployment policy after schema defaults have been applied. */
-type ResolvedConfig = Config & { readonly listWorkSliceMs: number }
+type ResolvedConfig = Config & { readonly listWorkSliceMs: number; readonly externalSessionScanMs: number }
 
 /** Host integrations replaceable by direct unit tests. */
 export interface SessionControllerInternals {
@@ -120,6 +126,7 @@ export class SessionController extends TypertRemoteService {
   static Config: z<Config, ResolvedConfig> = z.object({
     nativeOpen: z.boolean(),
     listWorkSliceMs: z.natural().min(1).default(16),
+    externalSessionScanMs: z.natural().default(0),
   })
 
   private readonly agents: ApiSessionAgentController
@@ -127,6 +134,7 @@ export class SessionController extends TypertRemoteService {
   private readonly controlState: SessionControlController
   private readonly history: SessionHistoryController
   private readonly listState: ApiSessionList
+  private readonly externalSessions: ExternalSessionWatch | undefined
   private readonly openPath: (path: string, signal: AbortSignal) => Promise<void>
   private readonly fileApplications: typeof nativeFileApplications
   private readonly openFileApplication: typeof openNativeFileApplication
@@ -158,6 +166,23 @@ export class SessionController extends TypertRemoteService {
     }, 'session-controller.promotions')
     this.history = new SessionHistoryController(ctx, (observation) => { this.promote(observation) })
     this.listState = new ApiSessionList(ctx, resolved.listWorkSliceMs)
+    // A Session stored by another process under this home never fires this
+    // process's lifecycle events. Watch stored revisions so a sidebar that is
+    // already open still learns about the task files an external run writes.
+    const persistence = ctx.get('sessionPersistence')
+    this.externalSessions = resolved.externalSessionScanMs === 0 || persistence === undefined
+      ? undefined
+      : new ExternalSessionWatch({
+        list: signal => persistence.list(signal === undefined ? undefined : { signal }),
+        isLive: sessionId => ctx.sessions.get(sessionId) !== undefined,
+        summarize: record => this.listState.summaryOfStored(record),
+        announce: (summary) => { ctx.emit('api-session/added', summary) },
+        touch: (sessionId, updatedAt) => { ctx.emit('api-session/activity', sessionId, updatedAt) },
+        remove: (sessionId) => { ctx.emit('api-session/removed', sessionId) },
+        warn: (message) => { ctx.logger.warn(message) },
+      }, resolved.externalSessionScanMs)
+    ctx.effect(() => () => { this.externalSessions?.stop() }, 'session-controller.external-sessions')
+    this.externalSessions?.start()
     this.fileApplications = internals.fileApplications ?? nativeFileApplications
     this.openFileApplication = internals.openFileApplication ?? openNativeFileApplication
     this.openPath = internals.openPath ?? openNativeAssociatedPath

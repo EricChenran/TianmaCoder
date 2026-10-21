@@ -37,6 +37,8 @@ Client journal 在发布 follow 快照、live entry 或历史页之前验证当�
 
 Host 仅在配置的工作时间片耗尽时，于完整条目之间让出事件循环；剩余工作较少时直接返回，不强制让出。每行及每次让出之后检查请求取消，取消时拒绝返回部分结果。每行同步计算；列表不承诺跨 Session 的统一快照。已经进入冷态队列的 Session 若在让出期间接入，仍返回缓存行：Client 对进行中请求的变更重放会纠正其可用性，带序号的投影会覆盖缓存提示。
 
+Host 还能发现共享同一 home 的其他进程写入的 Session。`externalSessionScanMs` 为正数时，Host 按该间隔重扫已存储的 header：新物化的 Session 以 `api-session/added` 转发，后续修订以更新后的摘要加 `api-session/activity` 转发，已消失的产物以 `api-session/removed` 转发。本进程拥有的 Session 仍使用自己的生命周期事件，第一次扫描只建立基线。因此，独立 `dsh` 进程运行的任务能到达已经打开的侧栏，而不必等到下一次 Client 连接。
+
 Client 列表行和驻留 Session 使用当前 `sessionListMetadata` 投影纠正过期的空白会话提示；最近活动时间取摘要时间戳与投影中最后一次用户提示词时间的较晚值。当 SessionManager 在列表行到达前创建实例时，会使用已保留的该 Session 元数据对账空白状态。因此，即使旧列表响应仍将已有对话标为空白，新会话操作也不会复用已经打开过的对话。
 
 显式 ID 的 `session.create` 会收养活动 Session，或恢复持久化 Session 并持续持有其写锁。写锁争用返回 `session/writer-held`；调用方可以尝试其他空白会话，同时保留其他失败。`session.list` 根据缓存元数据列出持久化空白会话，不打开冷日志正文。
@@ -97,6 +99,7 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 |---|---:|---|
 | `nativeOpen` | 平台探测 | 是否能把 Session 工作区路径交给原生桌面打开器 |
 | `listWorkSliceMs` | `16` | 列表工作时间片，单位为毫秒，取正整数；在完整条目之间检查 |
+| `externalSessionScanMs` | `0` | 扫描其他进程写入本 home 的 Session 的间隔，单位为毫秒，取正整数；`0` 关闭发现 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-api-session-controller)是所有受支持字段及其 JSDoc 的完整来源。
 

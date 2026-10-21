@@ -117,9 +117,13 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
-    # Session commands, cold reads, and live control over Typert Remote.
+    # Session commands, cold reads, and live control over Typert Remote. The
+    # scan picks up Session logs an external process materializes under this
+    # home, so a task run by another `dsh` process reaches an open sidebar.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
+      config:
+        externalSessionScanMs: 2000
 
     # One background job's observation record streamed over Typert Remote;
     # the roster rides the session control stream above.

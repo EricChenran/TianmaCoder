@@ -220,7 +220,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-session-controller`
 
 - `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
-- `source`: [`packages/api/session-controller/src/index.ts:80`](../packages/api/session-controller/src/index.ts)
+- `source`: [`packages/api/session-controller/src/index.ts:81`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -229,6 +229,11 @@ export interface Config {
   readonly nativeOpen?: boolean
   /** Positive integral milliseconds of list work before yielding between complete rows. */
   readonly listWorkSliceMs?: number
+  /**
+   * Positive integral milliseconds between scans for Sessions another process
+   * stored under this home; `0` disables discovery.
+   */
+  readonly externalSessionScanMs?: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-api-session-controller -->
@@ -837,6 +842,30 @@ export interface Config {
 export type Config = BrowserMcpConfig
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-chrome-devtools-mcp -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-desktop-guest -->
+<a id="deepseek-aidsh-experimental-browser-use-desktop-guest"></a>
+
+## `@deepseek-ai/dsh-experimental-browser-use-desktop-guest`
+
+- `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `desktopBrowserControl`
+- `source`: [`packages/experimental/browser-use-desktop-guest/src/index.ts:30`](../packages/experimental/browser-use-desktop-guest/src/index.ts)
+
+```ts config-catalog
+/** Workspace identity whose storage partition the agent guests share. */
+export interface Config {
+  /** Sidebar-browser workspace key whose login state the agent guests reuse. */
+  workspaceKey: string
+  /** On-screen size for the guest; when set the human watches the guest work live. */
+  watch?: {
+    /** Guest viewport width in CSS pixels. */
+    readonly width: number
+    /** Guest viewport height in CSS pixels. */
+    readonly height: number
+  }
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-desktop-guest -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-browser-use-playwright-mcp -->
 <a id="deepseek-aidsh-experimental-browser-use-playwright-mcp"></a>
@@ -4592,6 +4621,153 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@tianma/dsh-hooks-trust -->
 
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-mps-executor -->
+<a id="tianmadsh-mps-executor"></a>
+
+## `@tianma/dsh-mps-executor`
+
+- `refs`: [`PlatformScheme`](../packages/tianma/mps-exec-core/src/index.ts)
+- `source`: [`packages/tianma/mps-executor/src/config.ts:107`](../packages/tianma/mps-executor/src/config.ts)
+
+```ts config-catalog
+/** The executor node's plugin configuration. */
+export interface Config {
+  /** Management-platform host or address the node dials: an IPv4 address, a host name, or an IPv6 address. */
+  platformHost: string
+  /** Management-platform TCP port the node dials. */
+  platformPort?: number
+  /** Transport scheme for the platform connection. */
+  platformScheme?: PlatformScheme
+  /** Path prefix the protocol endpoints hang off. */
+  platformBasePath?: string
+  /** Node id the platform knows this node by. */
+  nodeId: string
+  /** Display name shown in the console. */
+  nodeName?: string
+  /** Host address the node reports to the platform. */
+  nodeHost?: string
+  /** Name of the environment variable holding the pre-shared secret. */
+  secretEnv?: string
+  /** Directory the node works under and reports as its workspace root. */
+  workspaceRoot?: string
+  /** Directory the node keeps its coding workspaces under; defaults to `coding` inside the workspace root. */
+  codingRoot?: string
+  /** Operator directory for the task ledger and operator commands. */
+  opsDir?: string
+  /** `user.name` the node commits under; the host's global git configuration is never touched. */
+  gitUserName?: string
+  /** `user.email` the node commits under. */
+  gitUserEmail?: string
+  /** Largest artifact the node uploads in one request. */
+  maxArtifactBytes?: number
+  /**
+   * The CLI runner the node falls back to when no runner is composed under
+   * `mpsTaskRunner`; composing one there takes precedence.
+   */
+  cliRunner?: CliRunnerConfig
+  /** Concurrent tasks this node accepts. */
+  slotsTotal?: number
+  /** Free disk floor in GB; below it the node drains and claims nothing. */
+  diskMinGb?: number
+  /**
+   * Lines the operator's copy of a run log keeps. The platform receives every line either
+   * way; this is what the node keeps on disk.
+   */
+  rawLogMaxLines?: number
+  /** Seconds a stopping node waits for running attempts and child processes before it exits. */
+  shutdownGraceSeconds?: number
+  /** Heartbeat period in seconds. */
+  heartbeatSeconds?: number
+  /** Claim long-poll budget in seconds. */
+  claimLongPollSeconds?: number
+  /** Lease renewal period in seconds, used until a claim states the platform's own. */
+  leaseRenewSeconds?: number
+  /** Runtime ceiling in seconds for one attempt, used when the task payload states none. */
+  taskRuntimeSeconds?: number
+  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  answerRuntimeSeconds?: number
+  /** Budget for one ordinary platform request in milliseconds. */
+  requestTimeoutMs?: number
+  /** Work kinds this node accepts. */
+  lanes?: string[]
+  /** Toolchain names this node detected. */
+  tools?: string[]
+  /** Agent version the node reports. */
+  agentVersion?: string
+  /**
+   * Provider route a node's agent runs start on, such as `deepseek-official`. Stated
+   * together with {@link Config.agentModel}, it overrides the profile's default for every
+   * task on this node; left blank, the profile's own default stands.
+   */
+  agentProvider?: string
+  /** Model id those runs start on, such as `deepseek-v4-pro`. */
+  agentModel?: string
+  /**
+   * Messages-compatible endpoint those runs use, when the deployment routes through a
+   * gateway instead of the official root.
+   */
+  agentBaseURL?: string
+  /**
+   * Environment variable the adapter reads the credential from, when it is not its own
+   * default. The key itself is never stated here: it stays in the environment or in the
+   * shared credential store, which is what lets a node and a workstation share one.
+   */
+  agentApiKeyEnv?: string
+  /** Operator labels shown in the console. */
+  labels?: Record<string, string>
+  /** Whether the node authenticates, registers, and heartbeats as soon as its profile loads. */
+  autoStart?: boolean
+}
+
+/** The CLI runner a node falls back to, as configuration states it. */
+export interface CliRunnerConfig {
+  /** Command and its leading arguments; the instruction is appended. */
+  command: string[]
+  /** Directory the runner keeps one raw log per attempt under; blank means beside the workspace root. */
+  logsDirectory: string
+  /** `DSH_HOME` the run uses, so a node's profile directory stays its own; blank inherits the environment. */
+  dshHome: string
+  /** Whether the run is asked for its event stream instead of its final answer alone. */
+  jsonEvents: boolean
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-mps-executor -->
+
+<!-- BEGIN GENERATED config-catalog:@tianma/dsh-mps-node-control -->
+<a id="tianmadsh-mps-node-control"></a>
+
+## `@tianma/dsh-mps-node-control`
+
+- `source`: [`packages/tianma/mps-node-control/src/index.ts:49`](../packages/tianma/mps-node-control/src/index.ts)
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /**
+   * Entry that starts a dsh process; defaults to the `dsh` CLI shipped beside
+   * this package, so the node runs the same build as the GUI it was started
+   * from. The process's own entry is only the fallback: the packaged desktop
+   * host takes positional argv, so relaunching it with `--profile` would read
+   * the flag as a path.
+   */
+  entry?: string | undefined
+  /** Node binary to launch it with; defaults to the running process's own. */
+  nodeBinary?: string | undefined
+  /**
+   * Loaders to pass before the entry, such as the TS source loader; defaults to
+   * the loaders this process was launched with.
+   */
+  loaders?: string[] | undefined
+  /** Profile the entry boots. */
+  profile: string
+  /** How many recent lines the status surface can read back. */
+  logLines: number
+  /** How long a stop waits for the process to end before it is killed. */
+  stopGraceMs: number
+}
+```
+<!-- END GENERATED config-catalog:@tianma/dsh-mps-node-control -->
+
 <!-- BEGIN GENERATED config-catalog:@tianma/dsh-oa-account -->
 <a id="tianmadsh-oa-account"></a>
 
@@ -4659,6 +4835,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-client-locale` | — | [`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts) |
 | `@deepseek-ai/dsh-client-modules` | `loader` | [`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts) |
 | `@deepseek-ai/dsh-client-resources` | — | [`packages/client/resources/src/index.ts`](../packages/client/resources/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-agent-browser` | — | [`packages/client/ui-agent-browser/src/index.ts`](../packages/client/ui-agent-browser/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-agent-preset` | — | [`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-approval` | — | [`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-attachment` | — | [`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts) |
@@ -4753,6 +4930,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 | `@deepseek-ai/dsh-workspace` | `storageDomain` · `sessionPersistence` | [`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts) |
 | `@tianma/dsh-behavioral-guidelines` | — | [`packages/tianma/behavioral-guidelines/src/index.ts`](../packages/tianma/behavioral-guidelines/src/index.ts) |
 | `@tianma/dsh-compaction-summarize` | — | [`packages/tianma/compaction-summarize/src/index.ts`](../packages/tianma/compaction-summarize/src/index.ts) |
+| `@tianma/dsh-mps-node-ui` | — | [`packages/tianma/mps-node-ui/src/index.ts`](../packages/tianma/mps-node-ui/src/index.ts) |
 | `@tianma/dsh-oa-account-ui` | — | [`packages/tianma/oa-account-ui/src/index.ts`](../packages/tianma/oa-account-ui/src/index.ts) |
 <!-- END GENERATED config-catalog:no-config -->
 
@@ -4805,6 +4983,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 | `@deepseek-ai/dsh-deque` | — | [`packages/util/deque/src/index.ts`](../packages/util/deque/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-agent-team-profile` | — | [`packages/experimental/agent-team-profile/src/index.ts`](../packages/experimental/agent-team-profile/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-badge-skill-bundle` | — | [`packages/experimental/badge-skill-bundle/src/index.ts`](../packages/experimental/badge-skill-bundle/src/index.ts) |
+| `@deepseek-ai/dsh-experimental-browser-agent-profile` | — | [`packages/experimental/browser-agent-profile/src/index.ts`](../packages/experimental/browser-agent-profile/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-browser-use-runtime` | — | [`packages/experimental/browser-use-runtime/src/index.ts`](../packages/experimental/browser-use-runtime/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-cot-translation-bundle` | — | [`packages/experimental/cot-translation-bundle/src/index.ts`](../packages/experimental/cot-translation-bundle/src/index.ts) |
 | `@deepseek-ai/dsh-experimental-inspector-profile` | — | [`packages/experimental/inspector-profile/src/index.ts`](../packages/experimental/inspector-profile/src/index.ts) |
@@ -4817,6 +4996,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 | `@deepseek-ai/dsh-experimental-webworker-runtime` | — | [`packages/experimental/webworker-runtime/src/index.ts`](../packages/experimental/webworker-runtime/src/index.ts) |
 | `@deepseek-ai/dsh-home-paths` | — | [`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts) |
 | `@deepseek-ai/dsh-hook-protocol` | — | [`packages/experimental/hook-protocol/src/index.ts`](../packages/experimental/hook-protocol/src/index.ts) |
+| `@deepseek-ai/dsh-host-browser-control` | — | [`packages/host/browser-control/src/index.ts`](../packages/host/browser-control/src/index.ts) |
 | `@deepseek-ai/dsh-http-proxy` | — | [`packages/util/http-proxy/src/index.ts`](../packages/util/http-proxy/src/index.ts) |
 | `@deepseek-ai/dsh-launch-environment` | — | [`packages/util/launch-environment/src/index.ts`](../packages/util/launch-environment/src/index.ts) |
 | `@deepseek-ai/dsh-lazy-require` | — | [`packages/util/lazy-require/src/index.ts`](../packages/util/lazy-require/src/index.ts) |
@@ -4853,4 +5033,6 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 | `@deepseek-ai/dsh-util-workspace-path` | — | [`packages/util/workspace-path/src/index.ts`](../packages/util/workspace-path/src/index.ts) |
 | `@deepseek-ai/dsh-win32-process` | — | [`packages/subprocess/win32-process/src/index.ts`](../packages/subprocess/win32-process/src/index.ts) |
 | `@tianma/dsh-bundle` | — | [`packages/tianma/bundle/src/index.ts`](../packages/tianma/bundle/src/index.ts) |
+| `@tianma/dsh-mps-exec-core` | — | [`packages/tianma/mps-exec-core/src/index.ts`](../packages/tianma/mps-exec-core/src/index.ts) |
+| `@tianma/dsh-mps-node-bundle` | — | [`packages/tianma/mps-node-bundle/src/index.ts`](../packages/tianma/mps-node-bundle/src/index.ts) |
 <!-- END GENERATED config-catalog:library -->

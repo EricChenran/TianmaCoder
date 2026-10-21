@@ -140,12 +140,14 @@ export interface Config {
   cliRunner?: CliRunnerConfig
   /** Concurrent tasks this node accepts. */
   slotsTotal?: number
+  /** Free disk floor in GB; below it the node drains and claims nothing. */
   diskMinGb?: number
   /**
    * Lines the operator's copy of a run log keeps. The platform receives every line either
    * way; this is what the node keeps on disk.
    */
   rawLogMaxLines?: number
+  /** Seconds a stopping node waits for running attempts and child processes before it exits. */
   shutdownGraceSeconds?: number
   /** Heartbeat period in seconds. */
   heartbeatSeconds?: number

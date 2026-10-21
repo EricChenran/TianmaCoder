@@ -37,6 +37,8 @@ List rows carry `formatStatus` when available, so Clients can identify migration
 
 Host list generation yields between complete rows only when its configured work slice is exhausted; cheap remaining work returns without a forced yield. Request cancellation is checked per row and after each yield and rejects without partial results. Each row is synchronous; the list does not promise one cross-Session snapshot. A Session already queued as cold remains a cached row if it attaches during a yield: Client in-flight mutation replay corrects its availability, and sequenced projections supersede cached hints.
 
+The Host can also discover Sessions that another process sharing its home stored. When `externalSessionScanMs` is positive, it rescans stored headers on that interval: a newly materialized Session is forwarded as `api-session/added`, a later revision as the updated summary plus `api-session/activity`, and a vanished artifact as `api-session/removed`. Sessions this process owns keep their own lifecycle events, and the first scan establishes the baseline silently. A task a separate `dsh` process runs therefore reaches a sidebar that is already open, instead of waiting for the next Client connection.
+
 Client list rows and resident Sessions use the current `sessionListMetadata` projection to reject stale blank-session hints; recency is the later of the summary timestamp and the projected last user prompt. When SessionManager creates an instance before its list row arrives, it reconciles blankness with metadata already retained for that Session. An opened conversation is therefore not reused by New Session even when an older list response still marks it blank.
 
 Explicit-id `session.create` adopts a live Session or resumes a persisted Session while retaining its writer lock. Writer contention returns `session/writer-held`; callers may try another blank without suppressing unrelated failures. `session.list` includes persisted blanks using cached metadata, without opening cold log bodies.
@@ -97,6 +99,7 @@ A successful `selectModel` response acknowledges the Session-local selection wit
 |---|---:|---|
 | `nativeOpen` | platform-detected | Whether Session workspace paths can be handed to a native desktop opener |
 | `listWorkSliceMs` | `16` | Positive integral list-work time slice in milliseconds; checks occur between complete rows |
+| `externalSessionScanMs` | `0` | Positive integral milliseconds between scans for Sessions other processes stored under this home; `0` disables discovery |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-api-session-controller) is the exhaustive source for accepted fields and their JSDoc.
 
