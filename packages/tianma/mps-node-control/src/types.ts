@@ -82,6 +82,15 @@ export interface MpsNodeDeployment {
   nodeHost?: string | undefined
   /** Root directory the node works its tasks in. */
   workspaceRoot?: string | undefined
+  /**
+   * Provider route the node's agent runs start on, such as `deepseek-official`, injected
+   * as `MPS_AGENT_PROVIDER` at the next launch. Stated together with
+   * {@link MpsNodeDeployment.agentModel}, it gives every task on this node its own default
+   * instead of the profile's, while the credential stays shared with the same home.
+   */
+  agentProvider?: string | undefined
+  /** Model id those runs start on, such as `deepseek-v4-pro`; injected as `MPS_AGENT_MODEL`. */
+  agentModel?: string | undefined
   /** How many workspaces the node can hold at once; at least 1. */
   slotsTotal?: number | undefined
   /**
@@ -141,6 +150,8 @@ export interface MpsNodeConfig {
     nodeName: MpsNodeConfigEntry
     nodeHost: MpsNodeConfigEntry
     workspaceRoot: MpsNodeConfigEntry
+    agentProvider: MpsNodeConfigEntry
+    agentModel: MpsNodeConfigEntry
     slotsTotal: MpsNodeConfigEntry
     networkProxy: MpsNodeConfigEntry
   }
@@ -161,6 +172,8 @@ export interface MpsNodeForm {
   nodeName?: string | undefined
   nodeHost?: string | undefined
   workspaceRoot?: string | undefined
+  agentProvider?: string | undefined
+  agentModel?: string | undefined
   slotsTotal?: string | undefined
   networkProxy?: string | undefined
   nodeSecret?: string | undefined

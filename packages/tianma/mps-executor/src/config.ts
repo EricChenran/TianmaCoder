@@ -12,6 +12,7 @@ import { hostname as hostHostname, platform } from 'node:os'
 import { createRequire } from 'node:module'
 import { delimiter, isAbsolute, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import type { AgentModelChoice } from './agent-patch.ts'
 import {
   DEFAULT_PLATFORM_BASE_PATH,
   DEFAULT_PLATFORM_PORT,
@@ -164,6 +165,25 @@ export interface Config {
   tools?: string[]
   /** Agent version the node reports. */
   agentVersion?: string
+  /**
+   * Provider route a node's agent runs start on, such as `deepseek-official`. Stated
+   * together with {@link Config.agentModel}, it overrides the profile's default for every
+   * task on this node; left blank, the profile's own default stands.
+   */
+  agentProvider?: string
+  /** Model id those runs start on, such as `deepseek-v4-pro`. */
+  agentModel?: string
+  /**
+   * Messages-compatible endpoint those runs use, when the deployment routes through a
+   * gateway instead of the official root.
+   */
+  agentBaseURL?: string
+  /**
+   * Environment variable the adapter reads the credential from, when it is not its own
+   * default. The key itself is never stated here: it stays in the environment or in the
+   * shared credential store, which is what lets a node and a workstation share one.
+   */
+  agentApiKeyEnv?: string
   /** Operator labels shown in the console. */
   labels?: Record<string, string>
   /** Whether the node authenticates, registers, and heartbeats as soon as its profile loads. */
@@ -205,6 +225,10 @@ export const Config: z<Config> = z.object({
   lanes: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
   agentVersion: z.string().default(UNKNOWN_AGENT_VERSION),
+  agentProvider: z.string().default(''),
+  agentModel: z.string().default(''),
+  agentBaseURL: z.string().default(''),
+  agentApiKeyEnv: z.string().default(''),
   labels: z.dict(z.string()).default({}),
   autoStart: z.boolean().default(true),
 })
@@ -271,6 +295,11 @@ export interface ExecutorSettings {
   capabilities: ExecCapabilities
   /** Agent version reported. */
   agentVersion: string
+  /**
+   * The model this node's agent runs start on, when the deployment chose one. Blank keeps
+   * the profile's own default, and the choice applies to every task the node runs.
+   */
+  agent: AgentModelChoice
   /** Operator labels. */
   labels: Record<string, string>
   /** Whether the node starts on load. */
@@ -400,6 +429,10 @@ export const EXECUTOR_ENV = {
   dshBin: 'MPS_DSH_BIN',
   dshHome: 'MPS_DSH_HOME',
   agentVersion: 'MPS_AGENT_VERSION',
+  agentProvider: 'MPS_AGENT_PROVIDER',
+  agentModel: 'MPS_AGENT_MODEL',
+  agentBaseURL: 'MPS_AGENT_BASE_URL',
+  agentApiKeyEnv: 'MPS_AGENT_API_KEY_ENV',
 } as const
 
 /**
@@ -447,6 +480,16 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
   if (secretEnv !== undefined && secretEnv !== '') config.secretEnv = secretEnv
   const agentVersion = env[EXECUTOR_ENV.agentVersion]
   if (agentVersion !== undefined && agentVersion !== '') config.agentVersion = agentVersion
+  // The model a deployment runs its agents on. Stated as a pair, like the profile row the
+  // overlay targets; a lone half is left for the resolver to refuse rather than guessed at.
+  const agentProvider = env[EXECUTOR_ENV.agentProvider]
+  if (agentProvider !== undefined && agentProvider.trim() !== '') config.agentProvider = agentProvider.trim()
+  const agentModel = env[EXECUTOR_ENV.agentModel]
+  if (agentModel !== undefined && agentModel.trim() !== '') config.agentModel = agentModel.trim()
+  const agentBaseURL = env[EXECUTOR_ENV.agentBaseURL]
+  if (agentBaseURL !== undefined && agentBaseURL.trim() !== '') config.agentBaseURL = agentBaseURL.trim()
+  const agentApiKeyEnv = env[EXECUTOR_ENV.agentApiKeyEnv]
+  if (agentApiKeyEnv !== undefined && agentApiKeyEnv.trim() !== '') config.agentApiKeyEnv = agentApiKeyEnv.trim()
   return config
 }
 
@@ -498,6 +541,12 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
     gitUserEmail: config.gitUserEmail ?? DEFAULT_GIT_USER_EMAIL,
     maxArtifactBytes: config.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES,
     cliRunner: resolveCliRunner(config.cliRunner, workspaceRoot),
+    agent: {
+      provider: config.agentProvider,
+      model: config.agentModel,
+      baseURL: config.agentBaseURL,
+      apiKeyEnv: config.agentApiKeyEnv,
+    },
     slotsTotal: config.slotsTotal ?? 1,
     diskMinGb: config.diskMinGb ?? DEFAULT_DISK_MIN_GB,
     shutdownGraceSeconds: config.shutdownGraceSeconds ?? DEFAULT_SHUTDOWN_GRACE_SECONDS,

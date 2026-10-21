@@ -60,6 +60,10 @@ kind: "package-reference"
 | `cliRunner.logsDirectory` | 工作区根目录下的 `logs` | 运行器为每次尝试保存原始日志的目录 |
 | `cliRunner.dshHome` | 继承环境 | 该次运行使用的 `DSH_HOME`，使节点的 profile 目录自成一份 |
 | `cliRunner.jsonEvents` | `false` | 向该次运行索取事件流：每一轮与每次工具调用都实时到达平台，节点也据此得知要上报的会话 |
+| `agentProvider` | 沿用 profile 自身默认 | 节点智能体运行所用的供应商路由，如 `deepseek-official`；与 `agentModel` 成对填写后，该节点上的每个任务都用它 |
+| `agentModel` | 沿用 profile 自身默认 | 这些运行使用的模型 id，如 `deepseek-v4-pro` |
+| `agentBaseURL` | 沿用适配器自身默认 | 经网关部署时这些运行使用的 Messages 兼容端点 |
+| `agentApiKeyEnv` | `DEEPSEEK_API_KEY` | 适配器读取凭据的环境变量名；密钥本身不写在这里 |
 | `shutdownGraceSeconds` | `60` | 停机时留给在跑尝试的收尾时间，超时才逐槽中止 |
 | `rawLogMaxLines` | `5000` | 节点自己保留的运行日志行数上限；平台侧无论上限如何都会逐行收到 |
 | `diskMinGb` | `5` | 磁盘余量低于此值时暂停认领，直到重新有空间 |

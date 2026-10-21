@@ -39,6 +39,7 @@ import { checkoutPublisher } from './publish.ts'
 import { checkoutSessionReporter, restoredSessionReports } from './session.ts'
 import { LOG_BATCH_MAX_LINES, TaskOrchestrator } from './orchestrator.ts'
 import { toError } from './report.ts'
+import { agentModelPatch } from './agent-patch.ts'
 import type { ExecutorReport } from './report.ts'
 import type { TaskRunner, TaskRunnerSource } from './runner.ts'
 import { WorkspaceStore, releasableWorkspaceEntries, releasableWorkspaces } from './workspace.ts'
@@ -209,6 +210,7 @@ export class MpsExecutorRuntime {
             logsDirectory: this.settings.cliRunner.logsDirectory,
             env: agentRunEnv(this.settings.cliRunner.dshHome),
             jsonEvents: this.settings.cliRunner.jsonEvents,
+            agentPatch: agentModelPatch(this.settings.agent),
           }),
         }),
       workspaces: checkoutAllocator({ store: this.#workspaces, git }),

@@ -60,6 +60,10 @@ The plugin publishes the node's platform session at `ctx.mpsExecutor`. On load i
 | `cliRunner.logsDirectory` | `logs` inside the workspace root | Directory the runner keeps one raw log per attempt under |
 | `cliRunner.dshHome` | inherited | `DSH_HOME` the run uses, so a node's profile directory stays its own |
 | `cliRunner.jsonEvents` | `false` | Ask the run for its event stream, so each turn and tool call reaches the platform and the node learns the session to report |
+| `agentProvider` | the profile's own | Provider route a node's agent runs start on, such as `deepseek-official`; stated with `agentModel`, it gives every task on this node its own default |
+| `agentModel` | the profile's own | Model id those runs start on, such as `deepseek-v4-pro` |
+| `agentBaseURL` | the adapter's own | Messages-compatible endpoint those runs use, when the deployment routes through a gateway |
+| `agentApiKeyEnv` | `DEEPSEEK_API_KEY` | Environment variable the adapter reads the credential from; the key itself is never stated here |
 | `shutdownGraceSeconds` | `60` | How long a stopping node lets running attempts finish before it ends them |
 | `rawLogMaxLines` | `5000` | Lines the operator's copy of a run log keeps; the platform receives every line as it is printed either way |
 | `diskMinGb` | `5` | Free disk space below which the node claims nothing until there is room |

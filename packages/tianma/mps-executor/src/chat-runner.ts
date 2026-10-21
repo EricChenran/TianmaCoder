@@ -18,6 +18,7 @@ import { RUNNER_STOP_GRACE_MS, readRunEvent, runFailureSummary, runProcess, writ
 import type { RunOutcome } from './cli-runner.ts'
 import type { RunLine } from './cli-runner.ts'
 import { toError } from './report.ts'
+import { writeAgentPatch } from './agent-patch.ts'
 import type { TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
 
 /** How long the answer may be, in characters; the group it goes back to is a chat. */
@@ -38,6 +39,12 @@ export interface ChatRunnerOptions {
    * carries the reply; without it the run's stdout is the reply.
    */
   jsonEvents?: boolean | undefined
+  /**
+   * Overlay the deployment's model choice resolves to, passed as `--patch` before the
+   * prompt so an answer runs on the same model the node's coding tasks do. Absent when
+   * the deployment states nothing.
+   */
+  agentPatch?: string | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
 }
@@ -56,6 +63,9 @@ export function chatAnswerRunner(options: ChatRunnerOptions): TaskRunner {
   const stopGraceMs = options.stopGraceMs ?? RUNNER_STOP_GRACE_MS
   const now = options.now ?? (() => new Date())
   const jsonEvents = options.jsonEvents === true
+  const patchPath = options.agentPatch === undefined
+    ? undefined
+    : writeAgentPatch(options.logsDirectory, options.agentPatch)
 
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
@@ -83,7 +93,12 @@ export function chatAnswerRunner(options: ChatRunnerOptions): TaskRunner {
         }])
         const outcome = await runProcess({
           bin,
-          args: [...prefix, ...(jsonEvents ? ['--json'] : []), answerPrompt(answer)],
+          args: [
+            ...prefix,
+            ...(patchPath === undefined ? [] : ['--patch', patchPath]),
+            ...(jsonEvents ? ['--json'] : []),
+            answerPrompt(answer),
+          ],
           directory,
           env: options.env,
           signal: context.signal,

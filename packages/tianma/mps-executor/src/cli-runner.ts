@@ -21,6 +21,7 @@ import { EVIDENCE_DIRECTORY, collectEvidence } from './evidence.ts'
 import type { CollectedEvidence, EvidenceCommandOutcome } from './evidence.ts'
 import { toError } from './report.ts'
 import { FAILURE_CODES } from './failures.ts'
+import { writeAgentPatch } from './agent-patch.ts'
 import type { ExecLogLine, ExecResultError } from '@tianma/dsh-mps-exec-core'
 import type { PublishedChanges, TaskRunContext, TaskRunResult, TaskRunner } from './runner.ts'
 import { fetchMaterials } from './materials.ts'
@@ -74,6 +75,13 @@ export interface CliRunnerOptions {
    * alone. It needs a CLI that has the flag, so a deployment states it.
    */
   jsonEvents?: boolean | undefined
+  /**
+   * Overlay the deployment's model choice resolves to, written beside the raw logs and
+   * passed as `--patch` before the run's own arguments. The launcher applies it after the
+   * profile layer, so this node's choice holds whatever the shared home selected.
+   * Absent when the deployment states nothing and the profile's default stands.
+   */
+  agentPatch?: string | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
 }
@@ -98,6 +106,11 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
   const stopGraceMs = options.stopGraceMs ?? RUNNER_STOP_GRACE_MS
   const now = options.now ?? (() => new Date())
   const jsonEvents = options.jsonEvents === true
+  // Written once, where the run's raw log also goes: a node's own file, outside every
+  // workspace, so it is never part of what the attempt delivers.
+  const patchPath = options.agentPatch === undefined
+    ? undefined
+    : writeAgentPatch(options.logsDirectory, options.agentPatch)
 
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
@@ -163,6 +176,9 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         bin,
         args: [
           ...prefix,
+          // The launcher's own flag, so it comes before the app's arguments: the model
+          // this deployment chose, applied over the profile's default.
+          ...(patchPath === undefined ? [] : ['--patch', patchPath]),
           ...(jsonEvents ? ['--json'] : []),
           ...(withSession && session !== undefined ? ['--session-id', session] : []),
           `${instruction}\n\n${TASK_BOOK_POINTER}`,

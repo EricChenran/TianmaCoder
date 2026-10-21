@@ -23,6 +23,10 @@ const FIELDS = [
   { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
   { key: 'slotsTotal', label: 'fieldSlotsTotal' },
   { key: 'networkProxy', label: 'fieldNetworkProxy' },
+  // The node's own default model route: every task on this machine starts on it, while
+  // the credential stays whatever the shared home holds.
+  { key: 'agentProvider', label: 'fieldAgentProvider' },
+  { key: 'agentModel', label: 'fieldAgentModel' },
 ] as const
 
 /**

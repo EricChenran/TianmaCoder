@@ -125,6 +125,8 @@ const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
   nodeName: 'MPS_NODE_NAME',
   nodeHost: 'MPS_NODE_HOST',
   workspaceRoot: 'MPS_NODE_WORKSPACE',
+  agentProvider: 'MPS_AGENT_PROVIDER',
+  agentModel: 'MPS_AGENT_MODEL',
   slotsTotal: 'MPS_NODE_SLOTS',
   networkProxy: 'MPS_NETWORK_PROXY',
   nodeSecret: 'MPS_NODE_SECRET',

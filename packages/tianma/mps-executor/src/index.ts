@@ -10,6 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { tianmaCliRunner } from './cli-runner.ts'
+import { agentModelPatch } from './agent-patch.ts'
 import { probeAgentVersion } from './capabilities.ts'
 import { resourceReader } from './resources.ts'
 import { appendNodeLog } from './node-log.ts'
@@ -72,6 +73,8 @@ export type {
 } from './runner.ts'
 export { GIT_DIAGNOSTIC_MAX_CHARS, GIT_PATH_ARGS, GitError, cliGit } from './git.ts'
 export { FAILURE_CODES, AttemptRefusal, attemptFailure } from './failures.ts'
+export { AGENT_PATCH_FILENAME, agentModelPatch, writeAgentPatch } from './agent-patch.ts'
+export type { AgentModelChoice } from './agent-patch.ts'
 export type { AttemptFailure, AttemptRefusalOptions } from './failures.ts'
 export type { GitOutput, GitRunner } from './git.ts'
 export { checkoutAllocator, prepareCheckout } from './checkout.ts'
@@ -242,6 +245,7 @@ export function apply(ctx: Context, config: Config): void {
     logsDirectory: settings.cliRunner.logsDirectory,
     env: agentRunEnv(settings.cliRunner.dshHome),
     jsonEvents: settings.cliRunner.jsonEvents,
+    agentPatch: agentModelPatch(settings.agent),
   })
   const runtime = new MpsExecutorRuntime({
     settings,

@@ -340,6 +340,7 @@ describe('the deployment parameters the Settings form owns', () => {
     const path = join(directory, 'echo-env.mjs')
     writeFileSync(path, [
       "console.log(`host=${process.env.MPS_PLATFORM_HOST ?? '-'} port=${process.env.MPS_PLATFORM_PORT ?? '-'}`)",
+      "console.log(`provider=${process.env.MPS_AGENT_PROVIDER ?? '-'} model=${process.env.MPS_AGENT_MODEL ?? '-'}`)",
       'setInterval(() => {}, 250)',
       '',
     ].join('\n'))
@@ -347,12 +348,20 @@ describe('the deployment parameters the Settings form owns', () => {
     contexts.push(ctx)
     await ctx.plugin(MpsNodeControlService, { entry: path, loaders: [] })
 
-    await ctx.mpsNodeControl.saveConfig({ platformHost: 'mps.example.com', platformPort: '8791' })
+    await ctx.mpsNodeControl.saveConfig({
+      platformHost: 'mps.example.com',
+      platformPort: '8791',
+      agentProvider: 'deepseek-official',
+      agentModel: 'deepseek-v4-pro',
+    })
     await ctx.mpsNodeControl.start()
     await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
 
     const lines = await ctx.mpsNodeControl.logs()
     expect(lines[0]?.text).toBe('host=mps.example.com port=8791')
+    // The model route a deployment saves reaches the node the same way, so every task it
+    // runs starts on it instead of the profile's default.
+    expect(lines[1]?.text).toBe('provider=deepseek-official model=deepseek-v4-pro')
     // The parameters this test wrote live under the isolated home, removed with it.
     expect(existsSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'))).toBe(true)
     await ctx.mpsNodeControl.stop()
