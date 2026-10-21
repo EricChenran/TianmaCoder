@@ -123,7 +123,7 @@
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
       config:
-        externalSessionScanMs: 2000
+        externalSessionScanMs: 5000
 
     # One background job's observation record streamed over Typert Remote;
     # the roster rides the session control stream above.
