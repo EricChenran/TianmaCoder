@@ -15,6 +15,9 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+// Type-only: the session catalog the model selector reads, so the deployment form offers
+// the same routes instead of asking for text.
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@tianma/dsh-mps-node-control/remote'
 import { MpsNodeSection } from './NodeSection.tsx'
 import { en, zh, type MpsNodeKey } from './locales.ts'
@@ -28,7 +31,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Services required by the node surface. */
-export const inject = ['slots', 'locale', 'remote', 'remote.mpsNodeControl']
+export const inject = ['slots', 'locale', 'remote', 'remote.mpsNodeControl', 'remote.session']
 
 /**
  * Register the execution-node settings page.
@@ -87,6 +90,15 @@ export function apply(ctx: Context): void {
       getSnapshot: () => snapshot,
       subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     } },
+    async loadModelCatalog() {
+      const response = await ctx.remote.session.modelCatalog()
+      if (!response.ok) throw new Error(`${response.error.code}: ${response.error.message}`)
+      return response.value.groups.map(group => ({
+        id: group.id,
+        name: group.name,
+        models: group.models.map(model => ({ id: model.id, name: model.name })),
+      }))
+    },
     async start() {
       publish({ busy: true, error: undefined })
       const result = await ctx.remote.mpsNodeControl.start()

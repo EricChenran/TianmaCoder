@@ -4,6 +4,8 @@ import { Button, Checkbox, Input, StateDot, Tag } from '@deepseek-ai/dsh-client-
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MpsNodeConfig, MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
 import type { MpsNodeFormInput, MpsNodeInjected } from './contract.ts'
+import type { NodeRouteChoice } from './model-options.ts'
+import { routeChoices, routeFields, routeLabel, routeValue } from './model-options.ts'
 import type { MpsNodeKey } from './locales.ts'
 import css from './Node.module.css'
 
@@ -23,18 +25,60 @@ const FIELDS = [
   { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
   { key: 'slotsTotal', label: 'fieldSlotsTotal' },
   { key: 'networkProxy', label: 'fieldNetworkProxy' },
-  // The node's own default model route: every task on this machine starts on it, while
-  // the credential stays whatever the shared home holds.
-  { key: 'agentProvider', label: 'fieldAgentProvider' },
-  { key: 'agentModel', label: 'fieldAgentModel' },
 ] as const
+
+/**
+ * The route select: one list of provider/model rows, grouped by provider, taken from the
+ * same catalog Settings → Models shows. One deployment states one route for the whole node,
+ * so a pick can never be half a pair, and the profile's own default stays the empty choice.
+ * @param props - the stored pair, the catalog, the copy, and the pick's handler.
+ * @returns the labelled select.
+ */
+function AgentRouteField({ provider, model, catalog, catalogError, choose, t }: {
+  provider: string
+  model: string
+  catalog: readonly NodeRouteChoice[] | undefined
+  catalogError: string | undefined
+  choose: (fields: { agentProvider: string; agentModel: string }) => void
+  t: (key: MpsNodeKey, params?: Record<string, string>) => string
+}) {
+  const value = routeValue(provider, model)
+  const known = catalog?.some(choice => choice.value === value) ?? false
+  const groups = new Map<string, NodeRouteChoice[]>()
+  for (const choice of catalog ?? []) groups.set(choice.group, [...groups.get(choice.group) ?? [], choice])
+  return <label className={css.field}>
+    <span className={css.fieldLabel}>{t('fieldAgentRoute')}</span>
+    <div className={css.fieldRow}>
+      <select
+        className={css.select}
+        value={value}
+        disabled={catalog === undefined && catalogError === undefined}
+        onChange={(event) => { choose(routeFields(event.target.value)) }}
+      >
+        <option value=''>{t('agentRouteDefault')}</option>
+        {/* A saved route the catalog no longer lists stays visible rather than being
+            silently cleared by the next save of an unrelated field. */}
+        {value !== '' && !known && <option value={value}>{value}</option>}
+        {[...groups].map(([group, choices]) => <optgroup key={group} label={group}>
+          {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+        </optgroup>)}
+      </select>
+    </div>
+    {catalogError !== undefined
+      ? <span className={css.error} role='alert'>{t('agentRouteFailed', { message: catalogError })}</span>
+      : catalog === undefined ? <span className={css.fieldLabel}>{t('agentRouteLoading')}</span> : undefined}
+  </label>
+}
 
 /**
  * @param props - localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
 export function MpsNodeSection(
-  { useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse, cancelTask, taskCommand, openSession, t }: MpsNodeSectionProps,
+  {
+    useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse,
+    cancelTask, taskCommand, openSession, loadModelCatalog, t,
+  }: MpsNodeSectionProps,
 ) {
   const node = useMpsNode(state => state)
   const phase = node.status?.phase
@@ -50,12 +94,29 @@ export function MpsNodeSection(
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<MpsNodeFormInput>({})
   const [finish, setFinish] = useState<Record<string, string>>({})
+  // The route list is read when the form opens, from the same catalog the session model
+  // selector lists, so the deployment chooses a route instead of typing one.
+  const [catalog, setCatalog] = useState<NodeRouteChoice[] | undefined>(undefined)
+  const [catalogError, setCatalogError] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (!editing || catalog !== undefined) return
+    let live = true
+    void loadModelCatalog().then(
+      (groups) => { if (live) setCatalog(routeChoices(groups)) },
+      (error: unknown) => { if (live) setCatalogError(error instanceof Error ? error.message : String(error)) },
+    )
+    return () => { live = false }
+  }, [editing, catalog, loadModelCatalog])
   const beginEdit = (): void => {
     const saved: MpsNodeFormInput = {}
     for (const field of FIELDS) {
       const value = config?.saved[field.key]
       if (value !== undefined) saved[field.key] = String(value)
     }
+    // The route is one select over two stored fields, so it is seeded here rather than by
+    // the field loop above.
+    if (config?.saved.agentProvider !== undefined) saved.agentProvider = config.saved.agentProvider
+    if (config?.saved.agentModel !== undefined) saved.agentModel = config.saved.agentModel
     setForm(saved)
     setEditing(true)
   }
@@ -120,6 +181,14 @@ export function MpsNodeSection(
                 >{t('browse')}</Button>}
               </div>
             </label>)}
+            <AgentRouteField
+              provider={form.agentProvider ?? ''}
+              model={form.agentModel ?? ''}
+              catalog={catalog}
+              catalogError={catalogError}
+              choose={(fields) => { setForm({ ...form, ...fields }) }}
+              t={t}
+            />
             <label className={css.field}>
               <span className={css.fieldLabel}>{t('fieldNodeSecret')}</span>
               <div className={css.fieldRow}>
@@ -154,6 +223,7 @@ export function MpsNodeSection(
               label={t(field.label)}
               value={effectiveLabel(config.effective[field.key], t)}
             />)}
+            <Row label={t('fieldAgentRoute')} value={routeLabel(config.effective.agentProvider.value, config.effective.agentModel.value, t('agentRouteDefault'))} />
             <Row label={t('fieldNodeSecret')} value={secretPlaceholder(config.secretSet, t)} />
             <div className={css.actions}>
               <Button variant="outline" onClick={beginEdit}>{t('configEdit')}</Button>

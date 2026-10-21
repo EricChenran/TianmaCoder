@@ -58,6 +58,8 @@ const CONFIG = {
 async function surface(options: {
   status?: () => Promise<unknown>
   logs?: () => Promise<unknown>
+  /** The session model catalog the deployment form lists routes from. */
+  modelCatalog?: () => Promise<unknown>
   start?: () => Promise<unknown>
   stop?: () => Promise<unknown>
   config?: () => Promise<unknown>
@@ -69,6 +71,9 @@ async function surface(options: {
   const ctx = new Context()
   const registered: Registered[] = []
   const remote = {
+    session: {
+      modelCatalog: options.modelCatalog ?? (() => Promise.resolve({ ok: true, value: { groups: [] } })),
+    },
     mpsNodeControl: {
       status: options.status ?? (() => Promise.resolve({ ok: true, value: RUNNING })),
       logs: options.logs ?? (() => Promise.resolve({ ok: true, value: [LINE] })),
@@ -90,6 +95,7 @@ async function surface(options: {
     bind: () => (key: MpsNodeKey) => zh[key],
   } as never)
   ctx.provide('remote', remote as never)
+  ctx.provide('remote.session', remote.session as never)
   ctx.provide('remote.mpsNodeControl', remote.mpsNodeControl as never)
 
   await ctx.plugin({ inject: [...inject], apply }).await()
@@ -109,6 +115,42 @@ describe('the node apply owns the Settings section', () => {
     expect(registered[0]?.options.locale).toBe('settings.mpsNode')
     expect(registered[0]?.options.label?.()).toBe(zh['nav'])
     expect(registered[0]?.component).toBeTypeOf('function')
+  })
+
+  it('lists the model routes the session selector offers', async () => {
+    const { operations } = await surface({
+      modelCatalog: () => Promise.resolve({
+        ok: true,
+        value: {
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash' }],
+          }],
+        },
+      }),
+    })
+
+    const load = operations().loadModelCatalog as () => Promise<unknown>
+
+    // The deployment form chooses from the platform's own catalog rather than from text,
+    // so this is the shape the select is built from.
+    await expect(load()).resolves.toEqual([
+      { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash' }] },
+    ])
+  })
+
+  it('reports a catalog the Host refuses, so the form can say so', async () => {
+    const { operations } = await surface({
+      modelCatalog: () => Promise.resolve({
+        ok: false,
+        error: { code: 'catalog/failed', message: 'no session controller' },
+      }),
+    })
+
+    const load = operations().loadModelCatalog as () => Promise<unknown>
+
+    await expect(load()).rejects.toThrow(/catalog\/failed: no session controller/u)
   })
 
   it('fills the observed snapshot from the first read', async () => {

@@ -7,6 +7,7 @@
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MpsNodeConfig, MpsNodeForm, MpsNodeLogLine, MpsNodeProbeResult, MpsNodeStatus, MpsNodeTaskView } from '@tianma/dsh-mps-node-control/types'
+import type { NodeModelGroup } from './model-options.ts'
 
 /** The form's own shape: one text field per deployment parameter. */
 export type MpsNodeFormInput = MpsNodeForm
@@ -72,4 +73,9 @@ export interface MpsNodeInjected {
   taskCommand: (command: { action: 'takeover' | 'complete'; task_id: string; summary?: string }) => Promise<void>
   /** Open one of the node's task sessions in the workspace UI, when it is composed. */
   openSession: (sessionId: string) => void
+  /**
+   * Read the providers and models the platform offers, from the same catalog the session
+   * model selector lists, so the deployment form chooses from them instead of stating text.
+   */
+  loadModelCatalog: () => Promise<NodeModelGroup[]>
 }

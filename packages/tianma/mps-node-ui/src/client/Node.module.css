@@ -36,6 +36,16 @@
   flex-wrap: wrap;
 }
 
+.select {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--dsh-color-border, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+}
+
 .notice {
   opacity: 0.7;
   margin: 0;
