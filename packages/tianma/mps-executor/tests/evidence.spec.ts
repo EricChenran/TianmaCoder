@@ -267,7 +267,7 @@ describe('collecting evidence', () => {
     })
   })
 
-  it('refuses a screenshot under the size the platform accepts', async () => {
+  it('accepts a screenshot of any size', async () => {
     const directory = temporary('mps-evidence-')
     mkdirSync(join(directory, SCREENSHOTS_DIRECTORY), { recursive: true })
     writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'small.png'), 'PNG-ish bytes\n', 'utf8')
@@ -281,8 +281,45 @@ describe('collecting evidence', () => {
       run: async () => ({ exit_code: 0, output: '' }),
     })
 
-    expect(collected.failure?.what).toBe('screenshots')
-    expect(collected.failure?.message).toContain('under the 800x600 the platform accepts')
+    // The gate judges parsability and solid color, not size: a narrow capture counts.
+    expect(collected.failure).toBeUndefined()
+    expect(collected.screenshots).toHaveLength(1)
+  })
+
+  it('collects screenshots when only min_screenshots states them', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, SCREENSHOTS_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'shot.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify([
+      { file: join(SCREENSHOTS_DIRECTORY, 'shot.png'), route: '/' },
+    ]), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: false, min_screenshots: 1 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toBeUndefined()
+    expect(collected.screenshots).toHaveLength(1)
+  })
+
+  it('accepts a manifest that wraps its screenshots in an object', async () => {
+    const directory = temporary('mps-evidence-')
+    mkdirSync(join(directory, SCREENSHOTS_DIRECTORY), { recursive: true })
+    writeFileSync(join(directory, SCREENSHOTS_DIRECTORY, 'wrapped.png'), 'PNG-ish bytes\n', 'utf8')
+    writeFileSync(join(directory, SCREENSHOT_MANIFEST), JSON.stringify({
+      screenshots: [{ file: join(SCREENSHOTS_DIRECTORY, 'wrapped.png'), route: '/' }],
+    }), 'utf8')
+
+    const collected = await collectEvidence({
+      directory,
+      payload: { deliverables: { require_screenshots: true, min_screenshots: 1 } },
+      run: async () => ({ exit_code: 0, output: '' }),
+    })
+
+    expect(collected.failure).toBeUndefined()
+    expect(collected.screenshots).toHaveLength(1)
   })
 
   it('refuses a declared screenshot the attempt did not write', async () => {

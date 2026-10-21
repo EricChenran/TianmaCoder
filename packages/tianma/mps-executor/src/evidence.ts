@@ -25,12 +25,6 @@ export const SCREENSHOTS_DIRECTORY = join(EVIDENCE_DIRECTORY, 'screenshots')
 /** File the attempt declares its screenshots in, relative to the workspace. */
 export const SCREENSHOT_MANIFEST = join(EVIDENCE_DIRECTORY, 'screenshots.json')
 
-/** Smallest width the platform accepts for a screenshot. */
-export const SCREENSHOT_MIN_WIDTH = 800
-
-/** Smallest height the platform accepts for a screenshot. */
-export const SCREENSHOT_MIN_HEIGHT = 600
-
 /** One command the node ran for evidence. */
 export interface EvidenceCommand {
   /** Command line the payload stated. */
@@ -162,7 +156,10 @@ export async function collectEvidence(options: CollectEvidenceOptions): Promise<
     }
     collected.report_path = stated
   }
-  if (deliverables['require_screenshots'] === true) {
+  // The gate demands screenshots whenever min_screenshots > 0 and the change hits the
+  // frontend rules, so the node collects on either signal: collecting only on the
+  // explicit flag lets a payload through whose gate then counts zero screenshots.
+  if (deliverables['require_screenshots'] === true || count(deliverables['min_screenshots']) !== undefined) {
     const screenshots = await readScreenshots(options.directory, deliverables)
     if ('failure' in screenshots) return { ...collected, failure: screenshots.failure }
     collected.screenshots = screenshots.screenshots
@@ -190,7 +187,13 @@ async function readScreenshots(
     // No manifest is the same answer as no screenshots: the attempt declared none.
     declared = undefined
   }
-  const entries = Array.isArray(declared) ? declared : []
+  // The task book says "declare each screenshot", and attempts have written both a bare
+  // array and a { "screenshots": [...] } wrapper; both are accepted here.
+  const entries = Array.isArray(declared)
+    ? declared
+    : Array.isArray(record(declared)['screenshots'])
+      ? (record(declared)['screenshots'] as unknown[])
+      : []
   if (entries.length < minimum) {
     return {
       failure: {
@@ -214,14 +217,8 @@ async function readScreenshots(
     }
     const width = count(stated['width'])
     const height = count(stated['height'])
-    if (width !== undefined && height !== undefined && (width < SCREENSHOT_MIN_WIDTH || height < SCREENSHOT_MIN_HEIGHT)) {
-      return {
-        failure: {
-          what: 'screenshots',
-          message: `${file} is ${String(width)}x${String(height)}, under the ${String(SCREENSHOT_MIN_WIDTH)}x${String(SCREENSHOT_MIN_HEIGHT)} the platform accepts`,
-        },
-      }
-    }
+    // No size floor: the platform's gate judges a screenshot by being parsable and not a
+    // solid color, so a narrow mobile capture counts too.
     // The manifest is written by the attempt, so its file names get the same cleaning a
     // report name does before they name a file the node reads.
     const cleaned = cleanStatedPath(file)

@@ -109,8 +109,6 @@ export {
   EVIDENCE_DIRECTORY,
   SCREENSHOT_MANIFEST,
   SCREENSHOTS_DIRECTORY,
-  SCREENSHOT_MIN_HEIGHT,
-  SCREENSHOT_MIN_WIDTH,
   collectEvidence,
 } from './evidence.ts'
 export { cleanStatedPath, sanitizeFilename } from './filenames.ts'
