@@ -614,6 +614,26 @@ interface RunRequest {
 }
 
 /**
+ * Decode one line a command printed. A tool's own output is UTF-8; a message the host
+ * shell localized (cmd.exe prints `找不到指定的文件` on a zh-CN host) is in the OEM code
+ * page, so a line that is not valid UTF-8 is GBK and decodes as that.
+ * @param bytes - the line, without its newline.
+ * @returns the line as text, as close as this build can read it.
+ */
+export function decodeCommandLine(bytes: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    try {
+      return new TextDecoder('gbk').decode(bytes)
+    } catch {
+      // A small-ICU build knows no GBK; the lossy UTF-8 reading stands.
+      return bytes.toString('utf8')
+    }
+  }
+}
+
+/**
  * Run the command once and stream what it prints.
  * @param request - the command, its directory, and where its lines go.
  * @returns how the run settled.
@@ -643,18 +663,19 @@ export async function runProcess(request: RunRequest): Promise<RunOutcome> {
       }
     }
 
-    const buffers = { stdout: '', stderr: '' }
+    // Lines split on the newline byte before decoding: 0x0a never occurs inside a
+    // multi-byte UTF-8 or GBK sequence, so a sequence split across chunks still decodes.
+    const buffers = { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) }
     for (const stream of ['stdout', 'stderr'] as const) {
-      pipes[stream].setEncoding('utf8')
-      pipes[stream].on('data', (chunk: string) => {
-        const text = buffers[stream] + chunk
-        const cut = text.lastIndexOf('\n')
+      pipes[stream].on('data', (chunk: Buffer) => {
+        const text = Buffer.concat([buffers[stream], chunk])
+        const cut = text.lastIndexOf(0x0a)
         if (cut === -1) {
           buffers[stream] = text
           return
         }
-        buffers[stream] = text.slice(cut + 1)
-        flush(stream, text.slice(0, cut + 1))
+        buffers[stream] = text.subarray(cut + 1)
+        flush(stream, decodeCommandLine(text.subarray(0, cut)))
       })
     }
 
@@ -671,7 +692,7 @@ export async function runProcess(request: RunRequest): Promise<RunOutcome> {
       resolve({ kind: 'exited', code: null, spawnError: error })
     })
     child.on('close', (code: number | null) => {
-      for (const stream of ['stdout', 'stderr'] as const) flush(stream, buffers[stream])
+      for (const stream of ['stdout', 'stderr'] as const) flush(stream, decodeCommandLine(buffers[stream]))
       void Promise.all(pending).then(() => {
         resolve({ kind: stopped ? 'stopped' : 'exited', code })
       }, reject)

@@ -92,6 +92,7 @@ export {
   stopPlan,
   exitCodeOf,
   readRunEvent,
+  decodeCommandLine,
   sessionAdoptionFailure,
   runFailureSummary,
   shellFor,

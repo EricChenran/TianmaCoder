@@ -10,6 +10,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, afterEach } from 'vitest'
 import {
+  AGENT_PATCH_FILENAME,
+  decodeCommandLine,
   exitCodeOf,
   readRunEvent,
   sessionAdoptionFailure,
@@ -568,6 +570,33 @@ describe('the CLI runner', () => {
     expect(result.error).toBeUndefined()
   })
 
+  it('starts the run on the model the deployment chose', async () => {
+    const workspace = temporary('mps-run-')
+    const logs = temporary('mps-logs-')
+    const context = new RecordingContext(workspace, assignment())
+    const patch = [
+      '- id: agent-default-model',
+      '  config:',
+      '    provider: "deepseek-official"',
+      '    model: "deepseek-v4-pro"',
+      '',
+    ].join('\n')
+
+    const result = await tianmaCliRunner({
+      command: [process.execPath, FIXTURE, 'ok'],
+      logsDirectory: logs,
+      agentPatch: patch,
+      now: () => new Date('2026-10-15T04:03:55.123Z'),
+    }).run(context)
+
+    expect(result.outcome).toBe('success')
+    // The overlay sits beside the raw logs, outside the workspace the attempt delivers,
+    // and the launcher's own flag carries it ahead of the app's arguments.
+    const overlay = join(logs, AGENT_PATCH_FILENAME)
+    expect(readFileSync(overlay, 'utf8')).toBe(patch)
+    expect(reported(context)).toContain(`stdout:args=ok --patch ${overlay} ${INSTRUCTION}`)
+  })
+
   it('stops a run when the node cancels the attempt', async () => {
     const workspace = temporary('mps-run-')
     const logs = temporary('mps-logs-')
@@ -698,6 +727,17 @@ describe('the CLI runner', () => {
       args: ['/d', '/s', '/c', 'npm run build'],
     })
     expect(shellFor('npm run build', 'linux')).toEqual({ bin: '/bin/sh', args: ['-c', 'npm run build'] })
+  })
+
+  it('decodes a command line as UTF-8, falling back to the GBK a localized shell prints', () => {
+    expect(decodeCommandLine(Buffer.from('npm run build', 'utf8'))).toBe('npm run build')
+    expect(decodeCommandLine(Buffer.from('构建完成', 'utf8'))).toBe('构建完成')
+    // `系统找不到指定的文件。` in GBK, the bytes cmd.exe writes on a zh-CN host.
+    const gbk = [
+      0xcf, 0xb5, 0xcd, 0xb3, 0xd5, 0xd2, 0xb2, 0xbb, 0xb5, 0xbd, 0xd6, 0xb8,
+      0xb6, 0xa8, 0xb5, 0xc4, 0xce, 0xc4, 0xbc, 0xfe, 0xa1, 0xa3,
+    ]
+    expect(decodeCommandLine(Buffer.from(gbk))).toBe('系统找不到指定的文件。')
   })
 
   it('reports an exit code even when a command left none', () => {
