@@ -72,7 +72,7 @@ describe('the profile bundle patch a deployment runs', () => {
     expect(patch).toContain('platformPort: !!js Number(process.env.MPS_PLATFORM_PORT ?? 8791)')
     expect(patch).toContain("platformScheme: !!js process.env.MPS_PLATFORM_SCHEME ?? 'http'")
     expect(patch).toContain("platformBasePath: !!js process.env.MPS_PLATFORM_BASE_PATH ?? '/exec/v1'")
-    expect(patch).toContain('autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)')
+    expect(patch).toContain('autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST || process.env.MPS_JOIN)')
   })
 
   it('names every environment variable a deployment is expected to state', () => {
@@ -81,6 +81,7 @@ describe('the profile bundle patch a deployment runs', () => {
       'MPS_AGENT_VERSION',
       'MPS_DSH_BIN',
       'MPS_DSH_HOME',
+      'MPS_JOIN',
       'MPS_NODE_HOST',
       'MPS_NODE_ID',
       'MPS_NODE_NAME',

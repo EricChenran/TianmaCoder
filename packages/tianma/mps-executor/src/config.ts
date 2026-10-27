@@ -16,6 +16,7 @@ import type { AgentModelChoice } from './agent-patch.ts'
 import {
   DEFAULT_PLATFORM_BASE_PATH,
   DEFAULT_PLATFORM_PORT,
+  platformEndpointFromUrl,
   resolvePlatformEndpoint,
   WORK_KIND_CHAT_ANSWER,
   WORK_KIND_CODING,
@@ -436,6 +437,7 @@ export const EXECUTOR_ENV = {
   workspaceRoot: 'MPS_NODE_WORKSPACE',
   opsDir: 'MPS_NODE_OPS_DIR',
   secret: 'MPS_NODE_SECRET',
+  join: 'MPS_JOIN',
   dshBin: 'MPS_DSH_BIN',
   dshHome: 'MPS_DSH_HOME',
   agentVersion: 'MPS_AGENT_VERSION',
@@ -445,21 +447,118 @@ export const EXECUTOR_ENV = {
   agentApiKeyEnv: 'MPS_AGENT_API_KEY_ENV',
 } as const
 
+/** One join string the platform minted, parsed into the parts the node configures from. */
+export interface ParsedJoinString {
+  /** Platform host the URL named. */
+  host: string
+  /** Platform port the URL named. */
+  port: number
+  /** Transport scheme the URL named. */
+  scheme: 'http' | 'https'
+  /** Path prefix the URL named. */
+  basePath: string
+  /** Node id the fragment carried. */
+  nodeId: string
+  /** Pre-shared secret the fragment carried. */
+  secret: string
+}
+
+/**
+ * Parse one join string — the single line the platform's console hands an operator, which
+ * carries the whole communication setup: the address as an `http(s)` URL and the node's
+ * identity in the fragment. The identity rides the fragment on purpose: a fragment is
+ * never sent to a server, so a join string pasted where a URL was expected cannot leak
+ * the secret into any access log.
+ * @param value - the join string, such as `http://192.168.1.10:8791/exec/v1#node=a&secret=b`.
+ * @returns the address parts and the identity.
+ * @throws TypeError naming which part is missing or unusable, so an operator can fix the
+ * paste rather than puzzle over a generic format error.
+ */
+export function parseJoinString(value: string): ParsedJoinString {
+  const text = value.trim()
+  const hash = text.indexOf('#')
+  if (hash < 0) {
+    throw new TypeError('the join string carries no "#" fragment: expected node=<id>&secret=<secret> after the platform address')
+  }
+  let address: ReturnType<typeof platformEndpointFromUrl>
+  try {
+    address = platformEndpointFromUrl(text.slice(0, hash))
+  } catch (error) {
+    throw new TypeError(`the join string's platform address is unusable: ${(error instanceof Error ? error.message : String(error))}`)
+  }
+  const fragment = new URLSearchParams(text.slice(hash + 1))
+  const nodeId = (fragment.get('node') ?? '').trim()
+  if (nodeId === '') {
+    throw new TypeError('the join string carries no node id: expected node=<id> in the "#" fragment')
+  }
+  const secret = (fragment.get('secret') ?? '').trim()
+  if (secret === '') {
+    throw new TypeError('the join string carries no secret: expected secret=<secret> in the "#" fragment')
+  }
+  return {
+    host: address.host,
+    port: address.port ?? DEFAULT_PLATFORM_PORT,
+    scheme: address.scheme ?? 'http',
+    basePath: address.basePath ?? DEFAULT_PLATFORM_BASE_PATH,
+    nodeId,
+    secret,
+  }
+}
+
+/**
+ * Fold a join string from the environment into one plugin configuration: every address
+ * and identity part the join string states fills the field the profile row left at its
+ * placeholder, and a value the environment states outright — the older, single-purpose
+ * variables — wins, because a deployment that states both meant the explicit one.
+ * @param config - the configuration a profile row or an environment stated.
+ * @param environment - the environment to read the join string from; defaults to this process's.
+ * @returns the configuration to resolve; the input itself when no join string is present.
+ */
+export function mergeExecutorJoin(config: Config, environment: NodeJS.ProcessEnv = process.env): Config {
+  const raw = environment[EXECUTOR_ENV.join]
+  if (raw === undefined || raw.trim() === '') return config
+  const join = parseJoinString(raw)
+  const explicit = (name: string): string | undefined => {
+    const value = environment[name]
+    return value === undefined || value.trim() === '' ? undefined : value.trim()
+  }
+  const stated: Config = Object.assign({}, config)
+  if (explicit(EXECUTOR_ENV.platformHost) === undefined) {
+    stated.platformHost = join.host
+    // Each address part is decided on its own: a deployment that stated the port (or the
+    // scheme, or the base path) next to a join string meant that part as stated.
+    if (explicit(EXECUTOR_ENV.platformPort) === undefined) stated.platformPort = join.port
+    if (explicit(EXECUTOR_ENV.platformScheme) === undefined) stated.platformScheme = join.scheme
+    if (explicit(EXECUTOR_ENV.platformBasePath) === undefined) stated.platformBasePath = join.basePath
+  }
+  if (explicit(EXECUTOR_ENV.nodeId) === undefined) stated.nodeId = join.nodeId
+  return stated
+}
+
 /**
  * Read a configuration out of an environment, the way the node profile's row reads it.
  * @param env - the environment to read, defaults to this process's.
  * @returns the configuration to resolve; absent values are left to the resolver's defaults.
  */
 export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
-  // The two the resolver refuses to default, refused here for the same reason: a node that
-  // does not know which platform it belongs to must not resolve an address at all.
-  const host = env[EXECUTOR_ENV.platformHost]?.trim() ?? ''
-  if (host === '') throw new Error(`${EXECUTOR_ENV.platformHost} is required: the node has to be told which platform it belongs to`)
-  const requiredNodeId = env[EXECUTOR_ENV.nodeId]?.trim() ?? ''
-  if (requiredNodeId === '') throw new Error(`${EXECUTOR_ENV.nodeId} is required: the platform identifies this machine by it`)
+  // A join string states the address and the identity in one value, so it satisfies the
+  // two the resolver refuses to default; each older single-purpose variable still wins
+  // over the join string's value, because a deployment that states both meant the
+  // explicit one.
+  const joinRaw = env[EXECUTOR_ENV.join]
+  const join = joinRaw === undefined || joinRaw.trim() === '' ? undefined : parseJoinString(joinRaw)
+  const host = env[EXECUTOR_ENV.platformHost]?.trim() ?? join?.host ?? ''
+  if (host === '') {
+    throw new Error(`${EXECUTOR_ENV.platformHost} or ${EXECUTOR_ENV.join} is required: the node has to be told which platform it belongs to`)
+  }
+  const requiredNodeId = env[EXECUTOR_ENV.nodeId]?.trim() ?? join?.nodeId ?? ''
+  if (requiredNodeId === '') {
+    throw new Error(`${EXECUTOR_ENV.nodeId} or ${EXECUTOR_ENV.join} is required: the platform identifies this machine by it`)
+  }
   const config: Config = { platformHost: host, nodeId: requiredNodeId }
   const port = env[EXECUTOR_ENV.platformPort]
   if (port !== undefined && port !== '') config.platformPort = Number(port)
+  else if (join !== undefined) config.platformPort = join.port
   const scheme = env[EXECUTOR_ENV.platformScheme]
   // The value arrives as text, so this is the boundary that decides whether it is one the node
   // connects with. Skipping anything else silently left the schema to exchange it for its
@@ -469,9 +568,12 @@ export function executorConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Con
       throw new TypeError(`${EXECUTOR_ENV.platformScheme} must be "http" or "https", got ${JSON.stringify(scheme)}`)
     }
     config.platformScheme = scheme
+  } else if (join !== undefined) {
+    config.platformScheme = join.scheme
   }
   const basePath = env[EXECUTOR_ENV.platformBasePath]
   if (basePath !== undefined && basePath !== '') config.platformBasePath = basePath
+  else if (join !== undefined) config.platformBasePath = join.basePath
   const nodeName = env[EXECUTOR_ENV.nodeName]
   if (nodeName !== undefined && nodeName !== '') config.nodeName = nodeName
   const nodeHost = env[EXECUTOR_ENV.nodeHost]
@@ -587,17 +689,22 @@ export function resolveExecutorSettings(config: Config, hostname: string = hostH
 }
 
 /**
- * Read the pre-shared node secret the configured environment variable holds.
+ * Read the pre-shared node secret: the configured environment variable first, then the
+ * fragment of a join string the same environment states. The variable wins because a
+ * deployment that rotated the secret into the variable while an older join string is
+ * still around meant the newer credential.
  * @param config - the validated plugin configuration.
  * @param environment - the environment to read; defaults to the process environment.
  * @returns the secret.
- * @throws Error when the variable is unset or blank, so a node never registers with an empty credential.
+ * @throws Error when neither source holds one, so a node never registers with an empty credential.
  */
 export function readNodeSecret(config: Config, environment: NodeJS.ProcessEnv = process.env): string {
   const name = config.secretEnv === undefined || config.secretEnv.trim() === '' ? DEFAULT_SECRET_ENV : config.secretEnv
   const value = environment[name]
-  if (value === undefined || value.trim() === '') {
-    throw new Error(`executor node secret is missing: set the ${name} environment variable`)
+  if (value !== undefined && value.trim() !== '') return value.trim()
+  const joinRaw = environment[EXECUTOR_ENV.join]
+  if (joinRaw !== undefined && joinRaw.trim() !== '') {
+    return parseJoinString(joinRaw).secret
   }
-  return value.trim()
+  throw new Error(`executor node secret is missing: set the ${name} environment variable or provide a ${EXECUTOR_ENV.join} join string`)
 }

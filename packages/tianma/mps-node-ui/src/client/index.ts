@@ -133,7 +133,7 @@ export function apply(ctx: Context): void {
     async probePlatform(form) {
       publish({ probeBusy: true })
       const result = await ctx.remote.mpsNodeControl.probe(form)
-      publish({ probeBusy: false, probe: result.ok ? result.value : { reachable: false, detail: failure(result.error) } })
+      publish({ probeBusy: false, probe: result.ok ? result.value : { reachable: false, kind: 'unreachable', detail: failure(result.error) } })
     },
     async cancelTask(taskId) {
       publish({ taskBusy: taskId })

@@ -1,11 +1,9 @@
 /** Settings section: the node process this GUI supervises, and what it printed. */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { MpsNodeConfig, MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
+import type { MpsNodeConfigEntry } from '@tianma/dsh-mps-node-control/types'
 import type { MpsNodeFormInput, MpsNodeInjected } from './contract.ts'
-import type { NodeRouteChoice } from './model-options.ts'
-import { routeChoices, routeFields, routeLabel, routeValue } from './model-options.ts'
 import type { MpsNodeKey } from './locales.ts'
 import css from './Node.module.css'
 
@@ -13,71 +11,62 @@ import css from './Node.module.css'
 export type MpsNodeSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.mpsNode'> & InjectFace<MpsNodeInjected>
 
-/** One deployment-parameter field: its storage key and its copy key. */
+/** The local fields the edit form holds beside the join string. */
 const FIELDS = [
-  { key: 'platformHost', label: 'fieldPlatformHost' },
-  { key: 'platformPort', label: 'fieldPlatformPort' },
-  { key: 'platformScheme', label: 'fieldPlatformScheme' },
-  { key: 'platformBasePath', label: 'fieldPlatformBasePath' },
-  { key: 'nodeId', label: 'fieldNodeId' },
-  { key: 'nodeName', label: 'fieldNodeName' },
-  { key: 'nodeHost', label: 'fieldNodeHost' },
   { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
-  { key: 'slotsTotal', label: 'fieldSlotsTotal' },
   { key: 'networkProxy', label: 'fieldNetworkProxy' },
 ] as const
 
+/** The join string as the paste box previews it: what it states, or why it cannot be read. */
+type JoinPreview =
+  | { kind: 'empty' }
+  | { kind: 'ok'; url: string; nodeId: string }
+  | { kind: 'invalid'; message: string }
+
 /**
- * The route select: one list of provider/model rows, grouped by provider, taken from the
- * same catalog Settings → Models shows. One deployment states one route for the whole node,
- * so a pick can never be half a pair, and the profile's own default stays the empty choice.
- * @param props - the stored pair, the catalog, the copy, and the pick's handler.
- * @returns the labelled select.
+ * Read one join string the way the Host's own parser will, so the preview under the
+ * paste box and the save that follows cannot disagree about what a paste means. The
+ * identity rides the fragment on purpose — a fragment never reaches a server.
+ * @param value - what the paste box holds.
+ * @returns the preview.
  */
-function AgentRouteField({ provider, model, catalog, catalogError, choose, t }: {
-  provider: string
-  model: string
-  catalog: readonly NodeRouteChoice[] | undefined
-  catalogError: string | undefined
-  choose: (fields: { agentProvider: string; agentModel: string }) => void
-  t: (key: MpsNodeKey, params?: Record<string, string>) => string
-}) {
-  const value = routeValue(provider, model)
-  const known = catalog?.some(choice => choice.value === value) ?? false
-  const groups = new Map<string, NodeRouteChoice[]>()
-  for (const choice of catalog ?? []) groups.set(choice.group, [...groups.get(choice.group) ?? [], choice])
-  return <label className={css.field}>
-    <span className={css.fieldLabel}>{t('fieldAgentRoute')}</span>
-    <div className={css.fieldRow}>
-      <select
-        className={css.select}
-        value={value}
-        disabled={catalog === undefined && catalogError === undefined}
-        onChange={(event) => { choose(routeFields(event.target.value)) }}
-      >
-        <option value=''>{t('agentRouteDefault')}</option>
-        {/* A saved route the catalog no longer lists stays visible rather than being
-            silently cleared by the next save of an unrelated field. */}
-        {value !== '' && !known && <option value={value}>{value}</option>}
-        {[...groups].map(([group, choices]) => <optgroup key={group} label={group}>
-          {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-        </optgroup>)}
-      </select>
-    </div>
-    {catalogError !== undefined
-      ? <span className={css.error} role='alert'>{t('agentRouteFailed', { message: catalogError })}</span>
-      : catalog === undefined ? <span className={css.fieldLabel}>{t('agentRouteLoading')}</span> : undefined}
-  </label>
+function previewJoin(value: string): JoinPreview {
+  const text = value.trim()
+  if (text === '') return { kind: 'empty' }
+  const hash = text.indexOf('#')
+  if (hash < 0) {
+    return { kind: 'invalid', message: 'it carries no "#" fragment: expected node=<id>&secret=<secret> after the platform address' }
+  }
+  let parsed: URL
+  try {
+    parsed = new URL(text.slice(0, hash))
+  } catch {
+    return { kind: 'invalid', message: 'its platform address is not a usable absolute URL' }
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { kind: 'invalid', message: 'its platform address must be http or https' }
+  }
+  const fragment = new URLSearchParams(text.slice(hash + 1))
+  const nodeId = (fragment.get('node') ?? '').trim()
+  if (nodeId === '') return { kind: 'invalid', message: 'it carries no node id: expected node=<id> after "#"' }
+  if ((fragment.get('secret') ?? '').trim() === '') {
+    return { kind: 'invalid', message: 'it carries no secret: expected secret=<secret> after "#"' }
+  }
+  return {
+    kind: 'ok',
+    url: `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/u, '')}`,
+    nodeId,
+  }
 }
 
 /**
- * @param props - localized copy, the node snapshot, and the node operations.
+ * @param props - the localized copy, the node snapshot, and the node operations.
  * @returns the execution-node settings section.
  */
 export function MpsNodeSection(
   {
     useMpsNode, start, stop, refresh, saveConfig, probePlatform, browse,
-    cancelTask, taskCommand, openSession, loadModelCatalog, t,
+    cancelTask, taskCommand, openSession, t,
   }: MpsNodeSectionProps,
 ) {
   const node = useMpsNode(state => state)
@@ -94,39 +83,57 @@ export function MpsNodeSection(
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState<MpsNodeFormInput>({})
   const [finish, setFinish] = useState<Record<string, string>>({})
-  // The route list is read when the form opens, from the same catalog the session model
-  // selector lists, so the deployment chooses a route instead of typing one.
-  const [catalog, setCatalog] = useState<NodeRouteChoice[] | undefined>(undefined)
-  const [catalogError, setCatalogError] = useState<string | undefined>(undefined)
+  const [restarting, setRestarting] = useState(false)
+  const [savedWhileRunning, setSavedWhileRunning] = useState(false)
+  const pasteBox = useRef<HTMLTextAreaElement>(null)
+  // A refused credential is a journey this page can finish on its own: the banner tells
+  // the operator what happened, and the join area opens with the paste box ready.
+  const credentialTrouble = useMemo(
+    () => node.lines.some(line => line.stream === 'stderr' && /NODE_SECRET_INVALID|NODE_DISABLED/u.test(line.text)),
+    [node.lines],
+  )
   useEffect(() => {
-    if (!editing || catalog !== undefined) return
-    let live = true
-    void loadModelCatalog().then(
-      (groups) => { if (live) setCatalog(routeChoices(groups)) },
-      (error: unknown) => { if (live) setCatalogError(error instanceof Error ? error.message : String(error)) },
-    )
-    return () => { live = false }
-  }, [editing, catalog, loadModelCatalog])
+    if (!credentialTrouble || editing) return
+    setEditing(true)
+  }, [credentialTrouble, editing])
+  // The paste box takes focus whenever the form opens, whichever way it opened.
+  useEffect(() => {
+    if (editing) pasteBox.current?.focus()
+  }, [editing])
+  const joinPreview = previewJoin(form.join ?? '')
   const beginEdit = (): void => {
     const saved: MpsNodeFormInput = {}
     for (const field of FIELDS) {
       const value = config?.saved[field.key]
-      if (value !== undefined) saved[field.key] = String(value)
+      if (value !== undefined) saved[field.key] = value
     }
-    // The route is one select over two stored fields, so it is seeded here rather than by
-    // the field loop above.
-    if (config?.saved.agentProvider !== undefined) saved.agentProvider = config.saved.agentProvider
-    if (config?.saved.agentModel !== undefined) saved.agentModel = config.saved.agentModel
+    // The join box starts empty on purpose: what it would replace is named in its
+    // placeholder, and a paste is the only way to state one.
     setForm(saved)
     setEditing(true)
   }
   const submit = (): void => {
-    void saveConfig(form).then((ok) => { if (ok) setEditing(false) })
+    const wasRunning = running
+    void saveConfig(form).then((ok) => {
+      if (!ok) return
+      setEditing(false)
+      setSavedWhileRunning(wasRunning)
+    })
   }
-  // The probe reads the form as it stands, so an address can be tested before it
-  // is saved; outside editing it reads whatever is in effect.
+  // The probe reads the form as it stands, so a join string can be tested before it
+  // is saved; outside editing it reads whatever is stored.
   const probeNow = (): void => {
-    void probePlatform(editing ? form : savedForm(config))
+    void probePlatform(editing ? form : {})
+  }
+  const restartNow = (): void => {
+    setRestarting(true)
+    void stop().then(() => start()).finally(() => { setRestarting(false); setSavedWhileRunning(false) })
+  }
+  const pasteFromClipboard = (): void => {
+    void navigator.clipboard.readText().then(
+      (text) => { setForm({ ...form, join: text, clearNodeSecret: '' }) },
+      () => pasteBox.current?.focus(),
+    )
   }
   return <div className={css.section}>
     <p className={css.notice}>{t('description')}</p>
@@ -153,9 +160,10 @@ export function MpsNodeSection(
           && <span className={css.error} role="alert">{node.error === '' ? t('startFailed') : node.error}</span>}
       </div>
     </div>
+    {credentialTrouble && <p className={css.error} role="alert">{t('credentialExpired')}</p>}
     <div className={css.group}>
-      <span className={css.groupTitle}>{t('configTitle')}</span>
-      <p className={css.notice}>{t('configDescription')}</p>
+      <span className={css.groupTitle}>{t('joinTitle')}</span>
+      <p className={css.notice}>{t('joinDescription')}</p>
       {config !== undefined && (config.lanAddresses.length > 0
         ? <p className={css.notice}>{t('lanNotice', { addresses: config.lanAddresses.join(', ') })}</p>
         : <p className={css.notice}>{t('lanNone')}</p>)}
@@ -163,6 +171,29 @@ export function MpsNodeSection(
         ? <span className={css.notice}>{t('sourceUnset')}</span>
         : editing
           ? <div className={css.fields}>
+            <label className={css.field}>
+              <span className={css.fieldLabel}>{t('joinTitle')}</span>
+              <div className={css.fieldRow}>
+                <textarea
+                  ref={pasteBox}
+                  className={css.pasteBox}
+                  value={form.join ?? ''}
+                  placeholder={config.joinSet === 'saved' ? t('joinKeepHint') : t('joinPlaceholder')}
+                  onChange={(event) => { setForm({ ...form, join: event.target.value, clearNodeSecret: '' }) }}
+                  rows={2}
+                  spellCheck={false}
+                  autoComplete='off'
+                />
+                <Button variant='outline' onClick={pasteFromClipboard}>{t('joinPaste')}</Button>
+              </div>
+            </label>
+            {joinPreview.kind === 'ok' && <div className={css.summary}>
+              <span>✓ {t('joinParsedUrl')} {joinPreview.url}</span>
+              <span>✓ {t('joinParsedNode')} {joinPreview.nodeId}</span>
+              <span>✓ {t('joinParsedSecret')}</span>
+            </div>}
+            {joinPreview.kind === 'invalid'
+              && <span className={css.error} role='alert'>{t('joinInvalid', { message: joinPreview.message })}</span>}
             {FIELDS.map(field => <label key={field.key} className={css.field}>
               <span className={css.fieldLabel}>{t(field.label)}</span>
               <div className={css.fieldRow}>
@@ -181,33 +212,23 @@ export function MpsNodeSection(
                 >{t('browse')}</Button>}
               </div>
             </label>)}
-            <AgentRouteField
-              provider={form.agentProvider ?? ''}
-              model={form.agentModel ?? ''}
-              catalog={catalog}
-              catalogError={catalogError}
-              choose={(fields) => { setForm({ ...form, ...fields }) }}
-              t={t}
-            />
-            <label className={css.field}>
+            {config.secretSet === 'saved' && config.joinSet === 'unset' && <label className={css.field}>
               <span className={css.fieldLabel}>{t('fieldNodeSecret')}</span>
               <div className={css.fieldRow}>
                 <Input
                   type='password'
                   value={form.nodeSecret ?? ''}
-                  placeholder={secretPlaceholder(config.secretSet, t)}
+                  placeholder={t('secretKeepHint')}
                   onChange={(event) => { setForm({ ...form, nodeSecret: event.target.value, clearNodeSecret: '' }) }}
                   autoComplete='new-password'
                 />
               </div>
-              {config.secretSet === 'saved'
-                ? <Checkbox
-                  checked={form.clearNodeSecret === 'true'}
-                  label={t('secretClear')}
-                  onChange={(next) => { setForm({ ...form, clearNodeSecret: next ? 'true' : '' }) }}
-                />
-                : <span className={css.fieldLabel}>{t('secretKeepHint')}</span>}
-            </label>
+              <Checkbox
+                checked={form.clearNodeSecret === 'true'}
+                label={t('secretClear')}
+                onChange={(next) => { setForm({ ...form, clearNodeSecret: next ? 'true' : '' }) }}
+              />
+            </label>}
             <div className={css.actions}>
               <Button variant="primary" onClick={submit} disabled={node.configBusy}>
                 {node.configBusy ? t('configSaving') : t('configSave')}
@@ -218,13 +239,12 @@ export function MpsNodeSection(
             </div>
           </div>
           : <>
-            {FIELDS.map(field => <Row
-              key={field.key}
-              label={t(field.label)}
-              value={effectiveLabel(config.effective[field.key], t)}
-            />)}
-            <Row label={t('fieldAgentRoute')} value={routeLabel(config.effective.agentProvider.value, config.effective.agentModel.value, t('agentRouteDefault'))} />
-            <Row label={t('fieldNodeSecret')} value={secretPlaceholder(config.secretSet, t)} />
+            {config.joinSummary === undefined
+              ? <span className={css.notice}>{t('joinSteps')}</span>
+              : <span className={css.notice}>{t('joinStored', {
+                node: config.joinSummary.nodeId,
+                url: config.joinSummary.url,
+              })} · {sourceOf(config.joinSet, t)}</span>}
             <div className={css.actions}>
               <Button variant="outline" onClick={beginEdit}>{t('configEdit')}</Button>
               {node.configSaved && <span className={css.notice}>{t('configSaved')}</span>}
@@ -240,10 +260,31 @@ export function MpsNodeSection(
           ? <span className={css.notice} role="status">
             {t('probeOk')} — {node.probe.detail}
           </span>
-          : <span className={css.error} role="status">{t('probeUnreachable')} — {node.probe.detail}</span>)}
+          : <span className={css.error} role="status">{t('probeUnreachable')} — {node.probe.detail} · {probeKindNote(node.probe.kind, t)}</span>)}
       </div>
-      <p className={css.notice}>{t('configSecretNote')}</p>
     </div>
+    <div className={css.group}>
+      <span className={css.groupTitle}>{t('policyTitle')}</span>
+      <p className={css.notice}>{t('policyDescription')}</p>
+      {config === undefined || (config.platformPolicy.slotsTotal === undefined && config.platformPolicy.lanes === undefined) ? (
+        <span className={css.notice}>{t('policyNone')}</span>
+      ) : <div className={css.fields}>
+        {config.platformPolicy.slotsTotal !== undefined
+          && <Row label={t('policySlots')} value={String(config.platformPolicy.slotsTotal)} />}
+        {config.platformPolicy.lanes !== undefined
+          && <Row label={t('policyLanes')} value={config.platformPolicy.lanes.join(', ') || t('unknown')} />}
+        {config.platformPolicy.agentProvider !== undefined && config.platformPolicy.agentModel !== undefined
+          && <Row label={t('policyAgent')} value={`${config.platformPolicy.agentProvider}/${config.platformPolicy.agentModel}`} />}
+        {config.platformPolicy.configRevision !== undefined
+          && <Row label={t('policyRevision')} value={`r${String(config.platformPolicy.configRevision)}`} />}
+      </div>}
+    </div>
+    {savedWhileRunning && !editing && <div className={css.actions}>
+      <span className={css.notice}>{t('restartNotice')}</span>
+      <Button variant="primary" onClick={restartNow} disabled={node.busy || restarting}>
+        {restarting ? t('restarting') : t('restartNow')}
+      </Button>
+    </div>}
     <div className={css.group}>
       <span className={css.groupTitle}>{t('tasksTitle')}</span>
       {node.tasks === undefined || node.tasks.length === 0
@@ -372,19 +413,16 @@ function kindLabel(kind: string, t: (key: MpsNodeKey) => string): string {
 }
 
 /**
- * The saved parameters as the probe reads them outside editing: the form the
- * Host would be configured with, as text.
- * @param config - the deployment-parameter reading.
- * @returns the form values, empty when no reading arrived.
+ * The next step one probe failure kind names for the operator.
+ * @param kind - how the probe ended.
+ * @param t - the namespace's translation seat.
+ * @returns the localized next step, empty for the kinds that need no extra word.
  */
-function savedForm(config: MpsNodeConfig | undefined): MpsNodeFormInput {
-  const saved: MpsNodeFormInput = {}
-  if (config === undefined) return saved
-  for (const field of FIELDS) {
-    const value = config.saved[field.key]
-    if (value !== undefined) saved[field.key] = String(value)
-  }
-  return saved
+function probeKindNote(kind: string, t: (key: MpsNodeKey) => string): string {
+  if (kind === 'dns-failed') return t('probeKindDns')
+  if (kind === 'refused') return t('probeKindRefused')
+  if (kind === 'timeout') return t('probeKindTimeout')
+  return ''
 }
 
 /**
@@ -394,15 +432,9 @@ function savedForm(config: MpsNodeConfig | undefined): MpsNodeFormInput {
  * @param t - the namespace's translation seat.
  * @returns the placeholder text.
  */
-function secretPlaceholder(source: 'saved' | 'environment' | 'default' | 'unset' | undefined, t: (key: MpsNodeKey) => string): string {
-  if (source === 'saved') return t('secretKeepHint')
-  if (source === 'environment') return t('sourceEnvironment')
-  return t('sourceUnset')
-}
-
 function placeholder(entry: MpsNodeConfigEntry | undefined, t: (key: MpsNodeKey) => string): string {
   if (entry === undefined) return t('sourceUnset')
-  return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceLabel(entry, t)}`
+  return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceOf(entry.source, t)}`
 }
 
 /**
@@ -411,19 +443,10 @@ function placeholder(entry: MpsNodeConfigEntry | undefined, t: (key: MpsNodeKey)
  * @param t - the namespace's translation seat.
  * @returns the row value text.
  */
-function effectiveLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => string): string {
-  return entry.value === undefined ? t('sourceUnset') : `${entry.value} · ${sourceLabel(entry, t)}`
-}
-
-/**
- * @param entry - the field's effective reading.
- * @param t - the namespace's translation seat.
- * @returns the localized origin label.
- */
-function sourceLabel(entry: MpsNodeConfigEntry, t: (key: MpsNodeKey) => string): string {
-  if (entry.source === 'saved') return t('sourceSaved')
-  if (entry.source === 'environment') return t('sourceEnvironment')
-  if (entry.source === 'default') return t('sourceDefault')
+function sourceOf(source: 'saved' | 'environment' | 'default' | 'unset', t: (key: MpsNodeKey) => string): string {
+  if (source === 'saved') return t('sourceSaved')
+  if (source === 'environment') return t('sourceEnvironment')
+  if (source === 'default') return t('sourceDefault')
   return t('sourceUnset')
 }
 

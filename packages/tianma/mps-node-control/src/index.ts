@@ -26,11 +26,11 @@ import type { Readable } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { operatorCommands, taskLedger } from '@tianma/dsh-mps-executor'
+import { operatorCommands, parseJoinString, readPolicySnapshot, taskLedger } from '@tianma/dsh-mps-executor'
 import z from '@deepseek-ai/schemastery'
 import type {
-  MpsNodeConfig, MpsNodeConfigEntry, MpsNodeDeployment, MpsNodeExit,
-  MpsNodeForm, MpsNodeLogLine, MpsNodePhase, MpsNodeProbeResult, MpsNodeStatus,
+  MpsNodeConfig, MpsNodeConfigEntry, MpsNodeDeployment, MpsNodeExit, MpsNodeForm,
+  MpsNodeLogLine, MpsNodePhase, MpsNodeProbeKind, MpsNodeProbeResult, MpsNodeStatus,
   MpsNodeTaskCommand, MpsNodeTaskView,
 } from './types.ts'
 
@@ -102,21 +102,20 @@ const DEPLOYMENT_FILENAME = 'mps-node-control.json'
 /** How long a connectivity probe waits for the platform's answer. */
 const PROBE_TIMEOUT_MS = 8_000
 
-/**
- * The protocol's own defaults, shown wherever neither the form nor the
- * environment states a value, so a blank field reads as "keeps this" rather
- * than "missing". These are the same defaults the node's bundle patch applies.
- */
-const FIELD_DEFAULTS: Readonly<Partial<Record<keyof MpsNodeDeployment, string>>> = {
-  platformHost: '127.0.0.1',
-  platformPort: '8791',
-  platformScheme: 'http',
-  platformBasePath: '/exec/v1',
-  slotsTotal: '1',
+/** Deployment fields the form edits, and the environment variables the node reads them from. */
+const DEPLOYMENT_ENV: Readonly<Record<'join' | 'workspaceRoot' | 'networkProxy' | 'nodeSecret', string>> = {
+  join: 'MPS_JOIN',
+  workspaceRoot: 'MPS_NODE_WORKSPACE',
+  networkProxy: 'MPS_NETWORK_PROXY',
+  nodeSecret: 'MPS_NODE_SECRET',
 }
 
-/** Deployment fields and the environment variables the node reads them from. */
-const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
+/**
+ * Deployment fields the form no longer edits, and the variables a saved file from before
+ * the join string may still state. A launch injects whatever the old file holds, so a
+ * deployment that has not adopted the join string keeps working exactly as it did.
+ */
+const LEGACY_DEPLOYMENT_ENV: Readonly<Record<string, string>> = {
   platformHost: 'MPS_PLATFORM_HOST',
   platformPort: 'MPS_PLATFORM_PORT',
   platformScheme: 'MPS_PLATFORM_SCHEME',
@@ -124,12 +123,9 @@ const DEPLOYMENT_ENV: Readonly<Record<keyof MpsNodeDeployment, string>> = {
   nodeId: 'MPS_NODE_ID',
   nodeName: 'MPS_NODE_NAME',
   nodeHost: 'MPS_NODE_HOST',
-  workspaceRoot: 'MPS_NODE_WORKSPACE',
   agentProvider: 'MPS_AGENT_PROVIDER',
   agentModel: 'MPS_AGENT_MODEL',
   slotsTotal: 'MPS_NODE_SLOTS',
-  networkProxy: 'MPS_NETWORK_PROXY',
-  nodeSecret: 'MPS_NODE_SECRET',
 }
 
 
@@ -211,15 +207,13 @@ function parseField(key: keyof MpsNodeDeployment, raw: string): { value?: string
  * @param saved - the form's stored parameters.
  * @returns the entry the settings surface shows.
  */
-function effectiveEntry(key: keyof MpsNodeDeployment, saved: MpsNodeDeployment): MpsNodeConfigEntry {
+function effectiveEntry(key: keyof typeof DEPLOYMENT_ENV, saved: MpsNodeDeployment): MpsNodeConfigEntry {
   const savedValue = saved[key]
   if (savedValue !== undefined && savedValue !== '') {
-    return { value: String(savedValue), source: 'saved' }
+    return { value: savedValue, source: 'saved' }
   }
   const fromEnv = process.env[DEPLOYMENT_ENV[key]]
   if (fromEnv !== undefined && fromEnv.trim() !== '') return { value: fromEnv, source: 'environment' }
-  const fallback = FIELD_DEFAULTS[key]
-  if (fallback !== undefined) return { value: fallback, source: 'default' }
   return { source: 'unset' }
 }
 
@@ -240,9 +234,16 @@ function opsDir(): string {
 
 function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
   const overlay: NodeJS.ProcessEnv = {}
-  for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
-    const value = saved[key]
-    if (value !== undefined && value !== '') overlay[DEPLOYMENT_ENV[key]] = String(value)
+  for (const [key, variable] of Object.entries(DEPLOYMENT_ENV)) {
+    const value = saved[key as keyof typeof DEPLOYMENT_ENV]
+    if (value !== undefined && value !== '') overlay[variable] = value
+  }
+  // A saved file from before the join string may state the older single-purpose
+  // variables; they keep reaching the node, and the executor's own precedence — an
+  // explicit variable wins over the join string's value — settles any overlap.
+  for (const [key, variable] of Object.entries(LEGACY_DEPLOYMENT_ENV)) {
+    const value = saved[key as keyof MpsNodeDeployment]
+    if (value !== undefined && value !== '') overlay[variable] = String(value)
   }
   // A stated proxy reaches the node as the environment git and the CLI's
   // network stack read, so a workspace fetch or push can leave this machine.
@@ -258,6 +259,17 @@ function launchEnvironment(saved: MpsNodeDeployment): NodeJS.ProcessEnv {
     const direct = new Set(['localhost', '127.0.0.1', '::1', '172.17.0.1'])
     const platformHost = overlay.MPS_PLATFORM_HOST ?? process.env.MPS_PLATFORM_HOST
     if (platformHost !== undefined) direct.add(platformHost)
+    // The join string states the platform address in one value; its host belongs on the
+    // direct list the same way, so the proxy never sits between the node and its platform.
+    const join = overlay.MPS_JOIN ?? process.env.MPS_JOIN
+    if (join !== undefined && join.trim() !== '') {
+      try {
+        direct.add(parseJoinString(join).host)
+      } catch {
+        // A join string that does not parse fails loudly at the node's own load; the
+        // proxy overlay is not the place to double-report it.
+      }
+    }
     const existing = process.env.NO_PROXY ?? process.env.no_proxy
     overlay.NO_PROXY = [...direct, ...(existing === undefined ? [] : existing.split(',').map(entry => entry.trim()).filter(entry => entry !== ''))].join(',')
     overlay.no_proxy = overlay.NO_PROXY
@@ -292,13 +304,70 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
- * One probe failure in a shape a settings page shows.
- * @param error - what the fetch threw.
- * @returns the message, with the timeout named as such.
+ * The address one probe dials: the join string the form holds first, then the stored one,
+ * then the environment's — and, for a deployment that predates the join string, the
+ * older single-purpose variables.
+ * @param formJoin - the join string the form holds, when it holds one.
+ * @param storedJoin - the join string the stored deployment holds, when it holds one.
+ * @returns the dial target, an unusable-address result, or undefined when nothing names an address.
  */
-function toErrorMessage(error: unknown): string {
+function probeTarget(formJoin: string, storedJoin: string):
+  | { kind: 'url'; url: string; host: string }
+  | { kind: 'unusable'; message: string }
+  | undefined {
+  const joinSource = formJoin.trim() !== ''
+    ? formJoin
+    : storedJoin.trim() !== ''
+      ? storedJoin
+      : (process.env.MPS_JOIN ?? '').trim() !== ''
+        ? process.env.MPS_JOIN as string
+        : ''
+  if (joinSource.trim() !== '') {
+    try {
+      const parsed = parseJoinString(joinSource)
+      return {
+        kind: 'url',
+        url: `${parsed.scheme}://${parsed.host}:${String(parsed.port)}${parsed.basePath}/auth/token`,
+        host: parsed.host.replace(/^\[|\]$/gu, ''),
+      }
+    } catch (error: unknown) {
+      return { kind: 'unusable', message: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  const host = process.env.MPS_PLATFORM_HOST?.trim()
+  if (host === undefined || host === '') return undefined
+  const port = Number(process.env.MPS_PLATFORM_PORT ?? 8791)
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) return undefined
+  const scheme = process.env.MPS_PLATFORM_SCHEME === 'https' ? 'https' : 'http'
+  const basePath = (process.env.MPS_PLATFORM_BASE_PATH ?? '/exec/v1').replace(/\/+$/u, '')
+  return { kind: 'url', url: `${scheme}://${host}:${String(port)}${basePath}/auth/token`, host }
+}
+
+/**
+ * How one probe failure ended, so the settings surface can word the next step per kind:
+ * a name that does not resolve, a port nothing listens on, and a silence each mean a
+ * different thing for an operator.
+ * @param error - what the fetch threw.
+ * @returns the failure kind.
+ */
+function probeFailureKind(error: unknown): MpsNodeProbeKind {
+  if (error instanceof Error && error.name === 'TimeoutError') return 'timeout'
+  const cause = error instanceof Error ? error.cause as { code?: unknown } | undefined : undefined
+  const code = cause?.code
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns-failed'
+  if (code === 'ECONNREFUSED') return 'refused'
+  return 'unreachable'
+}
+
+/**
+ * One probe failure in a shape a settings page shows, naming the timeout as such.
+ * @param error - what the fetch threw.
+ * @param timeoutMs - the probe's budget, named when the failure was the budget.
+ * @returns the message.
+ */
+function probeFailureText(error: unknown, timeoutMs: number): string {
   if (error instanceof Error) {
-    if (error.name === 'TimeoutError') return `no answer within ${String(PROBE_TIMEOUT_MS / 1000)} seconds`
+    if (error.name === 'TimeoutError') return `no answer within ${String(timeoutMs / 1000)} seconds`
     return error.message
   }
   return String(error)
@@ -430,28 +499,63 @@ export class MpsNodeControlService extends TypertRemoteService {
   }
 
   /**
-   * The deployment parameters the Settings form renders: what this page saved
-   * and what the next launch would run with, per field.
+   * The deployment parameters the Settings form renders: what this page saved, the join
+   * summary, and what the next launch would run with, per field the form edits. The join
+   * string's value and the stored secret never cross to the settings surface.
    * @returns the saved parameters and the effective reading.
    */
   @Remote
   async config(): Promise<MpsNodeConfig> {
     const stored = readDeployment(this.profileDir())
-    // The secret never crosses to the settings surface: it is reported only as
-    // its source, and the saved copy the form reads back carries no value.
-    const { nodeSecret: _secret, ...saved } = stored
-    const entries = Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>
+    // The join string carries the secret, so its value is reported only as its summary;
+    // the saved copy the form reads back carries neither it nor the stored secret.
+    const { join: _join, nodeSecret: _secret, ...saved } = stored
+    const entries = Object.keys(DEPLOYMENT_ENV) as Array<keyof typeof DEPLOYMENT_ENV>
     const effective = {} as MpsNodeConfig['effective']
     for (const key of entries) {
-      if (key === 'nodeSecret') continue
+      if (key === 'join' || key === 'nodeSecret') continue
       effective[key] = effectiveEntry(key, stored)
     }
+    const storedJoin = stored.join !== undefined && stored.join.trim() !== ''
+      ? stored.join
+      : process.env.MPS_JOIN !== undefined && process.env.MPS_JOIN.trim() !== ''
+        ? process.env.MPS_JOIN
+        : undefined
+    let joinSummary: MpsNodeConfig['joinSummary']
+    try {
+      const parsed = storedJoin === undefined ? undefined : parseJoinString(storedJoin)
+      if (parsed !== undefined) {
+        joinSummary = { url: `${parsed.scheme}://${parsed.host}:${String(parsed.port)}${parsed.basePath}`, nodeId: parsed.nodeId }
+      }
+    } catch {
+      // A stored join string that no longer parses is a file this page did not write in
+      // this shape; the readout simply reports none rather than failing the whole form.
+      joinSummary = undefined
+    }
+    // The policy snapshot the node process keeps: what the platform stated over /config,
+    // read here because the node is the only writer and this surface the only reader.
+    const snapshot = readPolicySnapshot(opsDir())
     return {
       saved,
+      joinSet: stored.join !== undefined ? 'saved'
+        : process.env.MPS_JOIN !== undefined && process.env.MPS_JOIN.trim() !== '' ? 'environment'
+          : 'unset',
+      ...(joinSummary === undefined ? {} : { joinSummary }),
       secretSet: stored.nodeSecret !== undefined ? 'saved'
         : process.env.MPS_NODE_SECRET !== undefined && process.env.MPS_NODE_SECRET !== '' ? 'environment'
-          : 'unset',
+          : stored.join !== undefined || (process.env.MPS_JOIN !== undefined && process.env.MPS_JOIN.trim() !== '') ? 'saved'
+            : 'unset',
       lanAddresses: lanIpv4Addresses(),
+      platformPolicy: snapshot === undefined ? {} : {
+        // The snapshot's reader already shaped every value; the two optionals keep
+        // their conditional spreads so an absent choice stays absent, not `undefined`.
+        slotsTotal: snapshot.policy.slotsTotal,
+        lanes: snapshot.policy.lanes,
+        ...(snapshot.policy.agent.provider === undefined ? {} : { agentProvider: snapshot.policy.agent.provider }),
+        ...(snapshot.policy.agent.model === undefined ? {} : { agentModel: snapshot.policy.agent.model }),
+        ...(snapshot.configRevision === 0 ? {} : { configRevision: snapshot.configRevision }),
+        ...(snapshot.at === '' ? {} : { at: snapshot.at }),
+      },
       effective,
     }
   }
@@ -467,24 +571,44 @@ export class MpsNodeControlService extends TypertRemoteService {
   async saveConfig(form: MpsNodeForm): Promise<MpsNodeConfig> {
     const previous = readDeployment(this.profileDir())
     const saved: MpsNodeDeployment = {}
-    for (const key of Object.keys(DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
+    // A join string states the address, the identity, and the credential in one value:
+    // storing one drops the older single-purpose fields it replaces, so a later read
+    // cannot show two competing sources of the same fact. The local fields — the
+    // workspace root and the proxy — are saved beside it either way.
+    const joinText = form.join?.trim() ?? ''
+    if (joinText !== '') {
+      parseJoinString(joinText)
+      saved.join = joinText
+    }
+    for (const key of Object.keys(DEPLOYMENT_ENV)) {
+      if (key === 'join') continue
       // The secret is kept when the form leaves it blank: a save that edits
       // unrelated fields must never wipe the credential. Only the explicit
       // instruction drops it.
       if (key === 'nodeSecret') {
         const stated = form.nodeSecret?.trim() ?? ''
-        if (stated !== '') saved.nodeSecret = stated
+        if (stated !== '') (saved as Record<string, string>)[key] = stated
         else if (form.clearNodeSecret !== 'true' && previous.nodeSecret !== undefined) {
           saved.nodeSecret = previous.nodeSecret
         }
         continue
       }
-      const parsed = parseField(key, form[key] ?? '')
+      const parsed = parseField(key as keyof typeof DEPLOYMENT_ENV, form[key as keyof MpsNodeForm] ?? '')
       if ('error' in parsed) {
         throw new Error(`mps-node-control: ${parsed.error}`)
       }
       if (parsed.value !== undefined) {
         ;(saved as Record<string, string | number>)[key] = parsed.value
+      }
+    }
+    if (joinText === '') {
+      // A blank join box keeps the stored one: editing unrelated fields must never
+      // detach a node from its platform. The box's placeholder says what is stored.
+      if (previous.join !== undefined) saved.join = previous.join
+      // A file from before the join string keeps the fields the form no longer edits.
+      for (const key of Object.keys(LEGACY_DEPLOYMENT_ENV) as Array<keyof MpsNodeDeployment>) {
+        const value = previous[key]
+        if (value !== undefined && value !== '') (saved as Record<string, string | number>)[key] = value
       }
     }
     const directory = this.profileDir()
@@ -498,31 +622,26 @@ export class MpsNodeControlService extends TypertRemoteService {
    * own integration note does: one `POST /auth/token` with deliberately wrong
    * credentials, where any HTTP answer — a 401 above all — means the network
    * path is open. The form's own values are read, not the saved ones, so an
-   * address can be tested before it is stored.
+   * address can be tested before it is stored. A join string names the address
+   * in one value; the older single-purpose environment variables still serve a
+   * deployment that states them instead.
    * @param form - the deployment-parameter form as it stands.
-   * @returns what the probe found.
+   * @returns what the probe found, with how it ended so the next step can be worded per kind.
    */
   @Remote
   async probe(form: MpsNodeForm): Promise<MpsNodeProbeResult> {
-    const saved = await this.config()
-    const pick = (formValue: string | undefined, key: keyof MpsNodeConfig['effective']): string | undefined => {
-      const text = formValue?.trim()
-      if (text !== undefined && text !== '') return text
-      const effective = saved.effective[key].value
-      return effective
+    const target = probeTarget(form.join ?? '', readDeployment(this.profileDir()).join ?? '')
+    if (target === undefined) {
+      return {
+        reachable: false,
+        kind: 'unreachable',
+        detail: 'no platform address to test; paste a join string from the platform console, or state the address in the environment',
+      }
     }
-    const host = pick(form.platformHost, 'platformHost')
-    if (host === undefined) {
-      return { reachable: false, detail: 'no platform address to test; state one in the form or the environment' }
+    if (target.kind === 'unusable') {
+      return { reachable: false, kind: 'unreachable', detail: target.message }
     }
-    const scheme = pick(form.platformScheme, 'platformScheme') === 'https' ? 'https' : 'http'
-    const portText = pick(form.platformPort, 'platformPort')
-    const port = portText === undefined ? 8791 : Number(portText)
-    if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
-      return { reachable: false, detail: `the platform port "${portText ?? ''}" is not a usable TCP port` }
-    }
-    const basePath = (pick(form.platformBasePath, 'platformBasePath') ?? '/exec/v1').replace(/\/+$/u, '')
-    const url = `${scheme}://${host}:${String(port)}${basePath}/auth/token`
+    const { url, host } = target
     // A production platform runs on another machine of this LAN: a loopback
     // target means the node is dialing itself, whatever the answer says.
     const loopback = isLoopbackHost(host)
@@ -542,6 +661,7 @@ export class MpsNodeControlService extends TypertRemoteService {
       // listening; the 401 is the documented shape of a healthy endpoint.
       return {
         reachable: true,
+        kind: 'answered',
         httpStatus: response.status,
         latencyMs,
         ...(loopback ? { loopback: true } : {}),
@@ -549,11 +669,12 @@ export class MpsNodeControlService extends TypertRemoteService {
           ? `the platform answered 401 in ${String(latencyMs)} ms, which is the healthy shape`
           : `the platform answered ${String(response.status)} in ${String(latencyMs)} ms`) + loopbackNote,
       }
-    } catch (error) {
+    } catch (error: unknown) {
       return {
         reachable: false,
+        kind: probeFailureKind(error),
         ...(loopback ? { loopback: true } : {}),
-        detail: `could not reach ${url}: ${toErrorMessage(error)}${loopbackNote}`,
+        detail: `could not reach ${url}: ${probeFailureText(error, PROBE_TIMEOUT_MS)}${loopbackNote}`,
       }
     }
   }

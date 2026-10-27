@@ -31,6 +31,8 @@ import { taskLedger } from './task-ledger.ts'
 import type { DrainingMarker } from './draining.ts'
 import { agentRunEnv } from './config.ts'
 import type { ExecutorSettings } from './config.ts'
+import { applyPlatformPolicy, describePolicy, policyFromSettings, writePolicySnapshot } from './policy.ts'
+import type { EffectivePolicy } from './policy.ts'
 import { checkoutAllocator } from './checkout.ts'
 import { chatAnswerRunner } from './chat-runner.ts'
 import { clientArtifactUploader } from './artifacts.ts'
@@ -138,8 +140,15 @@ export class MpsExecutorRuntime {
   readonly #draining: DrainingMarker
   /** How this node's resources are read, when a deployment composed a reader. */
   #probeResources: (() => Promise<ExecResources>) | undefined
-  /** Platform configuration revision this node has applied; undefined before registration. */
+  /** Platform configuration revision this node has applied; undefined before the first fetch. */
   #configRevision: number | undefined
+  /**
+   * The policy in force: the node's own configured values until the platform states
+   * others over `/config`, and the platform's from then on. Read per claim, per slot
+   * count, and per disk check, because a configuration revision may change any of them
+   * while the node runs.
+   */
+  #policy: EffectivePolicy
   #timer: ReturnType<typeof setInterval> | undefined
   #runningTasks: ExecRunningTask[] = []
   readonly #taskProgress = new Map<string, { progress: number; stage: string }>()
@@ -165,6 +174,7 @@ export class MpsExecutorRuntime {
     this.#heartbeatSeconds = options.settings.heartbeatSeconds
     this.#claimLongPollSeconds = options.settings.claimLongPollSeconds
     this.#logBatchMaxLines = LOG_BATCH_MAX_LINES
+    this.#policy = policyFromSettings(options.settings)
     this.#probeAgentVersion = options.probeAgentVersion
     this.#probeResources = options.probeResources
     this.#draining = drainingMarker(options.settings.codingRoot)
@@ -213,7 +223,9 @@ export class MpsExecutorRuntime {
             git,
             env: agentRunEnv(this.settings.cliRunner.dshHome),
             jsonEvents: this.settings.cliRunner.jsonEvents,
-            agentPatch: agentModelPatch(this.settings.agent),
+            // Supplied per run, so a platform that states an agent default over `/config`
+            // reaches answers that start after it, without a restart.
+            agentPatch: () => agentModelPatch(this.#policy.agent),
           }),
         }),
       workspaces: checkoutAllocator({ store: this.#workspaces, git }),
@@ -231,6 +243,9 @@ export class MpsExecutorRuntime {
       canClaim: () => this.#hasRoom,
       claimLongPollSeconds: () => this.#claimLongPollSeconds,
       logBatchMaxLines: () => this.#logBatchMaxLines,
+      // The policy the platform owns, read per claim and per attempt: slots, lanes, and
+      // the ceilings may all have moved since the orchestrator was built.
+      policy: () => this.#policy,
       report: this.#report,
       now: this.#now,
       hooks: {
@@ -285,6 +300,11 @@ export class MpsExecutorRuntime {
     return this.#workspaces
   }
 
+  /** The policy in force: this node's declared values until the platform states others. */
+  get policy(): EffectivePolicy {
+    return this.#policy
+  }
+
   /**
    * Slots free for a new task.
    * @returns the free-slot count, never below zero.
@@ -293,7 +313,7 @@ export class MpsExecutorRuntime {
     // An answer task holds no coding slot, so a node busy writing code still counts
     // as available to a customer's question.
     const coding = this.#runningTasks.length - (this.#tasks?.chatAnswerCount() ?? 0)
-    return Math.max(this.settings.slotsTotal - coding, 0)
+    return Math.max(this.#policy.slotsTotal - coding, 0)
   }
 
   /**
@@ -302,7 +322,7 @@ export class MpsExecutorRuntime {
    */
   slots(): ExecSlots {
     return {
-      total: this.settings.slotsTotal,
+      total: this.#policy.slotsTotal,
       running: this.#runningTasks.length,
       available: this.availableSlots(),
     }
@@ -345,7 +365,8 @@ export class MpsExecutorRuntime {
    */
   async #applyResources(resources: ExecResources): Promise<void> {
     this.#resources = { ...resources }
-    const room = resources.disk_free_gb >= this.settings.diskMinGb
+    const floor = this.#policy.diskMinGb
+    const room = resources.disk_free_gb >= floor
     if (room === this.#hasRoom) return
     this.#hasRoom = room
     if (room) {
@@ -361,14 +382,14 @@ export class MpsExecutorRuntime {
     }
     this.#report({
       level: 'warn',
-      message: `node ${this.settings.nodeId} is below ${String(this.settings.diskMinGb)}GB free (${String(resources.disk_free_gb)}GB); claiming nothing until there is room. Its workspaces are ${releasableWorkspaces(this.#workspaces.records)}`,
+      message: `node ${this.settings.nodeId} is below ${String(floor)}GB free (${String(resources.disk_free_gb)}GB); claiming nothing until there is room. Its workspaces are ${releasableWorkspaces(this.#workspaces.records)}`,
     })
     // The platform needs the footprints to decide what to release, and it only needs them
     // while the node is holding work back, so they are measured once per drain.
     this.#releasable = await releasableWorkspaceEntries(this.#workspaces.records)
     // Claiming nothing leaves the platform dispatching to a node that will not answer;
     // draining is how the protocol says a node stops taking work.
-    await this.#announce('drain', `this node is below its ${String(this.settings.diskMinGb)}GB disk floor`)
+    await this.#announce('drain', `this node is below its ${String(floor)}GB disk floor`)
   }
 
   /**
@@ -431,6 +452,11 @@ export class MpsExecutorRuntime {
       await this.#reportRestoredSessions(signal)
       const revision = registered.config_revision
       this.#configRevision = typeof revision === 'number' && Number.isFinite(revision) ? revision : undefined
+      // The registration itself may carry the policy beside its timing knobs — the shape
+      // a platform that states slots, lanes, ceilings, or an agent default registers with.
+      // Folding it here gives the policy from this node's first breath, without an extra
+      // request; a revision change still arrives over the heartbeat's own /config path.
+      this.#absorbPlatformPolicy(registered as unknown as Record<string, unknown>, 'registration')
       if (Number.isFinite(registered.heartbeat_interval_seconds) && registered.heartbeat_interval_seconds > 0) {
         this.#heartbeatSeconds = registered.heartbeat_interval_seconds
       }
@@ -535,12 +561,47 @@ export class MpsExecutorRuntime {
     if (typeof ceiling === 'number' && Number.isFinite(ceiling) && ceiling > 0) {
       this.#artifactCeilingBytes = ceiling
     }
+    // The policy the platform owns — slots, lanes, disk floor, ceilings, agent default.
+    // Keys the platform did not state usefully leave this node's declared values
+    // standing, which is what an older platform's empty payload amounts to.
+    this.#absorbPlatformPolicy(stated, `configuration ${String(this.#configRevision)}`)
     const kept = KEPT_CONFIGURATION.filter(name => stated[name] !== undefined)
     this.#report({
       level: kept.length === 0 ? 'info' : 'warn',
       message: kept.length === 0
         ? `platform configuration ${String(this.#configRevision)} applied (heartbeat ${String(this.#heartbeatSeconds)}s)`
         : `platform configuration ${String(this.#configRevision)} applied (heartbeat ${String(this.#heartbeatSeconds)}s); this node keeps the values it declared for ${kept.join(', ')}`,
+    })
+  }
+
+  /**
+   * Fold one platform payload's policy keys into the policy in force, keep the snapshot
+   * the settings surface reads, and say what applied. A payload that states nothing
+   * usable changes nothing and says nothing.
+   * @param stated - the `/config` payload or the registration result.
+   * @param origin - what the report names as the payload's source.
+   */
+  #absorbPlatformPolicy(stated: Record<string, unknown>, origin: string): void {
+    const folded = applyPlatformPolicy(this.#policy, stated)
+    if (folded.applied.length === 0) return
+    this.#policy = folded.policy
+    // The snapshot is what the settings surface reads: best effort, never worth more
+    // than a warning, because the policy itself already holds.
+    try {
+      writePolicySnapshot(this.settings.opsRoot, {
+        at: formatRfc3339(this.#now()),
+        configRevision: this.#configRevision ?? 0,
+        policy: this.#policy,
+      })
+    } catch (error: unknown) {
+      this.#report({
+        level: 'warn',
+        message: `could not keep the policy snapshot: ${toError(error).message}`,
+      })
+    }
+    this.#report({
+      level: 'info',
+      message: `platform ${origin} applied policy (${folded.applied.join(', ')}; now ${describePolicy(this.#policy)})`,
     })
   }
 

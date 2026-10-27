@@ -51,6 +51,27 @@
   margin: 0;
 }
 
+.pasteBox {
+  box-sizing: border-box;
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--dsh-color-border, rgba(0, 0, 0, 0.15));
+  border-radius: 6px;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  font-family: var(--dsh-font-mono, ui-monospace, monospace);
+  resize: vertical;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
 .fields {
   display: flex;
   flex-direction: column;

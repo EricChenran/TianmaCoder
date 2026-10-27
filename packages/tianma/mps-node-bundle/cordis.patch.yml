@@ -4,6 +4,10 @@
 # from the deployment's environment so one installation image serves every
 # node; any value can equally be written into this row instead.
 #
+# A join string (MPS_JOIN) states the address and the identity in one value;
+# the executor folds it into this row's placeholders at load, and a variable
+# stated outright still wins over the same value inside the join string.
+#
 # platformHost and nodeId have no fallback on purpose: a node that does not
 # know which platform it belongs to fails at load rather than registering
 # somewhere unintended.
@@ -45,7 +49,7 @@
         tools: []
         agentVersion: !!js process.env.MPS_AGENT_VERSION ?? 'unknown'
         labels: {}
-        autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST)
+        autoStart: !!js Boolean(process.env.MPS_PLATFORM_HOST || process.env.MPS_JOIN)
         # The runner the node falls back to: the CLI's headless profile, pointed at
         # an absolute executable path so a node never depends on PATH, and given its
         # own DSH_HOME so a node's profile directory stays its own. Composing any

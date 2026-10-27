@@ -77,11 +77,13 @@ export interface CliRunnerOptions {
   jsonEvents?: boolean | undefined
   /**
    * Overlay the deployment's model choice resolves to, written beside the raw logs and
-   * passed as `--patch` before the run's own arguments. The launcher applies it after the
-   * profile layer, so this node's choice holds whatever the shared home selected.
-   * Absent when the deployment states nothing and the profile's default stands.
+   * passed as `--patch` before the run's own arguments. The launcher applies it after
+   * the profile layer, so this node's choice holds whatever the shared home selected.
+   * Absent when the deployment states nothing and the profile's default stands. A
+   * supplier is resolved per run, which is how a platform-stated agent default reaches
+   * runs that start after the policy changed.
    */
-  agentPatch?: string | undefined
+  agentPatch?: string | (() => string | undefined) | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
 }
@@ -106,11 +108,20 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
   const stopGraceMs = options.stopGraceMs ?? RUNNER_STOP_GRACE_MS
   const now = options.now ?? (() => new Date())
   const jsonEvents = options.jsonEvents === true
-  // Written once, where the run's raw log also goes: a node's own file, outside every
-  // workspace, so it is never part of what the attempt delivers.
-  const patchPath = options.agentPatch === undefined
+  // A static overlay is written once, where the run's raw log also goes: a node's own
+  // file, outside every workspace, so it is never part of what the attempt delivers. A
+  // supplier is resolved per run instead, so a platform policy that changes the agent
+  // default reaches runs that start after it without a restart.
+  const staticPatch = typeof options.agentPatch === 'function' ? undefined : options.agentPatch
+  const patchSupplier = typeof options.agentPatch === 'function' ? options.agentPatch : undefined
+  const staticPatchPath = staticPatch === undefined
     ? undefined
-    : writeAgentPatch(options.logsDirectory, options.agentPatch)
+    : writeAgentPatch(options.logsDirectory, staticPatch)
+  const patchPathOf = (): string | undefined => {
+    if (patchSupplier === undefined) return staticPatchPath
+    const patch = patchSupplier()
+    return patch === undefined ? undefined : writeAgentPatch(options.logsDirectory, patch)
+  }
 
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
@@ -172,6 +183,8 @@ export function tianmaCliRunner(options: CliRunnerOptions): TaskRunner {
         }])
       }
       let answer: string | undefined
+      // Resolved per run, so a supplier follows the policy in force.
+      const patchPath = patchPathOf()
       const attempt = async (withSession: boolean): Promise<RunOutcome> => await runProcess({
         bin,
         args: [

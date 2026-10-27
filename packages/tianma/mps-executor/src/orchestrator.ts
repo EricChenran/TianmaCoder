@@ -38,6 +38,8 @@ import type {
 } from '@tianma/dsh-mps-exec-core'
 import { attemptFailure } from './failures.ts'
 import type { ExecutorSettings } from './config.ts'
+import type { EffectivePolicy } from './policy.ts'
+import { policyFromSettings } from './policy.ts'
 import { logSpool } from './log-spool.ts'
 import type { TaskLedger } from './task-ledger.ts'
 import type { LogSpool } from './log-spool.ts'
@@ -235,6 +237,13 @@ export interface TaskOrchestratorOptions {
    */
   logBatchMaxLines?: (() => number) | undefined
   /**
+   * The policy in force — slots, lanes, and the attempt ceilings — as the platform most
+   * recently stated it over `/config`; defaults to the settings the orchestrator was
+   * built with. It is read per claim and per attempt, because a configuration revision
+   * may change any of it while the node runs.
+   */
+  policy?: (() => EffectivePolicy) | undefined
+  /**
    * The task ledger an operator surface reads. Without one, the node keeps
    * no local record of what it took and how each attempt settled.
    */
@@ -314,6 +323,8 @@ export class TaskOrchestrator {
 
   readonly #claimLongPollSeconds: () => number
   readonly #logBatchMaxLines: () => number
+  /** The policy in force: slots and lanes the platform owns, read per claim and per attempt. */
+  readonly #policy: () => EffectivePolicy
   /** Whether the node has room for another attempt, when a deployment composes one. */
   readonly #canClaim: (() => boolean) | undefined
   readonly #ledger: TaskLedger | undefined
@@ -367,6 +378,7 @@ export class TaskOrchestrator {
     this.#canClaim = options.canClaim
     this.#claimLongPollSeconds = options.claimLongPollSeconds ?? (() => options.settings.claimLongPollSeconds)
     this.#logBatchMaxLines = options.logBatchMaxLines ?? (() => LOG_BATCH_MAX_LINES)
+    this.#policy = options.policy ?? (() => policyFromSettings(options.settings))
     this.#now = options.now ?? (() => new Date())
   }
 
@@ -438,7 +450,10 @@ export class TaskOrchestrator {
     const assignment = await this.#client.claim({
       available_slots: this.#hooks.availableSlots(),
       capabilities: {
-        lanes: [...this.#settings.capabilities.lanes],
+        // The lanes the platform stated over `/config`, when it stated any: the claim is
+        // where a node promises what it will take, so this is where the promise follows
+        // the policy rather than the startup configuration.
+        lanes: [...this.#policy().lanes],
         tools: [...this.#settings.capabilities.tools],
       },
       max_wait_seconds: this.#claimLongPollSeconds(),
@@ -607,18 +622,21 @@ export class TaskOrchestrator {
     }
     // An answer attempt follows its lease: the platform does not answer over a node that
     // is online, so nothing shorter may end the attempt — the ceiling only keeps the
-    // result inside the lease that holds the question, under a ten-minute cap.
+    // result inside the lease that holds the question, under a ten-minute cap. The
+    // ceilings come from the policy in force, so a `/config` revision reaches attempts
+    // that start after it.
+    const policy = this.#policy()
     let defaultLimit: number
     if (isChatAnswerTask(assignment)) {
-      if (this.#settings.answerRuntimeSeconds > 0) {
-        defaultLimit = this.#settings.answerRuntimeSeconds * 1000
+      if (policy.answerRuntimeSeconds > 0) {
+        defaultLimit = policy.answerRuntimeSeconds * 1000
       } else {
         running.leaseFollowLimit = true
         running.hardDeadlineAt = startedAt.getTime() + ANSWER_RUNTIME_CAP_MS
         defaultLimit = answerCeilingMs(assignment.lease_expire_at, running.hardDeadlineAt, startedAt)
       }
     } else {
-      defaultLimit = this.#settings.taskRuntimeSeconds * 1000
+      defaultLimit = policy.taskRuntimeSeconds * 1000
     }
     const limitMs = taskRuntimeLimitMs(assignment.payload) ?? defaultLimit
     running.limitTimer = setTimeout(() => { this.#expire(running) }, limitMs)

@@ -93,7 +93,7 @@ describe('asking the command line for the readout', () => {
       nodeCommand((code) => { exits.push(code) })
         .exitOverride()
         .parse(['--show-config'], { from: 'user' })
-    }).toThrow(/MPS_PLATFORM_HOST is required/u)
+    }).toThrow(/MPS_PLATFORM_HOST or MPS_JOIN is required/u)
   })
 })
 
@@ -131,14 +131,14 @@ describe('answering what this machine will dial', () => {
     expect(lines).toContain('slots                4')
     expect(lines).toContain('workspace root       /srv/node')
     expect(lines).toContain(`coding root          ${join('/srv/node', 'coding')}`)
-    expect(lines).toContain('secret               from MPS_NODE_SECRET (value not printed)')
+    expect(lines).toContain('secret               from MPS_NODE_SECRET or MPS_JOIN (value not printed)')
     expect(lines).not.toContain('super-secret-value')
   })
 
   it('refuses to resolve an address when the platform or the identity is unstated', () => {
     // The profile row refuses these too: a node must not dial somewhere it was not sent.
-    expect(() => describeConfig({ MPS_NODE_ID: 'node-demo' })).toThrow(/MPS_PLATFORM_HOST is required/u)
-    expect(() => describeConfig({ MPS_PLATFORM_HOST: '10.11.12.13' })).toThrow(/MPS_NODE_ID is required/u)
+    expect(() => describeConfig({ MPS_NODE_ID: 'node-demo' })).toThrow(/MPS_PLATFORM_HOST or MPS_JOIN is required/u)
+    expect(() => describeConfig({ MPS_PLATFORM_HOST: '10.11.12.13' })).toThrow(/MPS_NODE_ID or MPS_JOIN is required/u)
   })
 
   it('takes the defaults a machine that states only the required two would use', () => {
@@ -146,6 +146,6 @@ describe('answering what this machine will dial', () => {
 
     expect(lines).toContain('endpoint             http://platform.example:8791/exec/v1/register')
     expect(lines).toContain('slots                1')
-    expect(lines).toContain('secret               from MPS_NODE_SECRET (value not printed)')
+    expect(lines).toContain('secret               from MPS_NODE_SECRET or MPS_JOIN (value not printed)')
   })
 })

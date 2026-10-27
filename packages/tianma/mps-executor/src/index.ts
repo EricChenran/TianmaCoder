@@ -14,7 +14,7 @@ import { agentModelPatch } from './agent-patch.ts'
 import { probeAgentVersion } from './capabilities.ts'
 import { resourceReader } from './resources.ts'
 import { appendNodeLog } from './node-log.ts'
-import { agentRunEnv, readNodeSecret, resolveExecutorSettings } from './config.ts'
+import { agentRunEnv, mergeExecutorJoin, readNodeSecret, resolveExecutorSettings } from './config.ts'
 import type { Config } from './config.ts'
 import { MpsExecutorRuntime } from './runtime.ts'
 import type { ExecutorReport } from './runtime.ts'
@@ -42,7 +42,17 @@ export { cpuCounters, cpuPercent, resourceReader } from './resources.ts'
 export type { CpuCounters, ResourceReader, ResourceReaderOptions } from './resources.ts'
 export { DRAINING_MARKER, drainingMarker } from './draining.ts'
 export type { DrainingMarker } from './draining.ts'
-export { EXECUTOR_ENV, executorConfigFromEnv } from './config.ts'
+export { EXECUTOR_ENV, executorConfigFromEnv, mergeExecutorJoin, parseJoinString } from './config.ts'
+export type { ParsedJoinString } from './config.ts'
+export {
+  POLICY_SNAPSHOT_FILE,
+  applyPlatformPolicy,
+  describePolicy,
+  policyFromSettings,
+  readPolicySnapshot,
+  writePolicySnapshot,
+} from './policy.ts'
+export type { EffectivePolicy, PolicySnapshot } from './policy.ts'
 export { NODE_LOG_DIRECTORY, appendNodeLog } from './node-log.ts'
 export type { NodeLogRecord } from './node-log.ts'
 export { LOG_SPOOL_DIRECTORY, logSpool } from './log-spool.ts'
@@ -234,25 +244,25 @@ export function registerStopEffect(ctx: Context, runtime: MpsExecutorRuntime): (
  * @param config - the validated node configuration.
  */
 export function apply(ctx: Context, config: Config): void {
-  const settings = resolveExecutorSettings(config)
+  // A join string in the environment carries the address and the identity in one value;
+  // each older single-purpose variable still wins over it, and a row that states neither
+  // keeps whatever the join string states.
+  const merged = mergeExecutorJoin(config)
+  const settings = resolveExecutorSettings(merged)
   // The node's own runner, used when nothing composes one under the service key. A
   // deployment that wants a different execution strategy composes its own provider
-  // and this one is never reached.
-  const ownRunner = tianmaCliRunner({
-    command: settings.cliRunner.command,
-    logsDirectory: settings.cliRunner.logsDirectory,
-    env: agentRunEnv(settings.cliRunner.dshHome),
-    jsonEvents: settings.cliRunner.jsonEvents,
-    agentPatch: agentModelPatch(settings.agent),
-  })
+  // and this one is never reached. Built after the runtime so its model overlay can
+  // follow the policy the platform states over `/config`; the runtime only reads the
+  // runner when claiming starts, which is after the box below is filled.
+  const ownRunnerBox: { current?: TaskRunner } = {}
   const runtime = new MpsExecutorRuntime({
     settings,
     // Read when the handshake starts: the profile loads, and its help prints,
     // before the deployment has to provide the credential.
-    secret: () => readNodeSecret(config),
+    secret: () => readNodeSecret(merged),
     // Read when the node starts claiming, so a runner composed by any other row
     // is found even when it mounts after this one.
-    runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? ownRunner,
+    runner: () => ctx.get(TASK_RUNNER_SERVICE) ?? ownRunnerBox.current,
     // The version is probed from the CLI this node runs, so the platform schedules on
     // the build that is really here rather than a value someone wrote down.
     probeAgentVersion: async () => await probeAgentVersion({
@@ -275,6 +285,13 @@ export function apply(ctx: Context, config: Config): void {
         process.stderr.write(`[mps-node ${settings.nodeId}] ${report.level}: ${report.message}\n`)
       }
     },
+  })
+  ownRunnerBox.current = tianmaCliRunner({
+    command: settings.cliRunner.command,
+    logsDirectory: settings.cliRunner.logsDirectory,
+    env: agentRunEnv(settings.cliRunner.dshHome),
+    jsonEvents: settings.cliRunner.jsonEvents,
+    agentPatch: () => agentModelPatch(runtime.policy.agent),
   })
   ctx.provide('mpsExecutor', runtime)
   registerStopEffect(ctx, runtime)

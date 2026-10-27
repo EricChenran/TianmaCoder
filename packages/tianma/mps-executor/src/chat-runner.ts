@@ -73,9 +73,10 @@ export interface ChatRunnerOptions {
   /**
    * Overlay the deployment's model choice resolves to, passed as `--patch` before the
    * prompt so an answer runs on the same model the node's coding tasks do. Absent when
-   * the deployment states nothing.
+   * the deployment states nothing. A supplier is resolved per run, which is how a
+   * platform-stated agent default reaches answers that start after the policy changed.
    */
-  agentPatch?: string | undefined
+  agentPatch?: string | (() => string | undefined) | undefined
   /** Current-time source; injectable for tests. */
   now?: (() => Date) | undefined
 }
@@ -95,9 +96,18 @@ export function chatAnswerRunner(options: ChatRunnerOptions): TaskRunner {
   const stopGraceMs = options.stopGraceMs ?? RUNNER_STOP_GRACE_MS
   const now = options.now ?? (() => new Date())
   const jsonEvents = options.jsonEvents === true
-  const patchPath = options.agentPatch === undefined
+  // A static overlay is written once beside the raw logs; a supplier is resolved per
+  // run, so a platform-stated agent default reaches answers that start after it.
+  const staticPatch = typeof options.agentPatch === 'function' ? undefined : options.agentPatch
+  const patchSupplier = typeof options.agentPatch === 'function' ? options.agentPatch : undefined
+  const staticPatchPath = staticPatch === undefined
     ? undefined
-    : writeAgentPatch(options.logsDirectory, options.agentPatch)
+    : writeAgentPatch(options.logsDirectory, staticPatch)
+  const patchPathOf = (): string | undefined => {
+    if (patchSupplier === undefined) return staticPatchPath
+    const patch = patchSupplier()
+    return patch === undefined ? undefined : writeAgentPatch(options.logsDirectory, patch)
+  }
 
   return {
     async run(context: TaskRunContext): Promise<TaskRunResult> {
@@ -147,6 +157,8 @@ export function chatAnswerRunner(options: ChatRunnerOptions): TaskRunner {
           level: 'info',
           text: `answering message ${String(answer.message_id)} from ${answer.sender ?? 'the customer'} in ${directory}`,
         }])
+        // Resolved per run, so a supplier follows the policy in force.
+        const patchPath = patchPathOf()
         const attempt = async (withSession: boolean): Promise<RunOutcome> => await runProcess({
           bin,
           args: [

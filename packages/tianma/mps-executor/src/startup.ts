@@ -22,14 +22,22 @@ export const inject = ['cmdlineArgs']
 
 const HELP_AFTER = `
 The platform address and this node's identity come from the environment:
+  MPS_JOIN                join string from the platform console; one value carrying the
+                          address and this node's identity (host, port, scheme, base path,
+                          node id, secret) — it satisfies every MPS_PLATFORM_* and
+                          MPS_NODE_ID below on its own
   MPS_PLATFORM_HOST       platform host, IPv4, or IPv6 address; required to start
   MPS_PLATFORM_PORT       platform port (default 8791)
   MPS_PLATFORM_SCHEME     http or https (default http)
   MPS_PLATFORM_BASE_PATH  path prefix (default /exec/v1)
   MPS_NODE_ID             node id the platform knows this machine by; required to start
   MPS_NODE_SECRET         pre-shared secret; required to start
-  MPS_NODE_SLOTS          concurrent tasks (default 1)
+  MPS_NODE_SLOTS          concurrent tasks (default 1; the platform's policy overrides it)
   MPS_NODE_WORKSPACE      workspace root the node reports (default: the process working directory)
+
+A variable stated outright wins over the same value inside a join string. Slots, work
+kinds, ceilings, and the agent model are policy the platform states over /config; the
+values this node declares are the fallback until it does.
 
 Pass --show-config to print the address this machine will dial and the identity it will use,
 resolved from the same environment, without registering anywhere.
@@ -54,7 +62,7 @@ export function describeConfig(env: NodeJS.ProcessEnv = process.env): string {
     `slots                ${String(settings.slotsTotal)}`,
     `workspace root       ${settings.workspaceRoot}`,
     `coding root          ${settings.codingRoot}`,
-    `secret               from ${EXECUTOR_ENV.secret} (value not printed)`,
+    `secret               from ${EXECUTOR_ENV.secret} or ${EXECUTOR_ENV.join} (value not printed)`,
     `agent CLI            ${settings.cliRunner.command.join(' ')}`,
     `agent version        ${settings.agentVersion}`,
     // The limits decide whether the node takes work at all and how long it holds it, and a

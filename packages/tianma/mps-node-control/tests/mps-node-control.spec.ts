@@ -230,36 +230,65 @@ describe('the deployment parameters the Settings form owns', () => {
     return directory
   }
 
-  it('saves what the form stated and reads it back with its sources', async () => {
-    isolatedHome()
+  /** A join string a test can save as-is, with a secret a leak would name. */
+  const JOIN = 'http://mps.example.com:8791/exec/v1#node=node-7&secret=join-secret-value'
+
+  it('saves a join string and reads back its summary, never its value', async () => {
+    const home = isolatedHome()
     const ctx = await control()
 
     const before = await ctx.mpsNodeControl.config()
     expect(Array.isArray(before.lanAddresses)).toBe(true)
     expect(before.saved).toEqual({})
-    expect(before.effective.platformHost).toEqual({ value: '127.0.0.1', source: 'default' })
-    // The protocol's own defaults show wherever neither the form nor the
-    // environment states a value, so a blank field never reads as missing.
-    expect(before.effective.platformPort).toEqual({ value: '8791', source: 'default' })
-    expect(before.effective.platformScheme).toEqual({ value: 'http', source: 'default' })
-    expect(before.effective.platformBasePath).toEqual({ value: '/exec/v1', source: 'default' })
-    expect(before.effective.slotsTotal).toEqual({ value: '1', source: 'default' })
+    expect(before.joinSet).toBe('unset')
+    expect(before.joinSummary).toBeUndefined()
+    expect(before.secretSet).toBe('unset')
+    expect(before.platformPolicy).toEqual({})
 
-    const after = await ctx.mpsNodeControl.saveConfig({ platformHost: '  mps.example.com ', platformPort: '8791', nodeId: '' })
-    expect(after.saved).toEqual({ platformHost: 'mps.example.com', platformPort: 8791 })
-    expect(after.effective.platformHost).toEqual({ value: 'mps.example.com', source: 'saved' })
-    expect(after.effective.platformPort).toEqual({ value: '8791', source: 'saved' })
-    expect(after.effective.nodeId.source).toBe('unset')
+    const after = await ctx.mpsNodeControl.saveConfig({ join: ` ${JOIN} ` })
+    expect(after.joinSet).toBe('saved')
+    expect(after.joinSummary).toEqual({ url: 'http://mps.example.com:8791/exec/v1', nodeId: 'node-7' })
+    // The credential rides the join string, so the reading reports it as stored here.
+    expect(after.secretSet).toBe('saved')
+    // The copy the form reads back carries neither the join string nor its secret.
+    expect(JSON.stringify(after.saved)).not.toContain('join-secret-value')
+    // The stored file holds the whole join string, and nothing else it replaced.
+    const stored = JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')) as { join?: string }
+    expect(stored).toEqual({ join: JOIN })
   })
 
-  it('stores the secret, reports only whether it is set, and injects it at launch', async () => {
+  it('refuses a join string it cannot parse, storing nothing', async () => {
+    isolatedHome()
+    const ctx = await control()
+
+    await expect(ctx.mpsNodeControl.saveConfig({ join: 'http://mps.example.com:8791/exec/v1' }))
+      .rejects.toThrow(/"#"/u)
+    await expect(ctx.mpsNodeControl.saveConfig({ join: 'http://mps.example.com:8791/exec/v1#node=node-7' }))
+      .rejects.toThrow(/secret/u)
+    await expect(ctx.mpsNodeControl.saveConfig({ join: 'not a url#node=n&secret=s' }))
+      .rejects.toThrow(/address/u)
+    expect((await ctx.mpsNodeControl.config()).saved).toEqual({})
+  })
+
+  it('keeps the stored join when the form edits other fields', async () => {
+    const home = isolatedHome()
+    const ctx = await control()
+    await ctx.mpsNodeControl.saveConfig({ join: JOIN })
+
+    const kept = await ctx.mpsNodeControl.saveConfig({ networkProxy: 'http://127.0.0.1:7897' })
+    expect(kept.joinSet).toBe('saved')
+    expect((JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')) as { join?: string }).join)
+      .toBe(JOIN)
+  })
+
+  it('stores the legacy secret, reports only whether it is set, and injects it at launch', async () => {
     const home = isolatedHome()
     process.env.MPS_NODE_SECRET = 'env-secret'
     const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
     created.push(directory)
     const path = join(directory, 'echo-secret.mjs')
     writeFileSync(path, [
-      "console.log((process.env.MPS_NODE_SECRET ?? '-') + ' from=' + (process.env.MPS_PLATFORM_HOST ?? '-'))",
+      "console.log((process.env.MPS_NODE_SECRET ?? '-') + ' join=' + (process.env.MPS_JOIN ? 'set' : '-'))",
       'setInterval(() => {}, 250)',
       '',
     ].join('\n'))
@@ -270,77 +299,67 @@ describe('the deployment parameters the Settings form owns', () => {
       // The environment's secret shows as set before this page stores one.
       expect((await ctx.mpsNodeControl.config()).secretSet).toBe('environment')
 
-      const saved = await ctx.mpsNodeControl.saveConfig({ nodeSecret: 'stored-secret', platformHost: 'saved.example.com' })
+      const saved = await ctx.mpsNodeControl.saveConfig({ nodeSecret: 'stored-secret' })
       // The saved copy the form reads back carries no secret value.
       expect(saved.saved.nodeSecret).toBeUndefined()
       expect(saved.secretSet).toBe('saved')
       // The stored file does carry it, and the launch injects it over the environment's.
-      const stored = JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8'))
+      const stored = JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')) as { nodeSecret?: string }
       expect(stored.nodeSecret).toBe('stored-secret')
 
       await ctx.mpsNodeControl.start()
       await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
-      expect((await ctx.mpsNodeControl.logs())[0]?.text).toBe('stored-secret from=saved.example.com')
+      expect((await ctx.mpsNodeControl.logs())[0]?.text).toBe('stored-secret join=-')
       await ctx.mpsNodeControl.stop()
 
       // Saving the form without restating the secret keeps what is stored:
       // editing another field must never wipe the credential.
-      const kept = await ctx.mpsNodeControl.saveConfig({ platformHost: 'other.example.com' })
+      const kept = await ctx.mpsNodeControl.saveConfig({ workspaceRoot: 'D:/work' })
       expect(kept.secretSet).toBe('saved')
-      expect(JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')).nodeSecret)
+      expect((JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')) as { nodeSecret?: string }).nodeSecret)
         .toBe('stored-secret')
 
       // The explicit instruction alone drops it.
-      const dropped = await ctx.mpsNodeControl.saveConfig({ nodeSecret: '', clearNodeSecret: 'true' })
+      const dropped = await ctx.mpsNodeControl.saveConfig({ clearNodeSecret: 'true' })
       expect(dropped.secretSet).toBe('environment')
-      expect(JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')).nodeSecret)
+      expect((JSON.parse(readFileSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'), 'utf8')) as { nodeSecret?: string }).nodeSecret)
         .toBeUndefined()
-
-      // Saving the field empty clears what this page stored.
-      const cleared = await ctx.mpsNodeControl.saveConfig({ nodeSecret: '' })
-      expect(cleared.secretSet).toBe('environment')
     } finally {
       delete process.env.MPS_NODE_SECRET
     }
   })
 
-  it('ranks a saved field above the environment, which still beats unset', async () => {
+  it('ranks a saved local field above the environment, which still beats unset', async () => {
     isolatedHome()
-    process.env.MPS_PLATFORM_HOST = 'from-env.example.com'
-    process.env.MPS_NODE_ID = 'node-from-env'
+    process.env.MPS_NODE_WORKSPACE = 'C:/from-env'
     const ctx = await control()
     try {
       const reading = await ctx.mpsNodeControl.config()
-      expect(reading.effective.platformHost).toEqual({ value: 'from-env.example.com', source: 'environment' })
+      expect(reading.effective.workspaceRoot).toEqual({ value: 'C:/from-env', source: 'environment' })
+      expect(reading.effective.networkProxy).toEqual({ source: 'unset' })
 
-      const saved = await ctx.mpsNodeControl.saveConfig({ platformHost: 'saved.example.com' })
-      expect(saved.effective.platformHost).toEqual({ value: 'saved.example.com', source: 'saved' })
-      expect(saved.effective.nodeId).toEqual({ value: 'node-from-env', source: 'environment' })
+      const saved = await ctx.mpsNodeControl.saveConfig({ workspaceRoot: 'D:/saved' })
+      expect(saved.effective.workspaceRoot).toEqual({ value: 'D:/saved', source: 'saved' })
     } finally {
-      delete process.env.MPS_PLATFORM_HOST
-      delete process.env.MPS_NODE_ID
+      delete process.env.MPS_NODE_WORKSPACE
     }
   })
 
-  it('refuses a form whose numbers or scheme cannot be stored', async () => {
+  it('refuses a proxy the form cannot store', async () => {
     isolatedHome()
     const ctx = await control()
 
-    await expect(ctx.mpsNodeControl.saveConfig({ platformPort: '99999' })).rejects.toThrow(/platformPort/u)
-    await expect(ctx.mpsNodeControl.saveConfig({ slotsTotal: '0' })).rejects.toThrow(/slotsTotal/u)
-    await expect(ctx.mpsNodeControl.saveConfig({ platformScheme: 'ftp' })).rejects.toThrow(/platformScheme/u)
-    // Nothing was stored, so the reading still reports every field unset.
+    await expect(ctx.mpsNodeControl.saveConfig({ networkProxy: 'socks7://x' })).rejects.toThrow(/networkProxy/u)
     expect((await ctx.mpsNodeControl.config()).saved).toEqual({})
   })
 
-  it('launches the node with the saved parameters in its environment', async () => {
+  it('launches the node with the join string in its environment', async () => {
     const home = isolatedHome()
     const directory = mkdtempSync(join(tmpdir(), 'mps-control-'))
     created.push(directory)
-    const path = join(directory, 'echo-env.mjs')
+    const path = join(directory, 'echo-join.mjs')
     writeFileSync(path, [
-      "console.log(`host=${process.env.MPS_PLATFORM_HOST ?? '-'} port=${process.env.MPS_PLATFORM_PORT ?? '-'}`)",
-      "console.log(`provider=${process.env.MPS_AGENT_PROVIDER ?? '-'} model=${process.env.MPS_AGENT_MODEL ?? '-'}`)",
+      "console.log(`join=${process.env.MPS_JOIN ? 'set' : '-'} host=${process.env.MPS_PLATFORM_HOST ?? '-'} id=${process.env.MPS_NODE_ID ?? '-'}`)",
       'setInterval(() => {}, 250)',
       '',
     ].join('\n'))
@@ -348,21 +367,14 @@ describe('the deployment parameters the Settings form owns', () => {
     contexts.push(ctx)
     await ctx.plugin(MpsNodeControlService, { entry: path, loaders: [] })
 
-    await ctx.mpsNodeControl.saveConfig({
-      platformHost: 'mps.example.com',
-      platformPort: '8791',
-      agentProvider: 'deepseek-official',
-      agentModel: 'deepseek-v4-pro',
-    })
+    await ctx.mpsNodeControl.saveConfig({ join: JOIN })
     await ctx.mpsNodeControl.start()
     await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
 
+    // The join string reaches the child whole: it carries the address and the identity,
+    // and the executor's own precedence folds it over the row's placeholders.
     const lines = await ctx.mpsNodeControl.logs()
-    expect(lines[0]?.text).toBe('host=mps.example.com port=8791')
-    // The model route a deployment saves reaches the node the same way, so every task it
-    // runs starts on it instead of the profile's default.
-    expect(lines[1]?.text).toBe('provider=deepseek-official model=deepseek-v4-pro')
-    // The parameters this test wrote live under the isolated home, removed with it.
+    expect(lines[0]?.text).toBe('join=set host=- id=-')
     expect(existsSync(join(home, 'profiles', 'mps-node', 'mps-node-control.json'))).toBe(true)
     await ctx.mpsNodeControl.stop()
   })
@@ -383,7 +395,11 @@ describe('the deployment parameters the Settings form owns', () => {
 
     // A workspace fetch has to leave this machine through the proxy; the platform
     // itself sits on this LAN, so dialing it through the proxy would fail instead.
-    await ctx.mpsNodeControl.saveConfig({ networkProxy: 'http://127.0.0.1:7897', platformHost: 'mps.lan' })
+    // Its host comes out of the join string, which is where a deployment states it.
+    await ctx.mpsNodeControl.saveConfig({
+      networkProxy: 'http://127.0.0.1:7897',
+      join: 'http://mps.lan:8791/exec/v1#node=node-7&secret=s',
+    })
     await ctx.mpsNodeControl.start()
     await waitFor(async () => (await ctx.mpsNodeControl.logs()).length > 0)
 
@@ -426,6 +442,38 @@ describe('the deployment parameters the Settings form owns', () => {
       .rejects.toThrow(/name its task/u)
   })
 
+  it('reports the policy the node snapshot recorded', async () => {
+    const home = isolatedHome()
+    const { writePolicySnapshot } = await import('@tianma/dsh-mps-executor')
+    writePolicySnapshot(join(home, 'profiles', 'mps-node', 'ops'), {
+      at: '2026-10-27T10:00:00.000Z',
+      configRevision: 7,
+      policy: {
+        slotsTotal: 3,
+        lanes: ['coding'],
+        diskMinGb: 8,
+        taskRuntimeSeconds: 7200,
+        answerRuntimeSeconds: 0,
+        agent: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+      },
+    })
+    const ctx = await control()
+
+    const reading = await ctx.mpsNodeControl.config()
+    expect(reading.platformPolicy).toMatchObject({
+      slotsTotal: 3,
+      lanes: ['coding'],
+      agentProvider: 'deepseek-official',
+      agentModel: 'deepseek-v4-pro',
+      configRevision: 7,
+    })
+
+    // A node that never applied a policy reads as one the platform has not stated.
+    isolatedHome()
+    const bare = await control()
+    expect((await bare.mpsNodeControl.config()).platformPolicy).toEqual({})
+  })
+
   it('reports a platform that answers the probe, whatever status it answers with', async () => {
     const server = createServer((request, response) => {
       // The platform's own note: a 401 on a deliberately wrong credential is the
@@ -440,8 +488,9 @@ describe('the deployment parameters the Settings form owns', () => {
       isolatedHome()
       const ctx = await control()
 
-      const probe = await ctx.mpsNodeControl.probe({ platformHost: '127.0.0.1', platformPort: String(port) })
+      const probe = await ctx.mpsNodeControl.probe({ join: `http://127.0.0.1:${String(port)}/exec/v1#node=p&secret=s` })
       expect(probe.reachable).toBe(true)
+      expect(probe.kind).toBe('answered')
       expect(probe.httpStatus).toBe(401)
       expect(probe.latencyMs).toBeDefined()
       expect(probe.detail).toMatch(/401/u)
@@ -457,16 +506,22 @@ describe('the deployment parameters the Settings form owns', () => {
     isolatedHome()
     const ctx = await control()
 
-    const refused = await ctx.mpsNodeControl.probe({ platformHost: '127.0.0.1', platformPort: '1' })
+    const refused = await ctx.mpsNodeControl.probe({ join: 'http://127.0.0.1:49001/exec/v1#node=p&secret=s' })
     expect(refused.reachable).toBe(false)
+    expect(refused.kind).toBe('refused')
     expect(refused.httpStatus).toBeUndefined()
     expect(refused.detail).toMatch(/could not reach/u)
     expect(refused.loopback).toBe(true)
 
-    // With nothing stated anywhere, the probe dials the node's own fallback
-    // address, which is what a launch would dial too.
-    const absent = await ctx.mpsNodeControl.probe({ platformPort: '1' })
+    // With nothing stated anywhere, there is no address to dial and the probe says so.
+    const absent = await ctx.mpsNodeControl.probe({})
     expect(absent.reachable).toBe(false)
-    expect(absent.detail).toMatch(/127\.0\.0\.1:1/u)
+    expect(absent.kind).toBe('unreachable')
+    expect(absent.detail).toMatch(/no platform address/u)
+
+    // A join string that cannot be parsed is a result in the parser's own words.
+    const unusable = await ctx.mpsNodeControl.probe({ join: 'http://x/exec/v1' })
+    expect(unusable.reachable).toBe(false)
+    expect(unusable.detail).toMatch(/"#"/u)
   })
 })

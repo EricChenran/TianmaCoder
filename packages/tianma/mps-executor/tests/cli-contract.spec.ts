@@ -132,7 +132,7 @@ describe('the node profile answering what it will use', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toContain('http://10.11.12.13:9443/exec/v1/register')
     expect(result.stdout).toContain('node id              node-contract')
-    expect(result.stdout).toContain('secret               from MPS_NODE_SECRET (value not printed)')
+    expect(result.stdout).toContain('secret               from MPS_NODE_SECRET or MPS_JOIN (value not printed)')
     expect(result.stdout).not.toContain('contract-secret-value')
   }, 120_000)
 
@@ -142,7 +142,7 @@ describe('the node profile answering what it will use', () => {
     const result = await askNode(['--show-config'], { MPS_NODE_ID: 'node-contract' })
 
     expect(result.code).not.toBe(0)
-    expect(result.stderr).toContain('MPS_PLATFORM_HOST is required')
+    expect(result.stderr).toContain('MPS_PLATFORM_HOST or MPS_JOIN is required')
   }, 120_000)
 })
 
