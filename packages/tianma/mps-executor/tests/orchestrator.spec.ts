@@ -206,6 +206,7 @@ function orchestratorWith(options: {
   sessions?: TaskSessionReporter
   workspaces?: TaskWorkspaceAllocator
   logBatchMaxLines?: () => number
+  now?: (() => Date) | undefined
 }): { orchestrator: TaskOrchestrator; hooks: FakeHooks; reports: ExecutorReport[] } {
   const hooks = options.hooks ?? new FakeHooks()
   const reports = options.reports ?? []
@@ -220,7 +221,7 @@ function orchestratorWith(options: {
     sessions: options.sessions,
     workspaces: options.workspaces,
     logBatchMaxLines: options.logBatchMaxLines,
-    now: () => new Date('2026-10-15T04:03:55.123Z'),
+    now: options.now ?? (() => new Date('2026-10-15T04:03:55.123Z')),
   })
   return { orchestrator, hooks, reports }
 }
@@ -847,12 +848,16 @@ describe('task lifecycle', () => {
     expect(reports.some(report => report.message.includes('runtime ceiling'))).toBe(true)
   })
 
-  it('stops an answer attempt at the answer ceiling, which stays under the coding one', async () => {
+  it('stops an answer attempt at the ceiling its claim lease states', async () => {
     vi.useFakeTimers()
     const platform = new FakePlatform()
-    // No payload limit: the answer ceiling is the settings' own.
+    // No payload limit and no configured one, so the ceiling follows the lease: the
+    // fixed clock reads 04:03:55Z, the lease expires 04:05:55Z, and the 30 s margin
+    // for the result leaves 90 s of run.
     platform.assignments.push(assignment({
       kind: 'chat_answer',
+      lease_renew_seconds: 0,
+      lease_expire_at: '2026-10-15T04:05:55.123Z',
       payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } },
     }))
     const { orchestrator, reports } = orchestratorWith({
@@ -862,12 +867,96 @@ describe('task lifecycle', () => {
     })
 
     await orchestrator.claimOnce()
-    // The coding ceiling is hours; the answer one is 55 seconds by default.
-    await vi.advanceTimersByTimeAsync(55_000)
+    await vi.advanceTimersByTimeAsync(90_000)
     await orchestrator.drain()
 
     expect(platform.results[0]?.outcome).toBe('failed')
+    // The answer says why it is handed back, rather than a line about the node.
+    expect(platform.results[0]?.summary).toMatch(/longer than one attempt/u)
     expect(reports.some(report => report.message.includes('runtime ceiling'))).toBe(true)
+  })
+
+  it('caps an answer attempt at ten minutes however long its lease runs', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      kind: 'chat_answer',
+      lease_renew_seconds: 0,
+      lease_expire_at: '2026-10-15T05:03:55.123Z',
+      payload: { answer: { chat_id: 'wr1', message_id: 7, question: '总结 src 目录各模块职责' } },
+    }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: waitingRunner(() => ({ outcome: 'success', summary: 'late answer' })),
+    })
+
+    await orchestrator.claimOnce()
+    // An hour of lease is not an hour of one customer's question: the cap binds first.
+    await vi.advanceTimersByTimeAsync(599_000)
+    expect(platform.results).toEqual([])
+    await vi.advanceTimersByTimeAsync(1_000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('failed')
+  })
+
+  it('extends an answer ceiling as its lease renews', async () => {
+    vi.useFakeTimers()
+    // The renewal re-arms the ceiling against the clock the renewal arrived on, so this
+    // spec lets the node's clock advance with the faked one rather than sit frozen.
+    vi.setSystemTime(new Date('2026-10-15T04:03:55.123Z'))
+    const platform = new FakePlatform()
+    // The claim leaves 210 s of run; the renewal at 150 s states an expiry five minutes
+    // out, which moves the ceiling to 270 s — the margin kept for the result.
+    platform.assignments.push(assignment({
+      kind: 'chat_answer',
+      lease_renew_seconds: 150,
+      lease_expire_at: '2026-10-15T04:07:55.123Z',
+      payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } },
+    }))
+    platform.leaseAnswers.push({
+      lease_expire_at: '2026-10-15T04:08:55.123Z',
+      should_continue: true,
+    })
+    const { orchestrator } = orchestratorWith({
+      platform,
+      now: () => new Date(),
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: waitingRunner(() => ({ outcome: 'success', summary: 'late answer' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(90_000)
+    // Past the ceiling the claim stated, and the attempt still runs: the renewal moved it.
+    expect(platform.results).toEqual([])
+    await vi.advanceTimersByTimeAsync(180_000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('failed')
+  })
+
+  it('keeps a configured answer ceiling over the lease it follows', async () => {
+    vi.useFakeTimers()
+    const platform = new FakePlatform()
+    platform.assignments.push(assignment({
+      kind: 'chat_answer',
+      lease_renew_seconds: 0,
+      lease_expire_at: '2026-10-15T05:03:55.123Z',
+      payload: { answer: { chat_id: 'wr1', message_id: 7, question: 'hi' } },
+    }))
+    const { orchestrator } = orchestratorWith({
+      platform,
+      settings: { ...settings(), answerRuntimeSeconds: 5 },
+      runner: runnerOf(async () => { throw new Error('the coding runner must not run an answer task') }),
+      chatRunner: waitingRunner(() => ({ outcome: 'success', summary: 'late answer' })),
+    })
+
+    await orchestrator.claimOnce()
+    await vi.advanceTimersByTimeAsync(5_000)
+    await orchestrator.drain()
+
+    expect(platform.results[0]?.outcome).toBe('failed')
   })
 
   it('renews the lease on the claimed period and survives a failed renewal', async () => {

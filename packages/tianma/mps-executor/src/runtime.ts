@@ -199,15 +199,18 @@ export class MpsExecutorRuntime {
       settings: this.settings,
       runner,
       ledger: taskLedger(this.settings.opsRoot),
-      // Answer tasks ride the same CLI the coding runner resolved to, in a
-      // throwaway directory; without a resolved command there is no chat runner and
-      // an answer dispatch is reported failed at once.
+      // Answer tasks ride the same CLI the coding runner resolved to, in the project
+      // area of the workspace the payload binds the question to (a scratch directory
+      // only when it binds to neither); without a resolved command there is no chat
+      // runner and an answer dispatch is reported failed at once.
       ...(this.settings.cliRunner.command.length === 0
         ? {}
         : {
           chatRunner: chatAnswerRunner({
             command: this.settings.cliRunner.command,
             logsDirectory: this.settings.cliRunner.logsDirectory,
+            store: this.#workspaces,
+            git,
             env: agentRunEnv(this.settings.cliRunner.dshHome),
             jsonEvents: this.settings.cliRunner.jsonEvents,
             agentPatch: agentModelPatch(this.settings.agent),

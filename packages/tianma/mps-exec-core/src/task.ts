@@ -286,9 +286,10 @@ function stringList(value: unknown): string[] | undefined {
 export const WORK_KIND_CODING = 'coding'
 
 /**
- * The chat-answer work kind: a hosted-group question that needs one reply in
- * the result `summary`, no repository, no artifacts, and the platform's own
- * answerer taking over when the node does not settle within its soft deadline.
+ * The chat-answer work kind: a hosted-group question that needs one reply in the
+ * result `summary`. The platform never answers over a node that is online; it takes
+ * over only when the node fails repeatedly or holds no lease, so the node's own
+ * ceiling follows its lease instead of racing the platform.
  */
 export const WORK_KIND_CHAT_ANSWER = 'chat_answer'
 

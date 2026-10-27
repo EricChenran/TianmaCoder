@@ -61,12 +61,13 @@ export const DEFAULT_LEASE_RENEW_SECONDS = 30
 export const DEFAULT_TASK_RUNTIME_SECONDS = 3 * 60 * 60
 
 /**
- * Runtime ceiling for one chat-answer attempt, used when its payload states none.
- * The platform answers in its own engine after `MPS_ANSWER_NODE_TIMEOUT` (60 s),
- * so the node's ceiling stays under it: a node still working past the deadline
- * would answer a question the platform has already taken back.
+ * Runtime ceiling for one chat-answer attempt, used when its payload states none. Zero
+ * follows the lease: the ceiling the claim's `lease_expire_at` states minus the margin
+ * that keeps room for the result, capped at ten minutes, and re-armed by each renewal.
+ * The platform no longer answers over a node that is online, so nothing shorter may end
+ * an answer attempt early.
  */
-export const DEFAULT_ANSWER_RUNTIME_SECONDS = 55
+export const DEFAULT_ANSWER_RUNTIME_SECONDS = 0
 
 /** Budget for one ordinary platform request. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
@@ -157,7 +158,11 @@ export interface Config {
   leaseRenewSeconds?: number
   /** Runtime ceiling in seconds for one attempt, used when the task payload states none. */
   taskRuntimeSeconds?: number
-  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  /**
+   * Runtime ceiling in seconds for one chat-answer attempt, before its payload states
+   * one. Zero follows the lease (capped at ten minutes); a stated value is the ceiling
+   * as stated.
+   */
   answerRuntimeSeconds?: number
   /** Budget for one ordinary platform request in milliseconds. */
   requestTimeoutMs?: number
@@ -222,7 +227,7 @@ export const Config: z<Config> = z.object({
   claimLongPollSeconds: z.number().step(1).min(1).default(DEFAULT_CLAIM_LONG_POLL_SECONDS),
   leaseRenewSeconds: z.number().step(1).min(1).max(3600).default(DEFAULT_LEASE_RENEW_SECONDS),
   taskRuntimeSeconds: z.number().step(1).min(1).default(DEFAULT_TASK_RUNTIME_SECONDS),
-  answerRuntimeSeconds: z.number().step(1).min(1).default(DEFAULT_ANSWER_RUNTIME_SECONDS),
+  answerRuntimeSeconds: z.number().step(1).min(0).default(DEFAULT_ANSWER_RUNTIME_SECONDS),
   requestTimeoutMs: z.number().step(1).min(1000).default(DEFAULT_REQUEST_TIMEOUT_MS),
   lanes: z.array(z.string()).default([]),
   tools: z.array(z.string()).default([]),
@@ -289,7 +294,10 @@ export interface ExecutorSettings {
   leaseRenewSeconds: number
   /** Runtime ceiling in seconds for one attempt, before a payload states its own. */
   taskRuntimeSeconds: number
-  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  /**
+   * Runtime ceiling in seconds for one chat-answer attempt, before its payload states
+   * one. Zero follows the lease, capped at ten minutes.
+   */
   answerRuntimeSeconds: number
   /** Budget for one ordinary request. */
   requestTimeoutMs: number

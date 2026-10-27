@@ -152,6 +152,11 @@ describe('node configuration', () => {
     expect(settings.answerRuntimeSeconds).toBe(DEFAULT_ANSWER_RUNTIME_SECONDS)
   })
 
+  it('accepts zero as the answer ceiling, which follows the lease, and refuses less', () => {
+    expect(settingsFor({ answerRuntimeSeconds: 0 }).answerRuntimeSeconds).toBe(0)
+    expect(() => Config({ platformHost: '192.168.1.10', nodeId: 'node-1', answerRuntimeSeconds: -1 })).toThrow()
+  })
+
   it('keeps its operator directory beside the coding root, or where the GUI points it', () => {
     const settings = settingsFor({})
     expect(settings.opsRoot).toBe(join(settings.codingRoot, '.ops'))

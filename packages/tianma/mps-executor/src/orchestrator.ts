@@ -125,6 +125,38 @@ const CLAIM_FAILURE_PAUSE_MS = 5000
 /** How many times one result submission is retried before the node reports failure. */
 const RESULT_SUBMIT_ATTEMPTS = 5
 
+/**
+ * Hard ceiling one chat-answer attempt may never outgrow, however long its lease keeps
+ * being renewed: ten minutes of one customer's question is the most a group waits on it.
+ */
+export const ANSWER_RUNTIME_CAP_MS = 10 * 60 * 1000
+
+/**
+ * Margin kept between an answer attempt's ceiling and its lease expiry, so the result
+ * still reaches the platform before the lease recycles the question.
+ */
+export const ANSWER_LEASE_MARGIN_MS = 30_000
+
+/** Smallest ceiling one answer attempt runs under, so a run always gets to start. */
+const ANSWER_CEILING_FLOOR_MS = 1000
+
+/**
+ * The ceiling one chat-answer attempt runs under while it follows its lease: the lease's
+ * expiry minus the margin, and never past the ten-minute cap measured from the attempt's
+ * start. An expiry the clock cannot read leaves the cap alone, and a lease already inside
+ * its margin leaves the floor, which ends the attempt rather than working a lease the
+ * platform is about to recycle.
+ * @param expiresAt - the lease expiry the claim or a renewal stated, as an RFC 3339 string.
+ * @param hardDeadlineAt - the attempt's start plus the cap, in epoch milliseconds.
+ * @param now - the current time.
+ * @returns the milliseconds the attempt may still run for.
+ */
+export function answerCeilingMs(expiresAt: string, hardDeadlineAt: number, now: Date): number {
+  const expiry = Date.parse(expiresAt)
+  const leaseDeadline = Number.isFinite(expiry) ? expiry - ANSWER_LEASE_MARGIN_MS : Number.POSITIVE_INFINITY
+  return Math.max(Math.min(leaseDeadline, hardDeadlineAt) - now.getTime(), ANSWER_CEILING_FLOOR_MS)
+}
+
 /** How the orchestrator reports through the node it belongs to. */
 export interface TaskOrchestratorHooks {
   /**
@@ -237,6 +269,13 @@ interface RunningAttempt {
   held?: boolean | undefined
   /** Directory the attempt worked in, when it worked in one. */
   workspaceDirectory?: string | undefined
+  /**
+   * Start plus {@link ANSWER_RUNTIME_CAP_MS}, in epoch milliseconds; set only on an answer
+   * attempt whose ceiling follows its lease, so renewals cannot re-arm past the cap.
+   */
+  hardDeadlineAt?: number | undefined
+  /** Whether the attempt's ceiling is re-armed from each renewal's lease expiry. */
+  leaseFollowLimit?: boolean
   renewTimer?: NodeJS.Timeout | undefined
   limitTimer?: NodeJS.Timeout | undefined
 }
@@ -566,12 +605,21 @@ export class TaskOrchestrator {
     if (renewMs !== undefined) {
       running.renewTimer = setInterval(() => { void this.#renew(running) }, renewMs)
     }
-    // An answer attempt runs inside the platform's soft answer deadline, which its own
-    // engine enforces after the node's ceiling: a node still working past the deadline
-    // would answer a question the platform has already taken back.
-    const defaultLimit = isChatAnswerTask(assignment)
-      ? this.#settings.answerRuntimeSeconds * 1000
-      : this.#settings.taskRuntimeSeconds * 1000
+    // An answer attempt follows its lease: the platform does not answer over a node that
+    // is online, so nothing shorter may end the attempt — the ceiling only keeps the
+    // result inside the lease that holds the question, under a ten-minute cap.
+    let defaultLimit: number
+    if (isChatAnswerTask(assignment)) {
+      if (this.#settings.answerRuntimeSeconds > 0) {
+        defaultLimit = this.#settings.answerRuntimeSeconds * 1000
+      } else {
+        running.leaseFollowLimit = true
+        running.hardDeadlineAt = startedAt.getTime() + ANSWER_RUNTIME_CAP_MS
+        defaultLimit = answerCeilingMs(assignment.lease_expire_at, running.hardDeadlineAt, startedAt)
+      }
+    } else {
+      defaultLimit = this.#settings.taskRuntimeSeconds * 1000
+    }
     const limitMs = taskRuntimeLimitMs(assignment.payload) ?? defaultLimit
     running.limitTimer = setTimeout(() => { this.#expire(running) }, limitMs)
     this.#runningCount += 1
@@ -593,7 +641,17 @@ export class TaskOrchestrator {
     const { task_id: taskId, attempt } = running.assignment
     try {
       const lease = await this.#client.lease(taskId, attempt)
-      if (!lease.should_continue) await this.#supersede(running)
+      if (!lease.should_continue) {
+        await this.#supersede(running)
+        return
+      }
+      // An answer attempt following its lease gets the ceiling the renewal's expiry states:
+      // the lease moved, so the room the result needs moved with it — never past the cap.
+      if (running.leaseFollowLimit === true && running.limitTimer !== undefined) {
+        clearTimeout(running.limitTimer)
+        const ceiling = answerCeilingMs(lease.lease_expire_at, running.hardDeadlineAt ?? Number.POSITIVE_INFINITY, this.#now())
+        running.limitTimer = setTimeout(() => { this.#expire(running) }, ceiling)
+      }
     } catch (error) {
       // A renewal fails on every interval while the platform cannot take one; the same rule as
       // the runtime's repeating failures keeps this from writing the same line each time.
@@ -690,7 +748,17 @@ export class TaskOrchestrator {
       }
       let outcome = result.outcome
       if (running.aborted) outcome = strongerOutcome(outcome, 'cancelled')
-      if (running.timedOut) outcome = strongerOutcome(outcome, 'failed')
+      if (running.timedOut) {
+        outcome = strongerOutcome(outcome, 'failed')
+        // An answer that passed its ceiling says so itself: the question goes back with a
+        // reason the customer reads, rather than a line about the node's own mechanics.
+        if (isChatAnswerTask(running.assignment)) {
+          result = {
+            ...result,
+            summary: 'answering this question needs longer than one attempt allows, so it is handed back unfinished',
+          }
+        }
+      }
       if (running.aborted) await this.#ackAbort(running)
       // Offer the lines the platform could not take while the attempt ran, so the log a
       // result refers to is whole by the time that result arrives.
