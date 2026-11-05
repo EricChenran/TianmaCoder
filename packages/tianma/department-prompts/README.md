@@ -1,5 +1,5 @@
 ---
-description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and the bundled 公文, 模板源码抓取, and demo-video skills, all published out of the runtime archive."
+description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and the bundled 公文, 模板源码抓取, demo-video, and 方案书与投标文件 skills, all published out of the runtime archive."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines and before the plan policy. It also publishes the bundled 公文 and bootstrapmb 模板源码抓取 skills for both modes, the headless demo-video skill for 技术部, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only these two modes carry, the demo-video skill reaching 技术部 alone.
+`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines, before the plan policy. It publishes the bundled 公文 and bootstrapmb 模板源码抓取 skills for both modes, the headless demo-video skill for 技术部, the 方案书与投标文件 skill for 商务部, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only these two modes carry, the demo-video skill reaching 技术部 alone.
 
 ## Table of Contents
 
@@ -42,7 +42,7 @@ The shipped `tech` (技术部) and `business` (商务部) presets each mount one
 | `skillAssetRoot` | the packaged `skills/official-doc/` | Skill source directory, for a deployment that ships its own copy |
 | `skillDir` | `<harness home>/department/skills/official-doc` | Directory the skill is published into |
 
-Both modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
+Both modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video skill while 商务部 registers and publishes the 方案书与投标文件 skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -54,7 +54,7 @@ Both modes register and publish the 公文 and 模板源码抓取 skills, and �
 
 The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. The directory reaches the model only as the `DSH_DEPARTMENT_TOOLS` variable — no rule text, log line, or shell command names the path.
 
-The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部.
+The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部. The 方案书与投标文件 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 row registers.
 
 ### Source map
 
@@ -64,14 +64,16 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 | [`src/prompts/tech.ts`](src/prompts/tech.ts) | The 技术部 rules, compiled in |
 | [`src/prompts/business.ts`](src/prompts/business.ts) | The 商务部 rules, compiled in |
 | [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_TOOLS` contributor |
-| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, and `web-demo-video` providers |
+| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, `web-demo-video`, and `proposal-doc` providers |
 | [`assets/business/`](assets/business) | The packaged document scripts: `gen_doc.py`, `gen_quote.py`, `add_watermark.py`, `to_pdf.py`, `open_folder.py` |
 | [`skills/official-doc/`](skills/official-doc) | The packaged 公文 skill: `SKILL.md`, `scripts/gen_doc.py`, `assets/logo_light.png` |
 | [`skills/bootstrapmb-template-fetch/`](skills/bootstrapmb-template-fetch) | The packaged template-fetch skill (both departments): `SKILL.md`, `scripts/download-bootstrapmb.ps1`, `references/*` |
 | [`skills/web-demo-video/`](skills/web-demo-video) | The packaged headless demo-video skill (技术部 only): `SKILL.md`, `scripts/webdemo.mjs`, `scripts/lib/*.mjs`, `references/*` |
+| [`skills/proposal-doc/`](skills/proposal-doc) | The packaged 方案书与投标文件 skill (商务部 only): `SKILL.md`, `scripts/docbuild.py` with the diagram and content templates, `references/*`, `assets/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | Section registration, literal rendering, toolbox and skill publication, catalog scoping, vocabulary guard |
 | [`tests/template-fetch-skill.spec.ts`](tests/template-fetch-skill.spec.ts) | Byte-level publication, provider metadata, description cap, and both-department scoping of the template-fetch skill |
 | [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | Byte-level publication, provider metadata, and 技术部-only scoping of the demo-video skill |
+| [`tests/proposal-doc-skill.spec.ts`](tests/proposal-doc-skill.spec.ts) | Byte-level publication, provider metadata, description cap, and 商务部-only scoping of the 方案书与投标文件 skill |
 | — | No runtime invariant companion is published; the plugin owns one static section and two derived directories, all asserted by test, and exposes no independent relation a companion could observe. |
 
 </details>
@@ -146,6 +148,20 @@ One catalog line per request in those two modes (382-character description, unde
 
 The catalog line sits in the stable prefix of a department session; loading the body appends one tool result.
 
+### Bundled 方案书与投标文件 skill (商务部 only)
+
+#### What the model sees
+
+Sessions in the 商务部 mode carry one more catalog entry, `proposal-doc`, described as drafting Chinese 技术方案 and 投标文件 as DOCX plus PDF under the fixed GB/T 9704 layout. Loading it returns two working modes — a six-chapter 方案书 and a 招投标专员 workflow that reads the tender document, decomposes the scoring rules, answers each requirement row by row, and self-checks against a thirty-item disqualification list — plus the resource base where `scripts/docbuild.py`, the diagram helpers, and the two content templates were published. The model writes a `content.py` and runs `python <base>/scripts/docbuild.py`. The 技术部 mode and every other mode carry no entry.
+
+#### Token effect
+
+One catalog line per request in the 商务部 mode, under the 500-character cap, plus the loaded body's ~9 KB for the steps that load it and whichever reference page a reader opens. Other modes pay nothing.
+
+#### KV Cache effect
+
+The catalog line sits in the stable prefix of a 商务部 session; loading the body appends one tool result.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -159,7 +175,7 @@ These limits define where the row is a poor fit. They are current package constr
 - **The 公文 skill needs an interpreter with `reportlab`** — the bundled runtime payload carries `python-docx` and `Pillow` but not `reportlab`, so a machine whose `python` lacks it gets the DOCX and no PDF. The skill body tells the model to deliver the DOCX and say so rather than silently drop the PDF.
 - **The template-fetch skill scrapes a third-party site** — it drives bootstrapmb.com's unauthenticated endpoints and rewrites downloaded files; the packaged script defaults `-OutRoot` to the working directory and carries no site credentials. Its behaviour depends on that site's markup, and this package does not maintain it.
 - **The Agent browser the 技术部 rules name does not ship with the mode** — the `browser_*` tool family comes from the optional browser-automation plugin bundle, independent of departments; when it is not enabled the rules require the model to say so and verify through other real-entry means instead of claiming browser verification.
-- **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools`, `department/skills/official-doc`, and `department/skills/bootstrapmb-template-fetch`, and a 技术部 session additionally publishes `department/skills/web-demo-video`.
+- **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools`, `department/skills/official-doc`, and `department/skills/bootstrapmb-template-fetch`, a 商务部 session additionally publishes `department/skills/proposal-doc`, and a 技术部 session additionally publishes `department/skills/web-demo-video`.
 - **`scripts/lib/` inside the skill needs a forced add** — the repository `.gitignore` ignores every `lib/` directory, so new or changed files under it require `git add -f`; without that the repository and the packaged copy lose those five modules and `webdemo.mjs` cannot start.
 
 <a id="dev-note"></a>

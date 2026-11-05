@@ -22,6 +22,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { type Department, departmentPrompt } from './prompts/index.ts'
 import {
   installDepartmentSkill,
+  installProposalDocSkill,
   installTemplateFetchSkill,
   installWebDemoVideoSkill,
   type DepartmentSkillOptions,
@@ -31,11 +32,16 @@ import { type BusinessToolboxOptions, installBusinessToolbox } from './toolbox.t
 export { departmentPrompt, DEPARTMENTS, DEPARTMENT_PROMPTS, type Department } from './prompts/index.ts'
 export {
   installDepartmentSkill,
+  installProposalDocSkill,
   installWebDemoVideoSkill,
   installTemplateFetchSkill,
   materializeDepartmentSkill,
+  materializeProposalDocSkill,
   materializeWebDemoVideoSkill,
   materializeTemplateFetchSkill,
+  PROPOSAL_DOC_SKILL_ASSET_FILES,
+  PROPOSAL_DOC_SKILL_NAME,
+  PROPOSAL_DOC_SKILL_PROVIDER_NAME,
   SKILL_ASSET_FILES,
   SKILL_NAME,
   SKILL_PROVIDER_NAME,
@@ -111,6 +117,7 @@ export function apply(ctx: Context, config: Config): void {
   if (config.department === 'tech') installWebDemoVideoSkill(ctx)
   if (config.department === 'business') {
     const { assetRoot, toolsDir } = config
+    installProposalDocSkill(ctx)
     installBusinessToolbox(ctx, { ...assetRoot === undefined ? {} : { assetRoot }, ...toolsDir === undefined ? {} : { toolsDir } })
   }
 }

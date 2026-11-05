@@ -81,6 +81,30 @@ const TEMPLATE_FETCH_SKILL: BundledSkill = {
   packagedRoot: fileURLToPath(new URL('../skills/bootstrapmb-template-fetch/', import.meta.url)),
 }
 
+/** The 方案书/投标文件 skill, carried by the 商务部 mode. */
+const PROPOSAL_DOC_SKILL: BundledSkill = {
+  name: 'proposal-doc',
+  assetFiles: [
+    'SKILL.md',
+    'CHANGELOG.md',
+    'assets/logo_alpha.png',
+    'assets/logo_on_white.png',
+    'examples/coldchain/content.py',
+    'references/bid-playbook.md',
+    'references/content-blocks.md',
+    'references/format-spec.md',
+    'references/intake-checklist.md',
+    'references/ooxml-recipes.md',
+    'scripts/content_template.py',
+    'scripts/content_template_bid.py',
+    'scripts/diagrams.py',
+    'scripts/dkit.py',
+    'scripts/docbuild.py',
+    'scripts/ui.py',
+  ],
+  packagedRoot: fileURLToPath(new URL('../skills/proposal-doc/', import.meta.url)),
+}
+
 /** Skill name the model addresses, and the directory name it publishes under. */
 export const SKILL_NAME = OFFICIAL_DOC_SKILL.name
 
@@ -115,6 +139,19 @@ export const TEMPLATE_FETCH_SKILL_PROVIDER_NAME = 'tianma-department-template-fe
 
 /** Relative paths the 模板源码抓取 skill's published copy must carry. */
 export const TEMPLATE_FETCH_SKILL_ASSET_FILES = TEMPLATE_FETCH_SKILL.assetFiles
+
+/** Skill name the 方案书/投标文件 skill publishes under. */
+export const PROPOSAL_DOC_SKILL_NAME = PROPOSAL_DOC_SKILL.name
+
+/**
+ * Provider name the 方案书/投标文件 skill registers on the skill registry. It
+ * differs from `SKILL_PROVIDER_NAME` because one registry layer rejects a second
+ * provider under a name it already holds.
+ */
+export const PROPOSAL_DOC_SKILL_PROVIDER_NAME = 'tianma-department-proposal-doc'
+
+/** Relative paths the 方案书/投标文件 skill's published copy must carry. */
+export const PROPOSAL_DOC_SKILL_ASSET_FILES = PROPOSAL_DOC_SKILL.assetFiles
 
 /** Where a bundled skill is published from, and where it is published to. */
 export interface DepartmentSkillOptions {
@@ -185,6 +222,15 @@ export function materializeWebDemoVideoSkill(options: DepartmentSkillOptions = {
  */
 export function materializeTemplateFetchSkill(options: DepartmentSkillOptions = {}): string {
   return materializeSkill(TEMPLATE_FETCH_SKILL, options)
+}
+
+/**
+ * Publish the packaged 方案书/投标文件 skill into a directory the model's interpreter can read.
+ * @param options - asset and destination overrides, both optional.
+ * @returns the absolute published skill directory.
+ */
+export function materializeProposalDocSkill(options: DepartmentSkillOptions = {}): string {
+  return materializeSkill(PROPOSAL_DOC_SKILL, options)
 }
 
 /** Description and body read from one skill document's frontmatter. */
@@ -281,4 +327,16 @@ export function installWebDemoVideoSkill(ctx: Context, options: DepartmentSkillO
  */
 export function installTemplateFetchSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
   return installSkill(ctx, TEMPLATE_FETCH_SKILL, TEMPLATE_FETCH_SKILL_PROVIDER_NAME, options)
+}
+
+/**
+ * Publish the bundled 方案书/投标文件 skill and register it on the skill registry.
+ *
+ * Only the 商务部 row calls this: 方案与投标都是商务场景，技术部不需要。
+ * @param ctx - plugin context that owns the publication and the provider registration.
+ * @param options - asset and destination overrides, both optional.
+ * @returns whether the provider was registered.
+ */
+export function installProposalDocSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
+  return installSkill(ctx, PROPOSAL_DOC_SKILL, PROPOSAL_DOC_SKILL_PROVIDER_NAME, options)
 }

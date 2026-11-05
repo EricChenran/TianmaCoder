@@ -287,7 +287,7 @@ describe('@tianma/dsh-department-prompts', () => {
       })
       const expected = department === 'tech'
         ? [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME, plugin.WEB_DEMO_VIDEO_SKILL_NAME]
-        : [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME]
+        : [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME, plugin.PROPOSAL_DOC_SKILL_NAME]
       expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(expected)
       await fiber.dispose()
       expect(await ctx.skills.list()).toEqual([])

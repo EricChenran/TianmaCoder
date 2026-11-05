@@ -24,6 +24,7 @@
     "lib/types/**/*.d.ts",
     "assets/business/*.py",
     "skills/official-doc/**",
+    "skills/proposal-doc/**",
     "skills/web-demo-video/**",
     "skills/bootstrapmb-template-fetch/**"
   ],

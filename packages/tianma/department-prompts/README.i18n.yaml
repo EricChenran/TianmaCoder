@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
 /:
-  en: ec08d9cb5dc6862f
-  zh: fb0dd19b996dba97
+  en: b9b56969c8de2227
+  zh: 5d217aa58253a326
 /tianma-dsh-department-prompts:
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: 281736c35c6c4a85
-  zh: cf276a2ac5fbb995
+  en: 700b41ba938495ab
+  zh: 6f977df72255e49d
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
 /tianma-dsh-department-prompts/use-this-package:
-  en: 5b4bd52a73dd5ce1
-  zh: 484e4495fb04ee6d
+  en: a3a11c9647165874
+  zh: 5f211b3a6f614777
 /tianma-dsh-department-prompts/understand-the-implementation:
-  en: 64f78224f7d22918
-  zh: a732553ce22d54e7
+  en: 0883dd8de13d7833
+  zh: 9aebe627765cbdc3
 /tianma-dsh-department-prompts/understand-the-implementation/source-map:
-  en: 694d832a97134dc9
-  zh: ee95beecd779b820
+  en: e6e39f96a9c2c385
+  zh: 007a90167149da75
 /tianma-dsh-department-prompts/further-exploration:
   en: 4a1dc47d905730ba
   zh: d699dd1976957fa6
@@ -77,9 +77,21 @@
 /tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill/kv-cache-effect:
   en: 493f941b8b9f8727
   zh: 12d8ee9e3cba8e08
+/tianma-dsh-department-prompts/model-experience/bundled-skill-only:
+  en: 02c23305f8517c90
+  zh: ce708aa4bc6ef7ee
+/tianma-dsh-department-prompts/model-experience/bundled-skill-only/what-the-model-sees:
+  en: 99d53953449f9689
+  zh: a3ead7a62a709897
+/tianma-dsh-department-prompts/model-experience/bundled-skill-only/token-effect:
+  en: bb5f72f58b2d5266
+  zh: 13027a299b9855ff
+/tianma-dsh-department-prompts/model-experience/bundled-skill-only/kv-cache-effect:
+  en: f47429e8914b7b1a
+  zh: febde00c320c9772
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work:
-  en: ea94a4e37961d7cb
-  zh: 6a417f0b8578478c
+  en: 0d24bcc51f1c97ee
+  zh: bea50b46f763c2ec
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
   en: fe3fe2ab0b4c37e1
   zh: 501c74d8c2155493
