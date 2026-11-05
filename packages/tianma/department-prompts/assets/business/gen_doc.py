@@ -315,21 +315,12 @@ def add_flow(doc, flow, index, figure, image_path):
         para(doc, [("前置条件：", {"bold": True}), (flow["precondition"], {})], indent=True)
 
     para(doc, "流程步骤：", bold=True, indent=True, before=6)
-    with_actor = any(s["actor"] for s in flow["steps"])
-    with_rule = any(s["rule"] for s in flow["steps"])
-    headers = ["序号"] + (["执行角色"] if with_actor else []) + ["操作内容"] \
-        + (["业务规则与输出"] if with_rule else [])
-    widths = ([1.4, 2.6, 6.8, 4.8] if with_actor and with_rule
-              else [1.4, 2.6, 11.6] if with_actor
-              else [1.4, 4.0, 10.2] if with_rule
-              else [1.4, 14.2])
+    headers = ["序号", "执行角色", "操作内容", "业务规则与输出"]
+    widths = [1.4, 2.6, 6.8, 4.8]
     table = make_table(doc, headers, widths)
     for i, step in enumerate(flow["steps"], 1):
-        cells = [str(i)] + ([step["actor"]] if with_actor else []) + [step["action"]] \
-            + ([step["rule"]] if with_rule else [])
-        aligns = [CENTER] + ([None] if with_actor else []) + [None] \
-            + ([None] if with_rule else [])
-        add_row(table, cells, widths, aligns=aligns)
+        cells = [str(i), step["actor"], step["action"], step["rule"]]
+        add_row(table, cells, widths, aligns=[CENTER, None, None, None])
 
     if flow["exceptions"]:
         para(doc, "异常与分支：", bold=True, indent=True, before=8)
@@ -396,14 +387,10 @@ def write_markdown(data, flows, image_links, date_str, out_md):
                 lines.append("- **前置条件**：%s" % flow["precondition"])
             lines.append("")
             lines.extend(["**流程步骤**", ""])
-            with_actor = any(s["actor"] for s in flow["steps"])
-            with_rule = any(s["rule"] for s in flow["steps"])
-            headers = ["序号"] + (["执行角色"] if with_actor else []) + ["操作内容"] \
-                + (["业务规则与输出"] if with_rule else [])
+            headers = ["序号", "执行角色", "操作内容", "业务规则与输出"]
             rows = []
             for n, step in enumerate(flow["steps"], 1):
-                rows.append([str(n)] + ([step["actor"]] if with_actor else []) + [step["action"]]
-                            + ([step["rule"]] if with_rule else []))
+                rows.append([str(n), step["actor"], step["action"], step["rule"]])
             lines.extend([md_table(headers, rows), ""])
             if flow["exceptions"]:
                 lines.extend(["**异常与分支**", ""])

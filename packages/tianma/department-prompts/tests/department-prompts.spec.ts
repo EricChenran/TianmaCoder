@@ -83,7 +83,7 @@ describe('@tianma/dsh-department-prompts', () => {
 
   it('requires complete business workflows as text beside the generated diagram', () => {
     const text = plugin.departmentPrompt('business')
-    expect(text).toContain('### 业务工作流（图文并存，必须完整）')
+    expect(text).toContain('### 业务工作流规范（图文并存，必须完整）')
     expect(text).toContain('步骤表（序号｜执行角色｜操作内容｜业务规则与输出）')
     expect(text).toContain('**不得只给图不给文**')
   })
