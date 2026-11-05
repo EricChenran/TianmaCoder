@@ -86,6 +86,7 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('### 业务工作流规范（图文并存，必须完整）')
     expect(text).toContain('步骤表（序号｜执行角色｜操作内容｜业务规则与输出）')
     expect(text).toContain('**不得只给图不给文**')
+    expect(text).toContain('**空列自动隐藏**')
   })
 
   it('ships a same-content Markdown copy for the 技术部 handoff', () => {

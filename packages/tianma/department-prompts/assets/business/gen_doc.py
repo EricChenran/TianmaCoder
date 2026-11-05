@@ -302,6 +302,29 @@ def normalize_flow(raw, index):
     }
 
 
+def step_table_columns(steps):
+    """步骤表的列与列宽：序号、操作内容恒在；执行角色、业务规则整列为空时隐藏。"""
+    with_actor = any(s["actor"] for s in steps)
+    with_rule = any(s["rule"] for s in steps)
+    headers = ["序号"] + (["执行角色"] if with_actor else []) + ["操作内容"] \
+        + (["业务规则与输出"] if with_rule else [])
+    if with_actor and with_rule:
+        widths = [1.4, 2.6, 6.8, 4.8]
+    elif with_actor:
+        widths = [1.4, 2.6, 11.6]
+    elif with_rule:
+        widths = [1.4, 4.0, 10.2]
+    else:
+        widths = [1.4, 14.2]
+    return headers, widths, with_actor, with_rule
+
+
+def step_row(index, step, with_actor, with_rule):
+    """一行步骤的单元格，与 step_table_columns 的列一一对应。"""
+    return [str(index)] + ([step["actor"]] if with_actor else []) \
+        + [step["action"]] + ([step["rule"]] if with_rule else [])
+
+
 def add_flow(doc, flow, index, figure, image_path):
     """输出一条业务流程：正文（结构化）在前，流程图与图题在后。"""
     para(doc, "（%s）%s" % (cn_num(index), flow["name"]), size=14, font=KAI,
@@ -315,12 +338,11 @@ def add_flow(doc, flow, index, figure, image_path):
         para(doc, [("前置条件：", {"bold": True}), (flow["precondition"], {})], indent=True)
 
     para(doc, "流程步骤：", bold=True, indent=True, before=6)
-    headers = ["序号", "执行角色", "操作内容", "业务规则与输出"]
-    widths = [1.4, 2.6, 6.8, 4.8]
+    headers, widths, with_actor, with_rule = step_table_columns(flow["steps"])
     table = make_table(doc, headers, widths)
+    aligns = [CENTER] + [None] * (len(headers) - 1)
     for i, step in enumerate(flow["steps"], 1):
-        cells = [str(i), step["actor"], step["action"], step["rule"]]
-        add_row(table, cells, widths, aligns=[CENTER, None, None, None])
+        add_row(table, step_row(i, step, with_actor, with_rule), widths, aligns=aligns)
 
     if flow["exceptions"]:
         para(doc, "异常与分支：", bold=True, indent=True, before=8)
@@ -387,10 +409,9 @@ def write_markdown(data, flows, image_links, date_str, out_md):
                 lines.append("- **前置条件**：%s" % flow["precondition"])
             lines.append("")
             lines.extend(["**流程步骤**", ""])
-            headers = ["序号", "执行角色", "操作内容", "业务规则与输出"]
-            rows = []
-            for n, step in enumerate(flow["steps"], 1):
-                rows.append([str(n), step["actor"], step["action"], step["rule"]])
+            headers, _, with_actor, with_rule = step_table_columns(flow["steps"])
+            rows = [step_row(n, step, with_actor, with_rule)
+                    for n, step in enumerate(flow["steps"], 1)]
             lines.extend([md_table(headers, rows), ""])
             if flow["exceptions"]:
                 lines.extend(["**异常与分支**", ""])
