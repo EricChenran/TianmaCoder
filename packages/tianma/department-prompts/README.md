@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-The shipped `tech` (技术部) and `business` (商务部) presets each mount one row:
+The shipped `tech` (技术部), `business` (商务部), and `bid` (招投标专员) presets each mount one row:
 
 ```yaml
 - id: tianma-department
@@ -36,13 +36,13 @@ The shipped `tech` (技术部) and `business` (商务部) presets each mount one
 
 | Field | Default | Meaning |
 |---|---|---|
-| `department` | required | Rule set this row contributes: `tech` or `business` |
+| `department` | required | Rule set this row contributes: `tech`, `business`, or `bid` |
 | `assetRoot` | the packaged `assets/business/` | Script source directory, for a deployment that ships its own copies |
 | `toolsDir` | `<harness home>/department/business-tools` | Directory the scripts are published into |
 | `skillAssetRoot` | the packaged `skills/official-doc/` | Skill source directory, for a deployment that ships its own copy |
 | `skillDir` | `<harness home>/department/skills/official-doc` | Directory the skill is published into |
 
-Both modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video skill while 商务部 registers and publishes the 方案书与投标文件 skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
+All three modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video skill while 商务部 and 招投标专员 register and publish the 方案书与投标文件 skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -54,7 +54,7 @@ Both modes register and publish the 公文 and 模板源码抓取 skills, and �
 
 The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. The directory reaches the model only as the `DSH_DEPARTMENT_TOOLS` variable — no rule text, log line, or shell command names the path.
 
-The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部. The 方案书与投标文件 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 row registers.
+The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部. The 方案书与投标文件 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 and 招投标专员 rows register.
 
 ### Source map
 
@@ -63,6 +63,7 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 | [`src/index.ts`](src/index.ts) | Plugin entry: config schema, section registration, skill and toolbox wiring |
 | [`src/prompts/tech.ts`](src/prompts/tech.ts) | The 技术部 rules, compiled in |
 | [`src/prompts/business.ts`](src/prompts/business.ts) | The 商务部 rules, compiled in |
+| [`src/prompts/bid.ts`](src/prompts/bid.ts) | The 招投标专员 rules, compiled in |
 | [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_TOOLS` contributor |
 | [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, `web-demo-video`, and `proposal-doc` providers |
 | [`assets/business/`](assets/business) | The packaged document scripts: `gen_doc.py`, `gen_quote.py`, `add_watermark.py`, `to_pdf.py`, `open_folder.py` |
@@ -96,11 +97,11 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 
 #### What the model sees
 
-One literal system-prompt section, `tianma:department`, carrying the selected department's complete rules: 技术部 covers backend, frontend, and operations discipline plus delivery self-checks. Before delivery, it performs only a small set of checks directly relevant to the change and does not start the application before asking the user whether they want Agent-led end-to-end verification or will verify independently; it does not default to a full end-to-end run or screenshot audit. If the user chooses Agent-led verification, it drives a real page through the Agent browser for end-to-end testing and visual verification — for a cross-platform mini-program project (uni-app or Taro) it compiles an H5 build first and verifies that build instead of calling the WeChat DevTools, leaving platform-only capabilities, bundle size, and review compliance to the user's device preview — then exercises relevant paths through the real entry point and confirms isolation of workspaces, build outputs, service ports, browser user-data directories, and debugging ports before parallel work, saying so and falling back to other real-entry means when the environment exposes no such capability; shared resources run serially when isolation is unavailable. Frontend screenshots and responsive checks are performed only when relevant to selected Agent-led verification. If the user chooses independent verification, it starts the project and provides an access entry point and necessary operating prerequisites for the user to verify. Independent tasks may still run concurrently when they share no workspace or external resources. Confirm specific failure causes from logs and reproducible evidence rather than inferring them from one screenshot. 商务部 covers requirement documents, quotations, and case retrieval plus the shared commercial red lines, with each requirement document required to carry complete business workflows as structured text beside a generated flowchart and to write a same-content Markdown copy for the 技术部 handoff. The text equals `departmentPrompt(department)` byte for byte, and the section replaces nothing — it composes beside the persona, workspace instructions, and behavioral guidelines.
+One literal system-prompt section, `tianma:department`, carrying the selected department's complete rules: 技术部 covers backend, frontend, and operations discipline plus delivery self-checks. Before delivery, it performs only a small set of checks directly relevant to the change and does not start the application before asking the user whether they want Agent-led end-to-end verification or will verify independently; it does not default to a full end-to-end run or screenshot audit. If the user chooses Agent-led verification, it drives a real page through the Agent browser for end-to-end testing and visual verification — for a cross-platform mini-program project (uni-app or Taro) it compiles an H5 build first and verifies that build instead of calling the WeChat DevTools, leaving platform-only capabilities, bundle size, and review compliance to the user's device preview — then exercises relevant paths through the real entry point and confirms isolation of workspaces, build outputs, service ports, browser user-data directories, and debugging ports before parallel work, saying so and falling back to other real-entry means when the environment exposes no such capability; shared resources run serially when isolation is unavailable. Frontend screenshots and responsive checks are performed only when relevant to selected Agent-led verification. If the user chooses independent verification, it starts the project and provides an access entry point and necessary operating prerequisites for the user to verify. Independent tasks may still run concurrently when they share no workspace or external resources. Confirm specific failure causes from logs and reproducible evidence rather than inferring them from one screenshot. 商务部 covers requirement documents, quotations, and case retrieval plus the shared commercial red lines, with each requirement document required to carry complete business workflows as structured text beside a generated flowchart and to write a same-content Markdown copy for the 技术部 handoff. 招投标专员 covers tender reading, scoring decomposition, clause-by-clause responses, and the disqualification self-check, and it loads the 方案书与投标文件 skill for the bid document layout and playbook. The text equals `departmentPrompt(department)` byte for byte, and the section replaces nothing — it composes beside the persona, workspace instructions, and behavioral guidelines.
 
 #### Token effect
 
-About 6,400 tokens for 技术部 and 3,300 tokens for 商务部 at the 4-chars/token heuristic, once per request as part of the system prompt and unchanged across turns. A mode a user does not select costs nothing.
+About 6,400 tokens for 技术部, 3,300 tokens for 商务部, and 300 tokens for 招投标专员 at the 4-chars/token heuristic, once per request as part of the system prompt and unchanged across turns. A mode a user does not select costs nothing.
 
 #### KV Cache effect
 

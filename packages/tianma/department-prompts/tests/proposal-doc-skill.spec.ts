@@ -126,7 +126,7 @@ describe('@tianma/dsh-department-prompts proposal-doc skill', () => {
       try {
         const fiber = await ctx.plugin(plugin, { department })
         const names = (await ctx.skills.list()).map(skill => skill.name)
-        expect(names.includes(plugin.PROPOSAL_DOC_SKILL_NAME)).toBe(department === 'business')
+        expect(names.includes(plugin.PROPOSAL_DOC_SKILL_NAME)).toBe(department === 'business' || department === 'bid')
         expect(names.includes(plugin.SKILL_NAME)).toBe(true)
         await fiber.dispose()
         expect(await ctx.skills.list()).toEqual([])

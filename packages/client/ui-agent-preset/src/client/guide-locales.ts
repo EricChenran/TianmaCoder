@@ -101,6 +101,21 @@ export const guideEn = {
     '> Quote this requirement at 86,000 yuan over 60 working days. Split the modules by phase and keep the totals exact.',
     'Expected output: a quotation whose module amounts add up to the total, plus the PDF copy.',
   ].join('\n\n'),
+  guideBidIntro: 'Choose Bid specialist mode when starting a new task. Provide the tender document, the qualification material, the case list, and the price; the agent reads the tender first and asks for anything missing.',
+  guideBidExplanation: [
+    '### What it adds',
+    'Everything Standard mode provides, plus one system-prompt section carrying the bidding standard: read the tender, decompose the scoring, answer every requirement clause by clause, and self-check against the disqualification list.',
+    '### What it produces',
+    'The bid document as Word and PDF, plus two internal tables: a response checklist (clause, requirement, verdict, page) and a disqualification risk list.',
+  ].join('\n\n'),
+  guideBidUsage: [
+    '### Prepare a bid',
+    '> The tender notice is in this folder. Read it, decompose the scoring table, and draft the bid document with a response table for every starred clause.',
+    'Expected output: a bid document in the tender’s own chapter order, a clause-by-clause response table, and the disqualification risk list.',
+    '### Check for disqualification',
+    '> Go through the thirty red-line items and tell me which ones we cannot tick yet.',
+    'Expected output: the items that fail, each with a handling suggestion and the material we still need.',
+  ].join('\n\n'),
 }
 
 /** Keys merged into the feature’s ordinary locale seat. */
@@ -208,5 +223,20 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '### 出一份报价单',
     '> 按 86000 元、60 个工作日给这份需求报价，按阶段拆分模块，合计要精确。',
     '预期产出：模块金额合计等于总金额的报价单，以及同目录的 PDF。',
+  ].join('\n\n'),
+  guideBidIntro: '新建任务时选择「招投标专员」，提供招标文件、资质材料、案例目录与投标报价；Agent 先读标，缺什么再问什么。',
+  guideBidExplanation: [
+    '### 多了什么',
+    '标准模式的能力全部保留，另加一条招投标规范系统提示词：读招标文件、拆评分办法、逐条响应，再按三十条红线做废标自查。',
+    '### 产出什么',
+    '投标文件的 Word 与 PDF，外加两份内部用的表：应答核对表（条款、要求、结论、页码）与废标风险清单。',
+  ].join('\n\n'),
+  guideBidUsage: [
+    '### 编一份投标文件',
+    '> 招标文件在这个目录里。先通读并拆评分办法，再按招标文件的章节顺序出投标文件，★条款逐条响应。',
+    '预期产出：章节顺序与招标文件一致、带逐条响应表的投标文件，以及废标风险清单。',
+    '### 做废标自查',
+    '> 按三十条红线逐条过一遍，告诉我哪几条现在打不了勾。',
+    '预期产出：打不了勾的条目，每条给处置建议和还缺的材料。',
   ].join('\n\n'),
 }

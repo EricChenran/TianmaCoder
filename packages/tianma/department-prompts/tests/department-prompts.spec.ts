@@ -174,8 +174,24 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).not.toMatch(/[A-Za-z]:\\/u)
   })
 
+  /** The opening heading each department's rule set carries. */
+  const PROMPT_HEADINGS: Readonly<Record<plugin.Department, string>> = {
+    tech: '# 技术部工作规范',
+    business: '# 商务部工作规范',
+    bid: '# 招投标专员工作规范',
+  }
+
   it.each(plugin.DEPARTMENTS)('states the department the model is acting for', (department) => {
-    expect(plugin.departmentPrompt(department)).toContain(department === 'tech' ? '# 技术部工作规范' : '# 商务部工作规范')
+    expect(plugin.departmentPrompt(department)).toContain(PROMPT_HEADINGS[department])
+  })
+
+  it('drives the 招投标专员 from reading the tender to the disqualification self-check', () => {
+    const text = plugin.departmentPrompt('bid')
+    expect(text).toContain('五张清单')
+    expect(text).toContain('拆评分')
+    expect(text).toContain('完全响应')
+    expect(text).toContain('应答核对表')
+    expect(text).toContain('废标风险清单')
   })
 
   it('keeps acceptance user-directed after lightweight delivery checks', () => {

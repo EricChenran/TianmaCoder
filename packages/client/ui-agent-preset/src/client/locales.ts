@@ -25,6 +25,8 @@ export type AgentPresetSettingsKey =
   | 'presetTechDescription'
   | 'presetBusinessName'
   | 'presetBusinessDescription'
+  | 'presetBidName'
+  | 'presetBidDescription'
   | 'presetPickerIntro'
   | 'presetGroupWork'
   | 'presetGroupTeam'
@@ -37,6 +39,7 @@ export type AgentPresetSettingsKey =
   | 'presetCordisSummary'
   | 'presetTechSummary'
   | 'presetBusinessSummary'
+  | 'presetBidSummary'
   | 'inUse'
   | 'noDescription'
   | 'brokenBadge'
@@ -81,6 +84,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetBusinessName: 'Business mode',
   presetBusinessDescription:
     'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, and case retrieval, with its own document scripts.',
+  presetBidName: 'Bid specialist mode',
+  presetBidDescription:
+    'A fixed mode for tender work. Keeps Standard mode capabilities and adds the bidding standard: read the tender, decompose the scoring, answer every requirement, and self-check against the disqualification list.',
 
   // The picker's groups and its one-line rows. A shipped preset publishes no
   // name and no description, so these dictionaries are the only copy its menu
@@ -97,6 +103,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisSummary: 'Lets the agent write plugins and extend DSH',
   presetTechSummary: 'Backend, frontend and ops discipline',
   presetBusinessSummary: 'Requirement documents, quotations, case retrieval',
+  presetBidSummary: 'Tender reading, scoring, responses, disqualification checks',
 
   inUse: 'New task default',
 
@@ -142,6 +149,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetTechDescription: '固定技术团队模式。保留标准模式的能力，并加入技术部规范：后端、前端、运维三类工程纪律与交付自检。',
   presetBusinessName: '商务部',
   presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索，自带文档生成脚本。',
+  presetBidName: '招投标专员',
+  presetBidDescription: '固定投标团队模式。保留标准模式的能力，并加入招投标规范：读招标文件、拆评分办法、逐条响应、出投标文件与废标自查。',
 
   presetPickerIntro: '选择本任务使用的模式（单选）',
   presetGroupWork: '工作方式 · 决定工具怎么调',
@@ -155,6 +164,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetCordisSummary: '让 Agent 编写插件，扩展 DSH',
   presetTechSummary: '后端／前端／运维的工程纪律与交付自检',
   presetBusinessSummary: '需求文档、报价单、案例检索',
+  presetBidSummary: '读标、拆评分、逐条响应、废标自查',
 
   inUse: '新任务默认',
 

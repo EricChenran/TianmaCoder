@@ -15,6 +15,7 @@ import {
   IconCodeOutlineRegular,
   IconCordisPluginOutlineRegular,
   IconDeliverDocRegular,
+  IconInspectOutlineRegular,
   IconPlayOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -33,6 +34,8 @@ const MODE_ICONS: Readonly<Partial<Record<string, (props: IconProps) => ReactNod
   tech: IconChecklistOutlineRegular,
   /** Documents delivered to a customer. */
   business: IconDeliverDocRegular,
+  /** Bidding: read the tender, answer each clause, self-check for disqualification. */
+  bid: IconInspectOutlineRegular,
 }
 
 /**

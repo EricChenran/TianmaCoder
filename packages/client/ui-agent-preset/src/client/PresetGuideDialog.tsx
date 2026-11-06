@@ -23,6 +23,7 @@ const guides = new Map<string, PresetGuide>([
   ['cordis', { name: 'presetCordisName', intro: 'guideCordisIntro', explanation: 'guideCordisExplanation', usage: 'guideCordisUsage' }],
   ['tech', { name: 'presetTechName', intro: 'guideTechIntro', explanation: 'guideTechExplanation', usage: 'guideTechUsage' }],
   ['business', { name: 'presetBusinessName', intro: 'guideBusinessIntro', explanation: 'guideBusinessExplanation', usage: 'guideBusinessUsage' }],
+  ['bid', { name: 'presetBidName', intro: 'guideBidIntro', explanation: 'guideBidExplanation', usage: 'guideBidUsage' }],
 ])
 
 /**
