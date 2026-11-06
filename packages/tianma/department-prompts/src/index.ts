@@ -94,7 +94,7 @@ export const Config: z<Config> = z.object({
 /**
  * Register the selected department's rules and its bundled 公文 skill; for
  * 技术部 add the bundled 演示视频 skill, for 商务部 publish its toolbox, and
- * for 商务部 or 招投标专员 add the bundled 方案书与投标文件 skill.
+ * for 商务部 or 招投标专员 add the bundled 实施方案 skill.
  * @param ctx - the preset scope context this row mounts in.
  * @param config - the department selection and optional publication directories.
  */

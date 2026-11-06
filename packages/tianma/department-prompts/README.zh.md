@@ -1,5 +1,5 @@
 ---
-description: "TianmaCoder 桌面端部门模式的作业规则：每个模式一条字面系统提示词节，外加商务部文档工具箱与随包的公文、模板源码抓取、演示视频、方案书与投标文件四个技能——都从运行时归档中发布出来。"
+description: "TianmaCoder 桌面端部门模式的作业规则：每个模式一条字面系统提示词节，外加商务部文档工具箱与随包的公文、模板源码抓取、演示视频、实施方案四个技能——都从运行时归档中发布出来。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能、为商务部发布随包的方案书与投标文件技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它们，其中演示视频技能只到技术部。
+`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能、为商务部与招投标专员发布随包的实施方案技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它们，其中演示视频技能只到技术部。
 
 ## 目录
 
@@ -42,7 +42,7 @@ kind: "package-reference"
 | `skillAssetRoot` | 包内 `skills/official-doc/` | 技能来源目录，供自行携带副本的部署使用 |
 | `skillDir` | `<harness home>/department/skills/official-doc` | 技能发布到的目录 |
 
-三种模式都会注册并发布公文技能与模板源码抓取技能，技术部还会注册并发布无头演示视频技能，商务部与招投标专员会注册并发布方案书与投标文件技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
+三种模式都会注册并发布公文技能与模板源码抓取技能，技术部还会注册并发布无头演示视频技能，商务部与招投标专员会注册并发布实施方案技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -54,7 +54,7 @@ kind: "package-reference"
 
 工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
 
-公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，两个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/web-demo-video`，但它只由技术部那一行注册，因此即便两个预设共用本行，商务部也拿不到它。方案书与投标文件技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
+公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，两个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/web-demo-video`，但它只由技术部那一行注册，因此即便两个预设共用本行，商务部也拿不到它。实施方案技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
 
 ### 源码索引
 
@@ -70,11 +70,11 @@ kind: "package-reference"
 | [`skills/official-doc/`](skills/official-doc) | 随包交付的公文技能：`SKILL.md`、`scripts/gen_doc.py`、`assets/logo_light.png` |
 | [`skills/bootstrapmb-template-fetch/`](skills/bootstrapmb-template-fetch) | 随包交付的模板源码抓取技能（两部门共有）：`SKILL.md`、`scripts/download-bootstrapmb.ps1`、`references/*` |
 | [`skills/web-demo-video/`](skills/web-demo-video) | 随包交付的无头演示视频技能（仅技术部）：`SKILL.md`、`scripts/webdemo.mjs`、`scripts/lib/*.mjs`、`references/*` |
-| [`skills/proposal-doc/`](skills/proposal-doc) | 随包交付的方案书与投标文件技能（仅商务部）：`SKILL.md`、`scripts/docbuild.py` 与绘图、内容模板、`references/*`、`assets/*` |
+| [`skills/proposal-doc/`](skills/proposal-doc) | 随包交付的实施方案技能（商务部与招投标专员）：`SKILL.md`、`scripts/docbuild.py` 与绘图、实施方案模板、`references/*`、`assets/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | 节注册、字面渲染、工具箱与技能发布、目录作用域、用词守卫 |
 | [`tests/template-fetch-skill.spec.ts`](tests/template-fetch-skill.spec.ts) | 模板源码抓取技能的字节级发布、提供方元数据、描述上限与两部门作用域 |
 | [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | 演示视频技能的字节级发布、提供方元数据与仅技术部作用域 |
-| [`tests/proposal-doc-skill.spec.ts`](tests/proposal-doc-skill.spec.ts) | 方案书与投标文件技能的字节级发布、提供方元数据、描述上限与仅商务部作用域 |
+| [`tests/proposal-doc-skill.spec.ts`](tests/proposal-doc-skill.spec.ts) | 实施方案技能的字节级发布、提供方元数据、描述上限与两种模式的作用域 |
 | — | 不发布运行时不变式伴生入口；本插件只拥有一条静态节与两个派生目录，均由测试断言，也没有可供伴生入口独立观察的关系。 |
 
 </details>
@@ -97,7 +97,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-一条字面系统提示词节 `tianma:department`，承载所选部门的完整规则：技术部覆盖后端、前端、运维三类纪律与交付自检。交付前只做少量且与改动直接相关的基础检查，提问验收方式前不启动应用，也不默认执行完整端到端测试或截图验收；基础检查后询问用户由 Agent 执行端到端验证，还是由用户自行验收。用户选择 Agent 验证后用 Agent 浏览器驱动真实页面完成端到端测试与视觉验证，再按真实入口检查相关路径（环境未提供该能力时先说明、改用其他真实入口手段）；小程序端若是跨端框架（uni-app / Taro）工程，先编译 H5 构建再在 Agent 浏览器上验证，不调用微信开发者工具，平台专有能力、包体积与提审合规仍交用户真机复核；自行验收时启动项目并提供入口和必要操作前提。前端截图与响应式实测仅在 Agent 验收确有需要时进行。用户选择 Agent 验收后，再按真实入口检查相关路径，并在并行前确认工作区、构建产物、服务端口、浏览器用户数据目录和调试端口隔离；无法隔离的共享资源操作串行执行。用户选择自行验收时，启动项目并提供可访问入口与必要操作前提，由用户亲自验证。相互独立且不共享工作区与外部资源的任务仍可并行；具体失败归因须由日志和复现证据确认，不以单张截图断定根因。商务部覆盖需求文档、报价单、案例检索与共通的商务红线，其中需求文档必须以结构化正文承载完整的业务工作流并与脚本生成的流程图并存，同时写出同内容的 Markdown 副本供转交技术部。招投标专员覆盖读招标文件、拆评分办法、逐条响应与废标自查，并加载方案书与投标文件技能获取投标文件版式与手册。文本与 `departmentPrompt(department)` 逐字节一致，且该节不替换任何内容——它与 persona、工作区指令、行为规范并列组合。
+一条字面系统提示词节 `tianma:department`，承载所选部门的完整规则：技术部覆盖后端、前端、运维三类纪律与交付自检。交付前只做少量且与改动直接相关的基础检查，提问验收方式前不启动应用，也不默认执行完整端到端测试或截图验收；基础检查后询问用户由 Agent 执行端到端验证，还是由用户自行验收。用户选择 Agent 验证后用 Agent 浏览器驱动真实页面完成端到端测试与视觉验证，再按真实入口检查相关路径（环境未提供该能力时先说明、改用其他真实入口手段）；小程序端若是跨端框架（uni-app / Taro）工程，先编译 H5 构建再在 Agent 浏览器上验证，不调用微信开发者工具，平台专有能力、包体积与提审合规仍交用户真机复核；自行验收时启动项目并提供入口和必要操作前提。前端截图与响应式实测仅在 Agent 验收确有需要时进行。用户选择 Agent 验收后，再按真实入口检查相关路径，并在并行前确认工作区、构建产物、服务端口、浏览器用户数据目录和调试端口隔离；无法隔离的共享资源操作串行执行。用户选择自行验收时，启动项目并提供可访问入口与必要操作前提，由用户亲自验证。相互独立且不共享工作区与外部资源的任务仍可并行；具体失败归因须由日志和复现证据确认，不以单张截图断定根因。商务部覆盖需求文档、报价单、案例检索与共通的商务红线，其中需求文档必须以结构化正文承载完整的业务工作流并与脚本生成的流程图并存，同时写出同内容的 Markdown 副本供转交技术部。招投标专员覆盖读招标文件、拆评分办法、逐条响应与废标自查，并用随包的排版脚本出稿。文本与 `departmentPrompt(department)` 逐字节一致，且该节不替换任何内容——它与 persona、工作区指令、行为规范并列组合。
 
 #### Token 影响
 
@@ -149,11 +149,11 @@ kind: "package-reference"
 
 目录行位于部门会话的稳定前缀内；加载正文只是追加一条工具结果。
 
-### 随包方案书与投标文件技能（仅商务部）
+### 随包实施方案技能（商务部与招投标专员）
 
 #### 模型看到什么
 
-处于商务部模式的会话再多出一条目录项 `proposal-doc`，描述为按固化的 GB/T 9704 版式编制中文技术方案与投标文件（DOCX 与 PDF 双格式）。加载后返回两种工作模式——六章结构的方案书，以及先读招标文件、拆评分办法、逐条响应、再按三十条废标红线自查的招投标专员流程——以及 `scripts/docbuild.py`、绘图组件与两套内容模板被发布到的资源基准。模型写一份 `content.py`，执行 `python <基准>/scripts/docbuild.py`。技术部模式与其他模式都没有这条目录项。
+处于商务部或招投标专员模式的会话再多出一条目录项 `proposal-doc`，描述为按固化的 GB/T 9704 版式编制中文《实施方案》（DOCX 与 PDF 双格式）。本技能只出一种文档，七章骨架固定；加载后返回需求三问、缺料降级口径、七章骨架与 `NUMBERS` 数字台账规则，以及 `scripts/docbuild.py`、绘图组件与实施方案模板被发布到的资源基准。模型写一份 `content.py`，执行 `python <基准>/scripts/docbuild.py`；正文数字未在台账登记时脚本直接报错退出。技术部模式与其他模式都没有这条目录项。
 
 #### Token 影响
 

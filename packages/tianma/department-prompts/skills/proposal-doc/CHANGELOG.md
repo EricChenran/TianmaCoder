@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2.0.0 — 2026-11-06
+
+**收敛为单一文档：实施方案**
+
+- 删除"选模式"表与招投标专员模式（读标、拆评分、偏离表、应答核对表、废标风险清单）；文档类型固定为实施方案，不留开关、不留兼容。
+- 固定七章骨架（项目概述与需求理解 / 总体技术方案 / 功能模块技术方案 / 业务流程设计 / 系统演示 / 结论 / 附件与交付清单），不得增删章。
+- 新增六类禁令：投标函类、工期与周次、SLA、报价、招标程序、资质业绩；运营建议同样不写。
+- 新增缺料降级模式：先三问一次问全，仍缺则删除对应内容并在交付说明列明，优先级"不编造 ＞ 结构完整 ＞ 篇幅"。
+- `META` 收敛为 `title` / `subtitle` / `doc_name` / `org`；`project_no` 与 `client` 缺省为空，封面跳过空行、不留【】。
+- 新增 `NUMBERS` 数字台账：正文数字必须登记原样字符串与出处，`docbuild.py` 构建前校验，缺项直接报错退出。
+- 固化三处实现：目录→正文 `WD_SECTION.CONTINUOUS` 分节且首章自带分页、表头单元格 `keep_with_next`、封面空值跳过与显式置空。
+- 删除 `scripts/content_template.py`、`scripts/content_template_bid.py`、`references/bid-playbook.md` 与 `examples/coldchain/`；新增 `scripts/content_template_impl.py`。
+- `intake-checklist.md` 改为三问话术与降级判定表。
+
 ## 1.4.0 — 2026-11-05
 
 **新增招投标专员模式，并作为内置技能随产品发布**

@@ -110,9 +110,9 @@ describe('@tianma/dsh-department-prompts proposal-doc skill', () => {
       expect(catalog[0]?.description.length).toBeLessThanOrEqual(500)
       const loaded = await ctx.skills.get(plugin.PROPOSAL_DOC_SKILL_NAME)
       expect(loaded?.path).toBe(join(skillDir, 'SKILL.md'))
-      expect(loaded?.content.startsWith('# 方案书与投标文件')).toBe(true)
+      expect(loaded?.content.startsWith('# 实施方案（proposal-doc）')).toBe(true)
       expect(loaded?.content).toContain('scripts/docbuild.py')
-      expect(loaded?.content).toContain('references/bid-playbook.md')
+      expect(loaded?.content).toContain('references/content-blocks.md')
     } finally {
       await ctx.fiber.dispose()
     }
@@ -151,14 +151,20 @@ describe('@tianma/dsh-department-prompts proposal-doc skill', () => {
     }
     expect(raw).not.toMatch(/[A-Za-z]:\\/u)
     expect(raw).toContain('scripts/docbuild.py')
-    expect(raw).toContain('content_template_bid.py')
+    expect(raw).toContain('content_template_impl.py')
   })
 
-  it('ships a bid playbook the mode can actually follow', () => {
-    const playbook = readFileSync(join(SKILL_ASSET_ROOT, 'references', 'bid-playbook.md'), 'utf8')
-    expect(playbook).toContain('废标红线清单')
-    expect(playbook).toContain('偏离表')
-    expect(playbook).toContain('应答核对表')
-    expect(playbook).not.toMatch(/[A-Za-z]:\\/u)
+  it('ships a single implementation-plan body with the seven fixed chapters', () => {
+    const raw = readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')
+    expect(raw).toContain('本技能只出一种文档')
+    expect(raw).toContain('第一章　项目概述与需求理解')
+    expect(raw).toContain('第七章　附件与交付清单')
+    expect(raw).not.toContain('选模式')
+    expect(raw).not.toContain('招投标专员模式')
+    const builder = readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'docbuild.py'), 'utf8')
+    expect(builder).toContain('assert_number_ledger')
+    const template = readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'content_template_impl.py'), 'utf8')
+    expect(template).toContain('NUMBERS')
+    expect(template).toContain('第七章　附件与交付清单')
   })
 })

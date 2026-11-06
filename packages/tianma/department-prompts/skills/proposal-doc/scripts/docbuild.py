@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""方案书 DOCX 生成器：读一个 content.py，产出按附录 A 排版的 Word 文件。
+"""实施方案 DOCX 生成器：读一个 content.py，产出按版式规范排版的 Word 文件。
 
 用法：
     python docbuild.py <content.py 路径> -o <输出目录>
-content.py 需提供 META(dict) 与 CONTENT(list)；图片放在 content.py 同级的 img/ 下。
+content.py 需提供 META(dict)、CONTENT(list) 与 NUMBERS(dict)；
+图片放在 content.py 同级的 img/ 下。
 """
 import os
 import re
@@ -27,13 +28,13 @@ TEXT_W = 156.0
 TOC_BREAK = 20      # 目录第二页起始条目序号（0 基）
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# 以下 7 项由 content.py 的 META 覆盖
+# 以下 4 项由 content.py 的 META 覆盖；项目编号与委托单位缺省为空，封面不渲染空行
 TITLE = ""
-SUBTITLE = "技 术 方 案"
+SUBTITLE = "实 施 方 案"
 DOC_NAME = ""
 ORG = "宜春市天码信息有限公司"
-PROJECT_NO = "【项目编号】"
-CLIENT = "【委托单位名称】"
+PROJECT_NO = ""
+CLIENT = ""
 IMG_DIR = ""
 LOGO = os.path.join(HERE, "..", "assets", "logo_on_white.png")
 
@@ -80,6 +81,65 @@ def tighten(s):
     """中文与数字之间去掉空格，避免两端对齐时被拉成大空隙。"""
     s = RE_1.sub("", s)
     return RE_2.sub("", s)
+
+
+# ---------------------------------------------------------------- 数字台账
+# 数字 + 紧跟的单位/百分号按原样计入台账；图表编号是版式编号，不算正文数字。
+_NUM_UNITS = ("分钟", "小时", "工作日", "平方公里", "平方米", "立方米", "万元", "公里",
+              "千米", "毫米", "厘米", "毫秒", "秒", "天", "日", "周", "月", "年", "字",
+              "个", "项", "条", "台", "人", "次", "路", "倍", "米", "分", "页", "种",
+              "套", "张", "版", "级", "层", "核", "GB", "MB", "KB", "TB", "ms", "min",
+              "km", "cm", "mm", "kg", "%", "％", "℃")
+RE_NUM = re.compile(r"\d[\d,]*(?:\.\d+)?(?:\s*(?:%s))?" % "|".join(
+    re.escape(unit) for unit in sorted(_NUM_UNITS, key=len, reverse=True)))
+RE_FIG_REF = re.compile(r"[表图]\s*\d+")
+
+
+def scan_numbers(text):
+    """返回一段文字里出现的数字原样字符串；图表编号与交叉引用不计入。"""
+    text = RE_FIG_REF.sub("", str(text))
+    return RE_NUM.findall(text)
+
+
+def collect_numbers(content):
+    """收集 CONTENT 全文的数字：键为原样字符串，值为出现次数。"""
+    found = {}
+
+    def add(text):
+        for token in scan_numbers(text):
+            found[token] = found.get(token, 0) + 1
+
+    for blk in content:
+        kind = blk[0]
+        if kind in ("h1", "h2", "p"):
+            add(blk[1])
+        elif kind == "lead":
+            add(blk[1])
+            add(blk[2])
+        elif kind == "fig":
+            add(blk[2])
+        elif kind == "tbl":
+            spec = blk[1]
+            add(spec.get("caption", ""))
+            for header in spec.get("headers", []):
+                add(header)
+            for row in spec.get("rows", []):
+                for cell in row:
+                    add(cell)
+    return found
+
+
+def assert_number_ledger(content):
+    """构建前校验：正文有数字就必须在 NUMBERS 台账登记出处，否则不生成文件。"""
+    found = collect_numbers(content)
+    if not found:
+        return
+    ledger = getattr(C, "NUMBERS", None)
+    if not isinstance(ledger, dict) or not ledger:
+        sys.exit("content.py 缺少 NUMBERS 台账，正文出现数字：%s" % "、".join(sorted(found)))
+    missing = sorted(token for token in found if token not in ledger)
+    if missing:
+        sys.exit("NUMBERS 台账缺少以下数字的原样字符串与出处：\n  %s" % "\n  ".join(missing))
 
 
 def mm2tw(v):
@@ -417,10 +477,10 @@ def lead_para(doc, head, body):
     return p
 
 
-def heading(doc, text, level, first=False):
+def heading(doc, text, level):
     p = doc.add_paragraph(style="Heading 1" if level == 1 else "Heading 2")
     run_font(p.add_run(text), HEI, 22 if level == 1 else 16)
-    if level == 1 and not first:
+    if level == 1:
         pfmt(p, line=LINE, before=14, after=14, first_chars=0, align=WD_ALIGN_PARAGRAPH.CENTER,
              keep=True, page_break=True, before_lines=50, after_lines=50)
     elif level == 2:
@@ -520,6 +580,7 @@ def add_table(doc, spec):
         tcB.append(b)
         tcPr.append(tcB)
         _cell_text(cell, h, HEI, 10.5, "c")
+        cell.paragraphs[0].paragraph_format.keep_with_next = True
 
     for ri, row in enumerate(rows):
         tr = table.rows[ri + 1]
@@ -559,6 +620,8 @@ def build_cover(doc):
                        ("委托单位", CLIENT),
                        ("编制单位", ORG),
                        ("编制日期", cn_date(datetime.date.today()))):
+        if not val:
+            continue
         p = doc.add_paragraph()
         pfmt(p, line=32, before=0, after=0, first_chars=0, align=WD_ALIGN_PARAGRAPH.CENTER)
         run_font(p.add_run("%s：%s" % (label, val)), FANG, 16)
@@ -587,20 +650,19 @@ def build_toc(doc, heads):
 
 # ---------------------------------------------------------------- 主流程
 def apply_meta(meta):
-    global TITLE, SUBTITLE, DOC_NAME, ORG, PROJECT_NO, CLIENT, IMG_DIR, TOC_BREAK
-    TITLE = meta.get("title") or TITLE
-    SUBTITLE = meta.get("subtitle") or SUBTITLE
-    DOC_NAME = meta.get("doc_name") or (TITLE + "建设方案")
-    ORG = meta.get("org") or ORG
-    PROJECT_NO = meta.get("project_no") or PROJECT_NO
-    CLIENT = meta.get("client") or CLIENT
+    global TITLE, SUBTITLE, DOC_NAME, ORG, PROJECT_NO, CLIENT, IMG_DIR
+    TITLE = str(meta.get("title") or "").strip()
+    SUBTITLE = str(meta.get("subtitle") or "实 施 方 案").strip()
+    DOC_NAME = str(meta.get("doc_name") or (TITLE + "实施方案")).strip()
+    ORG = str(meta.get("org") or ORG).strip()
+    # 显式置空必须保留：项目编号与委托单位缺省为空，封面不渲染空行
+    PROJECT_NO = str(meta.get("project_no") or "").strip()
+    CLIENT = str(meta.get("client") or "").strip()
     IMG_DIR = meta["img_dir"]
-    if meta.get("toc_break"):
-        TOC_BREAK = int(meta["toc_break"])
-    LOGO_OVERRIDE = meta.get("logo")
 
 
 def build(out_path):
+    assert_number_ledger(C.CONTENT)
     heads = []
     for blk in C.CONTENT:
         if blk[0] in ("h1", "h2"):
@@ -610,7 +672,7 @@ def build(out_path):
     cp = doc.core_properties
     cp.title = DOC_NAME
     cp.subject = SUBTITLE
-    cp.category = "项目方案书"
+    cp.category = "实施方案"
     cp.comments = "按 GB/T 9704—2012 版式规范排版"
     setup_styles(doc)
     setup_section(doc.sections[0])
@@ -625,7 +687,7 @@ def build(out_path):
     setup_footer(sec2, numbered=False)
     build_toc(doc, heads)
 
-    doc.add_section(WD_SECTION.NEW_PAGE)
+    doc.add_section(WD_SECTION.CONTINUOUS)
     sec3 = doc.sections[-1]
     setup_section(sec3, body=True)
     setup_header(sec3, with_title=True)
@@ -635,7 +697,7 @@ def build(out_path):
     for blk in C.CONTENT:
         kind = blk[0]
         if kind in ("h1", "h2"):
-            p = heading(doc, blk[1], 1 if kind == "h1" else 2, first=(hi == 0))
+            p = heading(doc, blk[1], 1 if kind == "h1" else 2)
             add_bookmark(p, heads[hi][2], 100 + hi)
             hi += 1
         elif kind == "lead":
@@ -671,7 +733,7 @@ def load_content(path):
 
 def main(argv=None):
     global C
-    ap = argparse.ArgumentParser(description="生成方案书 DOCX")
+    ap = argparse.ArgumentParser(description="生成实施方案 DOCX")
     ap.add_argument("content", help="content.py 路径")
     ap.add_argument("-o", "--outdir", default=".", help="输出目录")
     ap.add_argument("-n", "--name", default="", help="输出文件名（不含扩展名）")

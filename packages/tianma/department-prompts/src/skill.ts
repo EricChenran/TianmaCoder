@@ -81,7 +81,7 @@ const TEMPLATE_FETCH_SKILL: BundledSkill = {
   packagedRoot: fileURLToPath(new URL('../skills/bootstrapmb-template-fetch/', import.meta.url)),
 }
 
-/** The 方案书/投标文件 skill, carried by the 商务部 mode. */
+/** The 实施方案 skill, carried by the 商务部 and 招投标专员 modes. */
 const PROPOSAL_DOC_SKILL: BundledSkill = {
   name: 'proposal-doc',
   assetFiles: [
@@ -89,14 +89,11 @@ const PROPOSAL_DOC_SKILL: BundledSkill = {
     'CHANGELOG.md',
     'assets/logo_alpha.png',
     'assets/logo_on_white.png',
-    'examples/coldchain/content.py',
-    'references/bid-playbook.md',
     'references/content-blocks.md',
     'references/format-spec.md',
     'references/intake-checklist.md',
     'references/ooxml-recipes.md',
-    'scripts/content_template.py',
-    'scripts/content_template_bid.py',
+    'scripts/content_template_impl.py',
     'scripts/diagrams.py',
     'scripts/dkit.py',
     'scripts/docbuild.py',
@@ -332,7 +329,7 @@ export function installTemplateFetchSkill(ctx: Context, options: DepartmentSkill
 /**
  * Publish the bundled 方案书/投标文件 skill and register it on the skill registry.
  *
- * Only the 商务部 row calls this: 方案与投标都是商务场景，技术部不需要。
+ * The 商务部 and 招投标专员 rows call this; 技术部 does not.
  * @param ctx - plugin context that owns the publication and the provider registration.
  * @param options - asset and destination overrides, both optional.
  * @returns whether the provider was registered.

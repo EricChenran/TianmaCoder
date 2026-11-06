@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
 /:
-  en: b9b56969c8de2227
-  zh: 5d217aa58253a326
+  en: 0633055a1cab1bda
+  zh: 44df0695cc201469
 /tianma-dsh-department-prompts:
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: 700b41ba938495ab
-  zh: 6f977df72255e49d
+  en: be9d8afe3cd608bd
+  zh: c1c31791a2b50b71
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
 /tianma-dsh-department-prompts/use-this-package:
-  en: 2124bc381043842a
-  zh: 9b89ef766a09aa03
+  en: 525606f2a2198710
+  zh: 43117744d26c5272
 /tianma-dsh-department-prompts/understand-the-implementation:
-  en: a78ed26758e96fc0
-  zh: 92d150064848bdb1
+  en: 1d2633c19109b8ad
+  zh: be4fd45dee542f41
 /tianma-dsh-department-prompts/understand-the-implementation/source-map:
-  en: 6c9bfe67508d3719
-  zh: f9ad99ed0301001e
+  en: ab37609438768eb6
+  zh: 2936fcb9b39385ed
 /tianma-dsh-department-prompts/further-exploration:
   en: 4a1dc47d905730ba
   zh: d699dd1976957fa6
@@ -33,8 +33,8 @@
   en: 1a7d4baa0d0fa7a8
   zh: 5fb4780141f14781
 /tianma-dsh-department-prompts/model-experience/department-rules/what-the-model-sees:
-  en: 91a6ce2748de5dba
-  zh: 372c6d28df430410
+  en: 0922c4b0e505ca3e
+  zh: 78618d577bb68b9a
 /tianma-dsh-department-prompts/model-experience/department-rules/token-effect:
   en: ee94666cb159b6bf
   zh: 72aeeb442d372c5b
@@ -77,16 +77,16 @@
 /tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill/kv-cache-effect:
   en: 493f941b8b9f8727
   zh: 12d8ee9e3cba8e08
-/tianma-dsh-department-prompts/model-experience/bundled-skill-only:
-  en: 02c23305f8517c90
-  zh: ce708aa4bc6ef7ee
-/tianma-dsh-department-prompts/model-experience/bundled-skill-only/what-the-model-sees:
-  en: 99d53953449f9689
-  zh: a3ead7a62a709897
-/tianma-dsh-department-prompts/model-experience/bundled-skill-only/token-effect:
+/tianma-dsh-department-prompts/model-experience/bundled-skill-and:
+  en: c339fb481e5cda08
+  zh: 15fbf92241222c1c
+/tianma-dsh-department-prompts/model-experience/bundled-skill-and/what-the-model-sees:
+  en: 0b6071094a4f49b9
+  zh: d4b34402954e665f
+/tianma-dsh-department-prompts/model-experience/bundled-skill-and/token-effect:
   en: bb5f72f58b2d5266
   zh: 13027a299b9855ff
-/tianma-dsh-department-prompts/model-experience/bundled-skill-only/kv-cache-effect:
+/tianma-dsh-department-prompts/model-experience/bundled-skill-and/kv-cache-effect:
   en: f47429e8914b7b1a
   zh: febde00c320c9772
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work:

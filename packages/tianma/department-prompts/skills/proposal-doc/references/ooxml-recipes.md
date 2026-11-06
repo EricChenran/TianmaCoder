@@ -94,3 +94,9 @@ print("内容下沿 mm =", round(rows.max() / a.shape[0] * 297, 1))   # 判断�
 ```
 
 页眉横线、页码位置都建议这样量：`bbox` 换算成 mm 再对照 28/184mm 的版心边界，比目测可靠。
+
+## 12. 三处已固化的实现细节（不要回退）
+
+- **目录→正文分节**：用 `WD_SECTION.CONTINUOUS`，首个章标题自带 `page_break`。改回 `NEW_PAGE` 时，目录恰好排满两页就会多出一张空白页。
+- **表头单元格**：设 `keep_with_next`。否则表题与表头留在页底、数据行被推到下一页，出现"表题与表体分家"。
+- **封面空值**：`build_cover` 遇到空值跳过该行；`apply_meta` 对 `project_no` / `client` 显式置空（`meta.get(...) or ""`），不能回落到默认占位。
