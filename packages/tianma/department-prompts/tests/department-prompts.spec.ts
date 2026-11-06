@@ -185,13 +185,14 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(plugin.departmentPrompt(department)).toContain(PROMPT_HEADINGS[department])
   })
 
-  it('drives the 招投标专员 from reading the tender to the disqualification self-check', () => {
+  it('makes the 招投标专员 produce an implementation plan through the proposal-doc skill', () => {
     const text = plugin.departmentPrompt('bid')
-    expect(text).toContain('五张清单')
-    expect(text).toContain('拆评分')
-    expect(text).toContain('完全响应')
-    expect(text).toContain('应答核对表')
-    expect(text).toContain('废标风险清单')
+    expect(text).toContain('proposal-doc')
+    expect(text).toContain('实施方案')
+    expect(text).toContain('NUMBERS')
+    expect(text).toContain('缺料')
+    expect(text).not.toContain('五张清单')
+    expect(text).not.toContain('拆评分')
   })
 
   it('keeps acceptance user-directed after lightweight delivery checks', () => {
