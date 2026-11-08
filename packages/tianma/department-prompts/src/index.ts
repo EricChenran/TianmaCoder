@@ -9,8 +9,9 @@
  *
  * Both department modes also carry the bundled 公文 and 模板源码抓取 skills: the
  * row is the only thing both presets mount, so registering their providers here
- * keeps those skills out of every other mode. The bundled 无头演示视频 skill is
- * 技术部-only, so the 技术部 row registers it and the 商务部 row does not.
+ * keeps those skills out of every other mode. The bundled 无头演示视频 and 配图
+ * 取用 skills are 技术部-only, so the 技术部 row registers them and the 商务部
+ * row does not.
  *
  * @module @tianma/dsh-department-prompts
  */
@@ -22,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { type Department, departmentPrompt } from './prompts/index.ts'
 import {
   installDepartmentSkill,
+  installImageAssetsSkill,
   installProposalDocSkill,
   installTemplateFetchSkill,
   installWebDemoVideoSkill,
@@ -32,13 +34,18 @@ import { type BusinessToolboxOptions, installBusinessToolbox } from './toolbox.t
 export { departmentPrompt, DEPARTMENTS, DEPARTMENT_PROMPTS, type Department } from './prompts/index.ts'
 export {
   installDepartmentSkill,
+  installImageAssetsSkill,
   installProposalDocSkill,
   installWebDemoVideoSkill,
   installTemplateFetchSkill,
   materializeDepartmentSkill,
+  materializeImageAssetsSkill,
   materializeProposalDocSkill,
   materializeWebDemoVideoSkill,
   materializeTemplateFetchSkill,
+  IMAGE_ASSETS_SKILL_ASSET_FILES,
+  IMAGE_ASSETS_SKILL_NAME,
+  IMAGE_ASSETS_SKILL_PROVIDER_NAME,
   PROPOSAL_DOC_SKILL_ASSET_FILES,
   PROPOSAL_DOC_SKILL_NAME,
   PROPOSAL_DOC_SKILL_PROVIDER_NAME,
@@ -115,7 +122,10 @@ export function apply(ctx: Context, config: Config): void {
     ...config.skillDir === undefined ? {} : { skillDir: config.skillDir },
   })
   installTemplateFetchSkill(ctx)
-  if (config.department === 'tech') installWebDemoVideoSkill(ctx)
+  if (config.department === 'tech') {
+    installImageAssetsSkill(ctx)
+    installWebDemoVideoSkill(ctx)
+  }
   if (config.department === 'business' || config.department === 'bid') installProposalDocSkill(ctx)
   if (config.department === 'business') {
     const { assetRoot, toolsDir } = config
