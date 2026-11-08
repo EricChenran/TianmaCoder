@@ -9,9 +9,9 @@
  *
  * Both department modes also carry the bundled 公文 and 模板源码抓取 skills: the
  * row is the only thing both presets mount, so registering their providers here
- * keeps those skills out of every other mode. The bundled 无头演示视频 and 配图
- * 取用 skills are 技术部-only, so the 技术部 row registers them and the 商务部
- * row does not.
+ * keeps those skills out of every other mode. The bundled 无头演示视频、配图
+ * 取用 and UI 界面确认单 skills are 技术部-only, so the 技术部 row registers
+ * them and the 商务部 row does not.
  *
  * @module @tianma/dsh-department-prompts
  */
@@ -26,6 +26,7 @@ import {
   installImageAssetsSkill,
   installProposalDocSkill,
   installTemplateFetchSkill,
+  installUiConfirmationDocSkill,
   installWebDemoVideoSkill,
   type DepartmentSkillOptions,
 } from './skill.ts'
@@ -36,13 +37,15 @@ export {
   installDepartmentSkill,
   installImageAssetsSkill,
   installProposalDocSkill,
-  installWebDemoVideoSkill,
   installTemplateFetchSkill,
+  installUiConfirmationDocSkill,
+  installWebDemoVideoSkill,
   materializeDepartmentSkill,
   materializeImageAssetsSkill,
   materializeProposalDocSkill,
-  materializeWebDemoVideoSkill,
   materializeTemplateFetchSkill,
+  materializeUiConfirmationDocSkill,
+  materializeWebDemoVideoSkill,
   IMAGE_ASSETS_SKILL_ASSET_FILES,
   IMAGE_ASSETS_SKILL_NAME,
   IMAGE_ASSETS_SKILL_PROVIDER_NAME,
@@ -55,6 +58,9 @@ export {
   TEMPLATE_FETCH_SKILL_ASSET_FILES,
   TEMPLATE_FETCH_SKILL_NAME,
   TEMPLATE_FETCH_SKILL_PROVIDER_NAME,
+  UI_CONFIRMATION_DOC_SKILL_ASSET_FILES,
+  UI_CONFIRMATION_DOC_SKILL_NAME,
+  UI_CONFIRMATION_DOC_SKILL_PROVIDER_NAME,
   WEB_DEMO_VIDEO_SKILL_ASSET_FILES,
   WEB_DEMO_VIDEO_SKILL_NAME,
   WEB_DEMO_VIDEO_SKILL_PROVIDER_NAME,
@@ -100,8 +106,8 @@ export const Config: z<Config> = z.object({
 
 /**
  * Register the selected department's rules and its bundled 公文 skill; for
- * 技术部 add the bundled 演示视频 skill, for 商务部 publish its toolbox, and
- * for 商务部 or 招投标专员 add the bundled 实施方案 skill.
+ * 技术部 add the bundled 演示视频、配图 and UI 确认单 skills, for 商务部 publish
+ * its toolbox, and for 商务部 or 招投标专员 add the bundled 实施方案 skill.
  * @param ctx - the preset scope context this row mounts in.
  * @param config - the department selection and optional publication directories.
  */
@@ -124,6 +130,7 @@ export function apply(ctx: Context, config: Config): void {
   installTemplateFetchSkill(ctx)
   if (config.department === 'tech') {
     installImageAssetsSkill(ctx)
+    installUiConfirmationDocSkill(ctx)
     installWebDemoVideoSkill(ctx)
   }
   if (config.department === 'business' || config.department === 'bid') installProposalDocSkill(ctx)

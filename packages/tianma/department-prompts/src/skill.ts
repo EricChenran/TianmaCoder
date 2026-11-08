@@ -1,14 +1,14 @@
 /**
  * The bundled 公文 (official document) skill, the bundled bootstrapmb
- * 模板源码抓取 skill, the bundled 无头演示视频 skill, and the bundled 配图
- * 取用 skill.
+ * 模板源码抓取 skill, the bundled 无头演示视频 skill, the bundled 配图
+ * 取用 skill, and the bundled UI 界面确认单 skill.
  *
  * The 商务部 and 技术部 presets are the only rows that mount
  * `@tianma/dsh-department-prompts`, and a provider registers into the calling
  * context's layer, so registering here scopes a skill to exactly those modes.
- * The 公文 and 模板源码抓取 skills serve both departments; the 演示视频 and 配图
- * skills are registered only by the 技术部 row, each through its own provider
- * name.
+ * The 公文 and 模板源码抓取 skills serve both departments; the 演示视频、配图
+ * and UI 确认单 skills are registered only by the 技术部 row, each through its
+ * own provider name.
  *
  * Two locations matter. The packaged skill directory travels inside the
  * application runtime archive, which only the Host process can read — the
@@ -95,6 +95,24 @@ const IMAGE_ASSETS_SKILL: BundledSkill = {
   packagedRoot: fileURLToPath(new URL('../skills/image-assets/', import.meta.url)),
 }
 
+/** The UI 界面确认单 skill, carried by the 技术部 mode only. */
+const UI_CONFIRMATION_DOC_SKILL: BundledSkill = {
+  name: 'ui-confirmation-doc',
+  assetFiles: [
+    'SKILL.md',
+    'CHANGELOG.md',
+    'references/manifest-example.json',
+    'references/mp-plan-example.json',
+    'references/plan-example.json',
+    'references/scope-policy.md',
+    'scripts/build_docx.py',
+    'scripts/cdp.mjs',
+    'scripts/mp-capture.cjs',
+    'scripts/web-capture.mjs',
+  ],
+  packagedRoot: fileURLToPath(new URL('../skills/ui-confirmation-doc/', import.meta.url)),
+}
+
 /** The 实施方案 skill, carried by the 商务部 and 招投标专员 modes. */
 const PROPOSAL_DOC_SKILL: BundledSkill = {
   name: 'proposal-doc',
@@ -163,6 +181,19 @@ export const IMAGE_ASSETS_SKILL_PROVIDER_NAME = 'tianma-department-image-assets'
 
 /** Relative paths the 配图 skill's published copy must carry. */
 export const IMAGE_ASSETS_SKILL_ASSET_FILES = IMAGE_ASSETS_SKILL.assetFiles
+
+/** Skill name the 技术部-only UI 确认单 skill publishes under. */
+export const UI_CONFIRMATION_DOC_SKILL_NAME = UI_CONFIRMATION_DOC_SKILL.name
+
+/**
+ * Provider name the UI 确认单 skill registers on the skill registry. It differs
+ * from `SKILL_PROVIDER_NAME` because one registry layer rejects a second
+ * provider under a name it already holds.
+ */
+export const UI_CONFIRMATION_DOC_SKILL_PROVIDER_NAME = 'tianma-department-ui-confirmation-doc'
+
+/** Relative paths the UI 确认单 skill's published copy must carry. */
+export const UI_CONFIRMATION_DOC_SKILL_ASSET_FILES = UI_CONFIRMATION_DOC_SKILL.assetFiles
 
 /** Skill name the 方案书/投标文件 skill publishes under. */
 export const PROPOSAL_DOC_SKILL_NAME = PROPOSAL_DOC_SKILL.name
@@ -255,6 +286,15 @@ export function materializeTemplateFetchSkill(options: DepartmentSkillOptions = 
  */
 export function materializeImageAssetsSkill(options: DepartmentSkillOptions = {}): string {
   return materializeSkill(IMAGE_ASSETS_SKILL, options)
+}
+
+/**
+ * Publish the packaged UI 确认单 skill into a directory the model's interpreter can read.
+ * @param options - asset and destination overrides, both optional.
+ * @returns the absolute published skill directory.
+ */
+export function materializeUiConfirmationDocSkill(options: DepartmentSkillOptions = {}): string {
+  return materializeSkill(UI_CONFIRMATION_DOC_SKILL, options)
 }
 
 /**
@@ -372,6 +412,18 @@ export function installTemplateFetchSkill(ctx: Context, options: DepartmentSkill
  */
 export function installImageAssetsSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
   return installSkill(ctx, IMAGE_ASSETS_SKILL, IMAGE_ASSETS_SKILL_PROVIDER_NAME, options)
+}
+
+/**
+ * Publish the bundled UI 确认单 skill and register it on the skill registry.
+ *
+ * Only the 技术部 row calls this, so no other mode's model sees the skill.
+ * @param ctx - plugin context that owns the publication and the provider registration.
+ * @param options - asset and destination overrides, both optional.
+ * @returns whether the provider was registered.
+ */
+export function installUiConfirmationDocSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
+  return installSkill(ctx, UI_CONFIRMATION_DOC_SKILL, UI_CONFIRMATION_DOC_SKILL_PROVIDER_NAME, options)
 }
 
 /**

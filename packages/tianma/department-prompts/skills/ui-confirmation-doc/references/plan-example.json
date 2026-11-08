@@ -1,0 +1,74 @@
+{
+  "_说明": "Web 管理后台截图计划。按 references/scope-policy.md 只取一级页面 + 少量核心弹窗；把 actions 换成你自己的选择器即可复用。",
+  "baseUrl": "http://localhost:5173",
+  "startPath": "/login",
+  "viewport": [1440, 900],
+  "dsf": 2,
+  "outDir": "screenshots",
+  "shots": [
+    {
+      "name": "01-login",
+      "actions": [{ "type": "wait", "ms": 400 }]
+    },
+    {
+      "name": "02-dashboard",
+      "fit": true,
+      "actions": [
+        { "type": "fill", "scope": ".login-form", "index": 0, "value": "admin" },
+        { "type": "fill", "scope": ".login-form", "index": 1, "value": "admin123" },
+        { "type": "btn", "text": "登录", "wait": 1500 },
+        { "type": "waitFor", "selector": ".stat-card" },
+        { "type": "wait", "ms": 700 }
+      ]
+    },
+    {
+      "name": "03-products",
+      "fit": true,
+      "actions": [
+        { "type": "menu", "text": "商品管理" },
+        { "type": "waitFor", "selector": ".el-table__row" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "name": "04-products-edit",
+      "actions": [
+        { "type": "setViewport", "width": 1440, "height": 900 },
+        { "type": "btn", "text": "新增商品" },
+        { "type": "waitFor", "selector": ".el-dialog" },
+        { "type": "fill", "placeholder": "请输入商品名称", "value": "示例商品" },
+        { "type": "wait", "ms": 500 }
+      ]
+    },
+    {
+      "name": "05-orders",
+      "fit": true,
+      "actions": [
+        { "type": "esc" },
+        { "type": "waitGone", "selector": ".el-dialog" },
+        { "type": "menu", "text": "订单管理" },
+        { "type": "waitFor", "selector": ".el-table__row" },
+        { "type": "wait", "ms": 700 }
+      ]
+    },
+    {
+      "name": "06-order-detail",
+      "actions": [
+        { "type": "rowbtn", "row": 0, "text": "详情" },
+        { "type": "waitFor", "selector": ".el-dialog" },
+        { "type": "wait", "ms": 600 }
+      ]
+    },
+    {
+      "name": "07-rbac",
+      "fit": true,
+      "actions": [
+        { "type": "esc" },
+        { "type": "waitGone", "selector": ".el-dialog" },
+        { "type": "menu", "text": "权限管理" },
+        { "type": "waitFor", "selector": ".role-card" },
+        { "type": "wait", "ms": 700 }
+      ]
+    }
+  ]
+}

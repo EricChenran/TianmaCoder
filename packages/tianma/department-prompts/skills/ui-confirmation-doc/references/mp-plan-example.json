@@ -1,0 +1,30 @@
+{
+  "_说明": "微信小程序截图计划。page 用 app.json 里的路由；只取 tab 页 + 主包入口页 + 5 张以内核心二级页。",
+  "wsEndpoint": "ws://127.0.0.1:9420",
+  "auto": {
+    "cli": "<微信开发者工具安装目录>\\cli.bat",
+    "project": "<小程序项目根目录>",
+    "port": 9420
+  },
+  "outDir": "screenshots-mp",
+  "pageWait": 1600,
+  "login": {
+    "page": "/pages/login/index",
+    "agree": ".ck",
+    "button": ".btn-auth",
+    "tokenKey": "hn_token"
+  },
+  "close": false,
+  "shots": [
+    { "name": "01-login", "page": "/pages/login/index" },
+    { "name": "02-home", "page": "/pages/home/index" },
+    { "name": "03-category", "page": "/pages/category/index" },
+    { "name": "04-cart", "page": "/pages/cart/index" },
+    { "name": "05-member", "page": "/pages/member/index" },
+    { "name": "06-profile", "page": "/pages/profile/index" },
+    { "name": "07-search", "page": "/pages/search/index", "query": "keyword=鲜花" },
+    { "name": "08-detail", "page": "/packageA/pages/detail/index", "query": "id=p01" },
+    { "name": "09-confirm", "page": "/packageA/pages/confirm/index", "query": "productId=p01&count=1" },
+    { "name": "10-order-detail", "page": "/packageA/pages/order/detail", "query": "id=o1" }
+  ]
+}

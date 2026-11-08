@@ -1,5 +1,5 @@
 ---
-description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and the bundled 公文, 模板源码抓取, demo-video, and 实施方案 skills, all published out of the runtime archive."
+description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and the bundled 公文, 模板源码抓取, demo-video, UI-confirmation, and 实施方案 skills, all published out of the runtime archive."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and bootstrapmb 模板源码抓取 skills for both modes, the headless demo-video skill for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only these two modes carry, the demo-video skill reaching 技术部 alone.
+`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and bootstrapmb 模板源码抓取 skills for both modes, the headless demo-video and UI-confirmation skills for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and for 商务部 the five packaged document scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only these two modes carry, the 技术部-only skills reaching it alone.
 
 ## Table of Contents
 
@@ -42,7 +42,7 @@ The shipped `tech` (技术部), `business` (商务部), and `bid` (招投标专�
 | `skillAssetRoot` | the packaged `skills/official-doc/` | Skill source directory, for a deployment that ships its own copy |
 | `skillDir` | `<harness home>/department/skills/official-doc` | Directory the skill is published into |
 
-All three modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video skill while 商务部 and 招投标专员 register and publish the 实施方案 skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
+All three modes register and publish the 公文 and 模板源码抓取 skills, and 技术部 additionally registers and publishes the headless demo-video and UI-confirmation skills while 商务部 and 招投标专员 register and publish the 实施方案 skill; `business` publishes the toolbox when the composition mounts `ctx.shellEnv`. A composition without the skill registry gets the rules and no skill; without `ctx.shellEnv` it gets the rules and no toolbox.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -54,7 +54,7 @@ All three modes register and publish the 公文 and 模板源码抓取 skills, a
 
 The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. The directory reaches the model only as the `DSH_DEPARTMENT_TOOLS` variable — no rule text, log line, or shell command names the path.
 
-The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部. The 实施方案 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 and 招投标专员 rows register.
+The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which both department rows register. The demo-video skill is published the same way into `<harness home>/department/skills/web-demo-video`, but only the 技术部 row registers it, so sharing this row between the two presets does not hand it to 商务部. The UI-confirmation skill publishes into `<harness home>/department/skills/ui-confirmation-doc` through its own provider, which the 技术部 row alone registers. The 实施方案 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 and 招投标专员 rows register.
 
 ### Source map
 
@@ -65,15 +65,17 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 | [`src/prompts/business.ts`](src/prompts/business.ts) | The 商务部 rules, compiled in |
 | [`src/prompts/bid.ts`](src/prompts/bid.ts) | The 招投标专员 rules, compiled in |
 | [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_TOOLS` contributor |
-| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, `web-demo-video`, and `proposal-doc` providers |
+| [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, `web-demo-video`, `ui-confirmation-doc`, and `proposal-doc` providers |
 | [`assets/business/`](assets/business) | The packaged document scripts: `gen_doc.py`, `gen_quote.py`, `add_watermark.py`, `to_pdf.py`, `open_folder.py` |
 | [`skills/official-doc/`](skills/official-doc) | The packaged 公文 skill: `SKILL.md`, `scripts/gen_doc.py`, `assets/logo_light.png` |
 | [`skills/bootstrapmb-template-fetch/`](skills/bootstrapmb-template-fetch) | The packaged template-fetch skill (both departments): `SKILL.md`, `scripts/download-bootstrapmb.ps1`, `references/*` |
 | [`skills/web-demo-video/`](skills/web-demo-video) | The packaged headless demo-video skill (技术部 only): `SKILL.md`, `scripts/webdemo.mjs`, `scripts/lib/*.mjs`, `references/*` |
+| [`skills/ui-confirmation-doc/`](skills/ui-confirmation-doc) | The packaged UI-confirmation skill (技术部 only): `SKILL.md`, `scripts/web-capture.mjs`, `scripts/mp-capture.cjs`, `scripts/build_docx.py`, `scripts/cdp.mjs`, `references/*` |
 | [`skills/proposal-doc/`](skills/proposal-doc) | The packaged 实施方案 skill (商务部 and 招投标专员): `SKILL.md`, `scripts/docbuild.py` with the diagram helpers and the implementation template, `references/*`, `assets/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | Section registration, literal rendering, toolbox and skill publication, catalog scoping, vocabulary guard |
 | [`tests/template-fetch-skill.spec.ts`](tests/template-fetch-skill.spec.ts) | Byte-level publication, provider metadata, description cap, and both-department scoping of the template-fetch skill |
 | [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | Byte-level publication, provider metadata, and 技术部-only scoping of the demo-video skill |
+| [`tests/ui-confirmation-doc-skill.spec.ts`](tests/ui-confirmation-doc-skill.spec.ts) | Byte-level publication, provider metadata, description cap, and 技术部-only scoping of the UI-confirmation skill |
 | [`tests/proposal-doc-skill.spec.ts`](tests/proposal-doc-skill.spec.ts) | Byte-level publication, provider metadata, description cap, and scoping of the 实施方案 skill across its two modes |
 | — | No runtime invariant companion is published; the plugin owns one static section and two derived directories, all asserted by test, and exposes no independent relation a companion could observe. |
 
@@ -163,6 +165,20 @@ One catalog line per request in the 商务部 mode, under the 500-character cap,
 
 The catalog line sits in the stable prefix of a 商务部 session; loading the body appends one tool result.
 
+### Bundled UI-confirmation skill (技术部 only)
+
+#### What the model sees
+
+Sessions in the 技术部 mode carry one more catalog entry, `ui-confirmation-doc`, described as compiling a signed UI 界面确认单 as DOCX plus PDF from per-screen screenshots of a Web admin console and a WeChat mini-program, laid into the customer's own template. Loading it returns the workflow — the three rules (never touch the template, cover every first-level page plus at most five core second-level pages per surface, deliver DOCX and PDF), the page inventory read from the router and `app.json`, the Web and mini-program capture plans with their action vocabularies, the document manifest, the template-cloning build script, and the delivery checks — plus the resource base where the scripts were published. The model runs `node <base>/scripts/web-capture.mjs`, `node <base>/scripts/mp-capture.cjs`, and `python <base>/scripts/build_docx.py`, then renders the result for inspection and delivers both files with `present`. The 商务部 mode and every other mode carry no such entry.
+
+#### Token effect
+
+One catalog line per request in the 技术部 mode (196-character description, under the 500-character cap), plus the loaded body's ~9 KB and whichever reference page a reader opens. Other modes pay nothing.
+
+#### KV Cache effect
+
+The catalog line sits in the stable prefix of a 技术部 session; loading the body appends one tool result.
+
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -176,7 +192,8 @@ These limits define where the row is a poor fit. They are current package constr
 - **The 公文 skill needs an interpreter with `reportlab`** — the bundled runtime payload carries `python-docx` and `Pillow` but not `reportlab`, so a machine whose `python` lacks it gets the DOCX and no PDF. The skill body tells the model to deliver the DOCX and say so rather than silently drop the PDF.
 - **The template-fetch skill scrapes a third-party site** — it drives bootstrapmb.com's unauthenticated endpoints and rewrites downloaded files; the packaged script defaults `-OutRoot` to the working directory and carries no site credentials. Its behaviour depends on that site's markup, and this package does not maintain it.
 - **The Agent browser the 技术部 rules name does not ship with the mode** — the `browser_*` tool family comes from the optional browser-automation plugin bundle, independent of departments; when it is not enabled the rules require the model to say so and verify through other real-entry means instead of claiming browser verification.
-- **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools`, `department/skills/official-doc`, and `department/skills/bootstrapmb-template-fetch`, a 商务部 session additionally publishes `department/skills/proposal-doc`, and a 技术部 session additionally publishes `department/skills/web-demo-video`.
+- **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools`, `department/skills/official-doc`, and `department/skills/bootstrapmb-template-fetch`, a 商务部 session additionally publishes `department/skills/proposal-doc`, and a 技术部 session additionally publishes `department/skills/web-demo-video` and `department/skills/ui-confirmation-doc`.
+- **The UI-confirmation skill needs a logged-in WeChat DevTools for the mini-program half** — the capture script drives the IDE's automation port, which the IDE enables only after it is switched on in its security settings, and it imports `miniprogram-automator` from the published skill directory rather than shipping it. Without those the Web half still runs and the mini-program half cannot be captured.
 - **`scripts/lib/` inside the skill needs a forced add** — the repository `.gitignore` ignores every `lib/` directory, so new or changed files under it require `git add -f`; without that the repository and the packaged copy lose those five modules and `webdemo.mjs` cannot start.
 
 <a id="dev-note"></a>

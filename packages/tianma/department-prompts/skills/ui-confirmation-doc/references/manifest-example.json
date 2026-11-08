@@ -1,0 +1,42 @@
+{
+  "_说明": "生成确认书的清单。template 指向甲方模板；sections 依次对应模板里的板块标题；imageWidthEmu 决定图片宽度（1 英寸 = 914400 EMU，A4 左右各 1.25in 时版心约 5.77in）。",
+  "template": "<甲方模板目录>\\UI确认书.docx",
+  "output": "Docs\\UI确认书.docx",
+  "anchorHeading": "Web界面：",
+  "figurePrefix": "图",
+  "imageWidthEmu": 5256000,
+  "title": "UI网站界面确认单",
+  "subject": "项目名称 · 管理后台与小程序界面确认",
+  "author": "项目组",
+  "sections": [
+    {
+      "heading": "Web界面：",
+      "imageWidthEmu": 5256000,
+      "figures": [
+        { "image": "screenshots/01-login.png", "caption": "登录（/login）" },
+        { "image": "screenshots/02-dashboard.png", "caption": "数据看板（/dashboard）" },
+        { "image": "screenshots/03-products.png", "caption": "商品管理（/products）" },
+        { "image": "screenshots/04-products-edit.png", "caption": "商品新增弹窗（/products）" },
+        { "image": "screenshots/05-orders.png", "caption": "订单管理（/orders）" },
+        { "image": "screenshots/06-order-detail.png", "caption": "订单详情（/orders）" },
+        { "image": "screenshots/07-rbac.png", "caption": "权限管理（/rbac）" }
+      ]
+    },
+    {
+      "heading": "小程序界面：",
+      "imageWidthEmu": 3566160,
+      "figures": [
+        { "image": "screenshots-mp/01-login.png", "caption": "登录（/pages/login/index）" },
+        { "image": "screenshots-mp/02-home.png", "caption": "首页（/pages/home/index）" },
+        { "image": "screenshots-mp/03-category.png", "caption": "分类（/pages/category/index）" },
+        { "image": "screenshots-mp/04-cart.png", "caption": "购物车（/pages/cart/index）" },
+        { "image": "screenshots-mp/05-member.png", "caption": "会员卡（/pages/member/index）" },
+        { "image": "screenshots-mp/06-profile.png", "caption": "我的（/pages/profile/index）" },
+        { "image": "screenshots-mp/07-search.png", "caption": "搜索结果（/pages/search/index）" },
+        { "image": "screenshots-mp/08-detail.png", "caption": "商品详情（/packageA/pages/detail/index）" },
+        { "image": "screenshots-mp/09-confirm.png", "caption": "确认订单（/packageA/pages/confirm/index）" },
+        { "image": "screenshots-mp/10-order-detail.png", "caption": "订单详情（/packageA/pages/order/detail）" }
+      ]
+    }
+  ]
+}

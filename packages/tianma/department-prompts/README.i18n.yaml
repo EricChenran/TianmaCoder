@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
 /:
-  en: 0633055a1cab1bda
-  zh: 44df0695cc201469
+  en: 7bcf542b28221ad8
+  zh: 11c6ad1e6c2c820a
 /tianma-dsh-department-prompts:
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: be9d8afe3cd608bd
-  zh: c1c31791a2b50b71
+  en: 54dd21199dc53297
+  zh: dbe077346ce3549d
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
 /tianma-dsh-department-prompts/use-this-package:
-  en: 525606f2a2198710
-  zh: 43117744d26c5272
+  en: 2aa4425cc8b10d0b
+  zh: 32e1fb1410ca66e3
 /tianma-dsh-department-prompts/understand-the-implementation:
-  en: 1d2633c19109b8ad
-  zh: be4fd45dee542f41
+  en: c11c0f4484e59280
+  zh: eaf4a44f8ec34ecb
 /tianma-dsh-department-prompts/understand-the-implementation/source-map:
-  en: ab37609438768eb6
-  zh: 2936fcb9b39385ed
+  en: a100cadb2838cc9b
+  zh: 01258c246eb1445f
 /tianma-dsh-department-prompts/further-exploration:
   en: 4a1dc47d905730ba
   zh: d699dd1976957fa6
@@ -89,9 +89,21 @@
 /tianma-dsh-department-prompts/model-experience/bundled-skill-and/kv-cache-effect:
   en: f47429e8914b7b1a
   zh: febde00c320c9772
+/tianma-dsh-department-prompts/model-experience/bundled-ui-confirmation-skill-only:
+  en: c9c8fa363e32bc5f
+  zh: 6d77d3cffdee9f05
+/tianma-dsh-department-prompts/model-experience/bundled-ui-confirmation-skill-only/what-the-model-sees:
+  en: b21bde5d5478f432
+  zh: 0b61b923bd51c353
+/tianma-dsh-department-prompts/model-experience/bundled-ui-confirmation-skill-only/token-effect:
+  en: 5c7a886c88693ef2
+  zh: cce44b04a55af221
+/tianma-dsh-department-prompts/model-experience/bundled-ui-confirmation-skill-only/kv-cache-effect:
+  en: f4aaf1b1c37e15e1
+  zh: 82b20050d1d6279b
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work:
-  en: 0d24bcc51f1c97ee
-  zh: bea50b46f763c2ec
+  en: b49830adb8c51786
+  zh: 28031c1210dd894c
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
   en: fe3fe2ab0b4c37e1
   zh: 501c74d8c2155493

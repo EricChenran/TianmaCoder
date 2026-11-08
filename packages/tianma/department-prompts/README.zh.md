@@ -1,5 +1,5 @@
 ---
-description: "TianmaCoder 桌面端部门模式的作业规则：每个模式一条字面系统提示词节，外加商务部文档工具箱与随包的公文、模板源码抓取、演示视频、实施方案四个技能——都从运行时归档中发布出来。"
+description: "TianmaCoder 桌面端部门模式的作业规则：每个模式一条字面系统提示词节，外加商务部文档工具箱与随包的公文、模板源码抓取、演示视频、UI 界面确认单、实施方案技能——都从运行时归档中发布出来。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能、为商务部与招投标专员发布随包的实施方案技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它们，其中演示视频技能只到技术部。
+`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为两种模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能与 UI 界面确认单技能、为商务部与招投标专员发布随包的实施方案技能，并对商务部额外把随包交付的五个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有这两种模式携带它们，其中技术部专属的技能只到技术部。
 
 ## 目录
 
@@ -42,7 +42,7 @@ kind: "package-reference"
 | `skillAssetRoot` | 包内 `skills/official-doc/` | 技能来源目录，供自行携带副本的部署使用 |
 | `skillDir` | `<harness home>/department/skills/official-doc` | 技能发布到的目录 |
 
-三种模式都会注册并发布公文技能与模板源码抓取技能，技术部还会注册并发布无头演示视频技能，商务部与招投标专员会注册并发布实施方案技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
+三种模式都会注册并发布公文技能与模板源码抓取技能，技术部还会注册并发布无头演示视频技能与 UI 界面确认单技能，商务部与招投标专员会注册并发布实施方案技能；`business` 在组合挂载了 `ctx.shellEnv` 时还会发布工具箱。缺少技能注册表的组合只得到规则、没有技能；缺少 `ctx.shellEnv` 的组合只得到规则、没有工具箱。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -54,7 +54,7 @@ kind: "package-reference"
 
 工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
 
-公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，两个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/web-demo-video`，但它只由技术部那一行注册，因此即便两个预设共用本行，商务部也拿不到它。实施方案技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
+公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，两个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/web-demo-video`，但它只由技术部那一行注册，因此即便两个预设共用本行，商务部也拿不到它。UI 界面确认单技能通过自己的提供方发布到 `<harness home>/department/skills/ui-confirmation-doc`，只有技术部那一行注册它。实施方案技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
 
 ### 源码索引
 
@@ -65,15 +65,17 @@ kind: "package-reference"
 | [`src/prompts/business.ts`](src/prompts/business.ts) | 商务部规则，编译内置 |
 | [`src/prompts/bid.ts`](src/prompts/bid.ts) | 招投标专员规则，编译内置 |
 | [`src/toolbox.ts`](src/toolbox.ts) | 脚本发布与 `DSH_DEPARTMENT_TOOLS` 贡献者 |
-| [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc`、`bootstrapmb-template-fetch`、`web-demo-video`、`proposal-doc` 提供方 |
+| [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc`、`bootstrapmb-template-fetch`、`web-demo-video`、`ui-confirmation-doc`、`proposal-doc` 提供方 |
 | [`assets/business/`](assets/business) | 随包交付的文档脚本：`gen_doc.py`、`gen_quote.py`、`add_watermark.py`、`to_pdf.py`、`open_folder.py` |
 | [`skills/official-doc/`](skills/official-doc) | 随包交付的公文技能：`SKILL.md`、`scripts/gen_doc.py`、`assets/logo_light.png` |
 | [`skills/bootstrapmb-template-fetch/`](skills/bootstrapmb-template-fetch) | 随包交付的模板源码抓取技能（两部门共有）：`SKILL.md`、`scripts/download-bootstrapmb.ps1`、`references/*` |
 | [`skills/web-demo-video/`](skills/web-demo-video) | 随包交付的无头演示视频技能（仅技术部）：`SKILL.md`、`scripts/webdemo.mjs`、`scripts/lib/*.mjs`、`references/*` |
+| [`skills/ui-confirmation-doc/`](skills/ui-confirmation-doc) | 随包交付的 UI 界面确认单技能（仅技术部）：`SKILL.md`、`scripts/web-capture.mjs`、`scripts/mp-capture.cjs`、`scripts/build_docx.py`、`scripts/cdp.mjs`、`references/*` |
 | [`skills/proposal-doc/`](skills/proposal-doc) | 随包交付的实施方案技能（商务部与招投标专员）：`SKILL.md`、`scripts/docbuild.py` 与绘图、实施方案模板、`references/*`、`assets/*` |
 | [`tests/department-prompts.spec.ts`](tests/department-prompts.spec.ts) | 节注册、字面渲染、工具箱与技能发布、目录作用域、用词守卫 |
 | [`tests/template-fetch-skill.spec.ts`](tests/template-fetch-skill.spec.ts) | 模板源码抓取技能的字节级发布、提供方元数据、描述上限与两部门作用域 |
 | [`tests/web-demo-video-skill.spec.ts`](tests/web-demo-video-skill.spec.ts) | 演示视频技能的字节级发布、提供方元数据与仅技术部作用域 |
+| [`tests/ui-confirmation-doc-skill.spec.ts`](tests/ui-confirmation-doc-skill.spec.ts) | UI 界面确认单技能的字节级发布、提供方元数据、描述上限与仅技术部作用域 |
 | [`tests/proposal-doc-skill.spec.ts`](tests/proposal-doc-skill.spec.ts) | 实施方案技能的字节级发布、提供方元数据、描述上限与两种模式的作用域 |
 | — | 不发布运行时不变式伴生入口；本插件只拥有一条静态节与两个派生目录，均由测试断言，也没有可供伴生入口独立观察的关系。 |
 
@@ -163,6 +165,20 @@ kind: "package-reference"
 
 目录行位于商务部会话的稳定前缀内；加载正文追加一条工具结果。
 
+### 随包 UI 界面确认单技能（仅技术部）
+
+#### 模型看到什么
+
+处于技术部模式的会话再多出一条目录项 `ui-confirmation-doc`，描述为把 Web 管理后台与微信小程序的逐屏截图套进甲方模板，编成可签字的《UI 界面确认单》（DOCX 与 PDF 双格式）。加载后返回完整作业流程——三条铁律（不改模板、只拍一级页面加每端 5 张以内核心二级页、交付 DOCX 与 PDF）、从路由与 `app.json` 摸出的页面清单、Web 与小程序两份截图计划及其动作词表、文档清单、克隆模板段落的生成脚本、交付前自检——以及脚本被发布到的资源基准。模型执行 `node <基准>/scripts/web-capture.mjs`、`node <基准>/scripts/mp-capture.cjs`、`python <基准>/scripts/build_docx.py`，先渲染目检，再用 `present` 交付两个文件。商务部模式与其他模式都没有这条目录项。
+
+#### Token 影响
+
+技术部模式下每请求一条目录行（描述 196 字符，未触及 500 字符上限），加上真正加载它的步骤所产生的正文开销（约 9 KB）与读者按需拉取的参考页。其他模式零开销。
+
+#### KV 缓存影响
+
+目录行位于技术部会话的稳定前缀内；加载正文只是追加一条工具结果。
+
 ## 已知限制与后续工作
 
 <a id="known-limitations-and-deferred-work"></a>
@@ -176,7 +192,8 @@ kind: "package-reference"
 - **公文技能需要带 `reportlab` 的解释器**——随包运行时载荷带 `python-docx` 与 `Pillow`，但不带 `reportlab`，因此机器上的 `python` 缺它时只能得到 DOCX、没有 PDF。技能正文要求模型交付 DOCX 并说明原因，而不是静默丢掉 PDF。
 - **模板源码抓取技能抓的是第三方站点**——它驱动 bootstrapmb.com 的未鉴权接口并改写下载到的文件；随包脚本把 `-OutRoot` 默认为当前工作目录，且不带任何站点凭证。其行为依赖该站点的页面结构，本包不维护它。
 - **技术部规则点名的 Agent 浏览器能力不随该模式交付**——`browser_*` 工具族来自可选的浏览器自动化插件包，与部门无关；未启用时规则要求模型先说明，再改用其他真实入口手段验证，不谎称做过浏览器验证。
-- **每个 harness home 的工具箱目录与技能目录按名字共用**——所有部门会话共用 `department/business-tools`、`department/skills/official-doc` 与 `department/skills/bootstrapmb-template-fetch`，商务部会话另加 `department/skills/proposal-doc`，技术部会话另加 `department/skills/web-demo-video`。
+- **每个 harness home 的工具箱目录与技能目录按名字共用**——所有部门会话共用 `department/business-tools`、`department/skills/official-doc` 与 `department/skills/bootstrapmb-template-fetch`，商务部会话另加 `department/skills/proposal-doc`，技术部会话另加 `department/skills/web-demo-video` 与 `department/skills/ui-confirmation-doc`。
+- **UI 界面确认单技能的小程序半边需要已登录的微信开发者工具**——截图脚本要驱动 IDE 的自动化端口，该端口须先在 IDE 的安全设置里打开，且脚本从发布目录导入 `miniprogram-automator`、不随包携带。这两项不具备时，Web 半边照常可用，小程序半边拍不了。
 - **技能里的 `scripts/lib/` 要强制入仓**——仓库级 `.gitignore` 忽略所有 `lib/` 目录，因此新增或改动该目录下的文件必须 `git add -f`；漏掉的话仓库与随包副本会缺那五个模块，`webdemo.mjs` 直接起不来。
 
 <a id="dev-note"></a>

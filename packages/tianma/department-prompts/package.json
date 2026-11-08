@@ -27,6 +27,7 @@
     "skills/proposal-doc/**",
     "skills/web-demo-video/**",
     "skills/image-assets/**",
+    "skills/ui-confirmation-doc/**",
     "skills/bootstrapmb-template-fetch/**"
   ],
   "license": "MIT",
