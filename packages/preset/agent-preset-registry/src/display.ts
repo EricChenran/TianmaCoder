@@ -16,6 +16,7 @@ export type BuiltInPresetCopyKey =
   | 'presetTechName' | 'presetTechDescription'
   | 'presetBusinessName' | 'presetBusinessDescription'
   | 'presetBidName' | 'presetBidDescription'
+  | 'presetTesterName' | 'presetTesterDescription'
 
 /** Preset roster fields needed to resolve display copy. */
 export interface PresetDisplaySource {
@@ -48,6 +49,7 @@ const BUILT_IN_PRESET_KEYS: Readonly<Partial<Record<string, PresetLocaleKeys>>> 
   tech: { name: 'presetTechName', description: 'presetTechDescription' },
   business: { name: 'presetBusinessName', description: 'presetBusinessDescription' },
   bid: { name: 'presetBidName', description: 'presetBidDescription' },
+  tester: { name: 'presetTesterName', description: 'presetTesterDescription' },
 }
 
 /**

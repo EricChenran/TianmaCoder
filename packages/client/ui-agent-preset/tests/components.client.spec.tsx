@@ -259,7 +259,7 @@ describe('the picker’s groups', () => {
   /** Every shipped preset, so each group has rows. */
   const shipped: readonly AgentPresetOption[] = [
     { id: 'standard' }, { id: 'ptc' }, { id: 'minimal' },
-    { id: 'cordis' }, { id: 'tech' }, { id: 'business' }, { id: 'bid' },
+    { id: 'cordis' }, { id: 'tech' }, { id: 'business' }, { id: 'bid' }, { id: 'tester' },
   ]
 
   it('asks how tools are called before whose standards they follow', () => {
@@ -271,12 +271,13 @@ describe('the picker’s groups', () => {
     expect(screen.getByText(en.presetGroupTeam)).toBeTruthy()
     // The heading's claim also rides its own rows, so a row read on its own
     // still says which group it belongs to.
-    expect(screen.getAllByText(en.presetTeamTag)).toHaveLength(3)
+    expect(screen.getAllByText(en.presetTeamTag)).toHaveLength(4)
 
     const text = document.body.textContent ?? ''
     expect(text.indexOf(en.presetGroupWork)).toBeLessThan(text.indexOf(en.presetGroupTeam))
     expect(text.indexOf(en.presetTechSummary)).toBeLessThan(text.indexOf(en.presetBusinessSummary))
     expect(text.indexOf(en.presetBusinessSummary)).toBeLessThan(text.indexOf(en.presetBidSummary))
+    expect(text.indexOf(en.presetBidSummary)).toBeLessThan(text.indexOf(en.presetTesterSummary))
   })
 
   it('leaves the demoted modes closed until their row is opened', () => {

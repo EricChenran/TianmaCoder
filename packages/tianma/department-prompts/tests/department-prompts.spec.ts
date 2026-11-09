@@ -179,6 +179,7 @@ describe('@tianma/dsh-department-prompts', () => {
     tech: '# 技术部工作规范',
     business: '# 商务部工作规范',
     bid: '# 招投标专员工作规范',
+    tester: '# 测试员工作规范',
   }
 
   it.each(plugin.DEPARTMENTS)('states the department the model is acting for', (department) => {
@@ -193,6 +194,25 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('缺料')
     expect(text).not.toContain('五张清单')
     expect(text).not.toContain('拆评分')
+  })
+
+  it('makes the 测试员 verify with scripts and name file-level fixes', () => {
+    const text = plugin.departmentPrompt('tester')
+    // The one rule the mode exists for, stated verbatim.
+    expect(text).toContain('任何无脚本验证的断言均不可信')
+    // Both deliverables keep fixed names so a handoff can find them.
+    expect(text).toContain('测试调研报告.md')
+    expect(text).toContain('修改方案.md')
+    // The three findings the mode must look for, and the evidence standard.
+    expect(text).toContain('mock 占位')
+    expect(text).toContain('前后端未接入')
+    expect(text).toContain('功能预留')
+    expect(text).toContain('文件路径:行号')
+    expect(text).toContain('未验证')
+    // Verification only; fixing business code needs an explicit request.
+    expect(text).toContain('默认只新增测试与文档')
+    // The 实施方案 skill belongs to the 商务部 and 招投标专员 rows alone.
+    expect(text).not.toContain('proposal-doc')
   })
 
   it('keeps acceptance user-directed after lightweight delivery checks', () => {
@@ -306,7 +326,9 @@ describe('@tianma/dsh-department-prompts', () => {
       const expected = department === 'tech'
         ? [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.DEMO_VIDEO_SKILL_NAME, plugin.IMAGE_ASSETS_SKILL_NAME,
           plugin.SKILL_NAME, plugin.UI_CONFIRMATION_DOC_SKILL_NAME]
-        : [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME, plugin.PROPOSAL_DOC_SKILL_NAME]
+        : department === 'business' || department === 'bid'
+          ? [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME, plugin.PROPOSAL_DOC_SKILL_NAME]
+          : [plugin.TEMPLATE_FETCH_SKILL_NAME, plugin.SKILL_NAME]
       expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(expected)
       await fiber.dispose()
       expect(await ctx.skills.list()).toEqual([])

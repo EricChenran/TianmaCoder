@@ -38,6 +38,7 @@
     "presets/department-tech.patch.yml",
     "presets/department-business.patch.yml",
     "presets/department-bid.patch.yml",
+    "presets/department-tester.patch.yml",
     "lib/public-url-*.js",
     "lib/types/**/*.d.ts"
   ],
@@ -52,7 +53,8 @@
         "./presets/cordis.patch.yml",
         "./presets/department-tech.patch.yml",
         "./presets/department-business.patch.yml",
-        "./presets/department-bid.patch.yml"
+        "./presets/department-bid.patch.yml",
+        "./presets/department-tester.patch.yml"
       ]
     }
   },

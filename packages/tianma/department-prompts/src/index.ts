@@ -7,11 +7,12 @@
  * toolbox scripts are published to a private directory whose location reaches
  * the model only as the `DSH_DEPARTMENT_TOOLS` variable.
  *
- * Both department modes also carry the bundled 公文 and 模板源码抓取 skills: the
- * row is the only thing both presets mount, so registering their providers here
- * keeps those skills out of every other mode. The bundled 演示视频（小程序与
- * Web 同一条目）、配图取用 and UI 界面确认单 skills are 技术部-only, so the 技术部
- * row registers them and the 商务部 row does not.
+ * Every department mode also carries the bundled 公文 and 模板源码抓取 skills:
+ * the row is the only thing the department presets mount, so registering their
+ * providers here keeps those skills out of every other mode. The bundled
+ * 演示视频（小程序与 Web 同一条目）、配图取用 and UI 界面确认单 skills are
+ * 技术部-only, so the 技术部 row registers them and no other department row
+ * does.
  *
  * @module @tianma/dsh-department-prompts
  */
@@ -97,7 +98,7 @@ export interface Config extends BusinessToolboxOptions, DepartmentSkillOptions {
 
 /** Runtime schema for the department row. */
 export const Config: z<Config> = z.object({
-  department: z.union(['tech', 'business', 'bid'] as const).required(),
+  department: z.union(['tech', 'business', 'bid', 'tester'] as const).required(),
   assetRoot: z.string(),
   toolsDir: z.string(),
   skillAssetRoot: z.string(),
@@ -107,7 +108,9 @@ export const Config: z<Config> = z.object({
 /**
  * Register the selected department's rules and its bundled 公文 skill; for
  * 技术部 add the bundled 演示视频、配图 and UI 确认单 skills, for 商务部 publish
- * its toolbox, and for 商务部 or 招投标专员 add the bundled 实施方案 skill.
+ * its toolbox, and for 商务部 or 招投标专员 add the bundled 实施方案 skill. The
+ * 测试员 row carries only the rules and the two skills every department mode
+ * shares.
  * @param ctx - the preset scope context this row mounts in.
  * @param config - the department selection and optional publication directories.
  */

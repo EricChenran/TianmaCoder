@@ -42,7 +42,7 @@ interface PresetGroup {
 /** The groups, in the order the picker asks them. */
 const GROUPS: readonly PresetGroup[] = [
   { ids: ['standard', 'ptc'], headingKey: 'presetGroupWork' },
-  { ids: ['tech', 'business', 'bid'], headingKey: 'presetGroupTeam', tagKey: 'presetTeamTag' },
+  { ids: ['tech', 'business', 'bid', 'tester'], headingKey: 'presetGroupTeam', tagKey: 'presetTeamTag' },
 ]
 
 /** Presets the picker keeps behind {@link MORE_ROW_ID}: not everyday choices. */
@@ -64,6 +64,7 @@ const SUMMARY_KEYS: Readonly<Partial<Record<string, AgentPresetSettingsKey>>> = 
   tech: 'presetTechSummary',
   business: 'presetBusinessSummary',
   bid: 'presetBidSummary',
+  tester: 'presetTesterSummary',
 }
 
 /**

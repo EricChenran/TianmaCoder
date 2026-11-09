@@ -11,18 +11,20 @@
 import { BID_PROMPT } from './bid.ts'
 import { BUSINESS_PROMPT } from './business.ts'
 import { TECH_PROMPT } from './tech.ts'
+import { TESTER_PROMPT } from './tester.ts'
 
 /** Department identifier a preset selects. */
-export type Department = 'tech' | 'business' | 'bid'
+export type Department = 'tech' | 'business' | 'bid' | 'tester'
 
 /** Every department this plugin can contribute. */
-export const DEPARTMENTS: readonly Department[] = ['tech', 'business', 'bid']
+export const DEPARTMENTS: readonly Department[] = ['tech', 'business', 'bid', 'tester']
 
 /** The rule set each department contributes, keyed by identifier. */
 export const DEPARTMENT_PROMPTS: Readonly<Record<Department, string>> = {
   tech: TECH_PROMPT,
   business: BUSINESS_PROMPT,
   bid: BID_PROMPT,
+  tester: TESTER_PROMPT,
 }
 
 /**

@@ -116,6 +116,21 @@ export const guideEn = {
     '> We do not have the prototype screenshots yet. Start with what we have.',
     'Expected output: the plan with the missing section removed, and a delivery note listing what was dropped and why.',
   ].join('\n\n'),
+  guideTesterIntro: 'Choose Tester mode when starting a new task. State the project, how it starts, and which flows count as acceptance; the agent verifies them with scripts and a real browser instead of judging from the source.',
+  guideTesterExplanation: [
+    '### What it adds',
+    'Everything Standard mode provides, plus one system-prompt section that turns the task into verification: it runs the existing tests first, adds backend unit and interface tests, starts the real stack for frontend-backend integration, drives the real pages end to end, and reads screenshots for visual defects. Mocks, missing frontend-backend wiring, and unfinished placeholders are recorded with file and line as the evidence.',
+    '### What you get',
+    'A findings report with a test matrix, defects, evidence, and a minimal reproduction; a ledger of mocks and unimplemented placeholders; a frontend-backend contract check; and a fix plan whose every entry names a file, a location, and the command that proves the fix. Any claim that was not executed is marked unverified.',
+  ].join('\n\n'),
+  guideTesterUsage: [
+    '### Audit a half-finished project',
+    '> This admin console is supposed to be finished, but I suspect parts of it are mocked. Verify the backend, the integration, and the main flows, then tell me what is fake, what is missing, and how to fix it.',
+    'Expected output: a report backed by commands and a prioritized fix plan that names files and locations.',
+    '### Accept a delivery',
+    '> Check this release end to end before I hand it over: every main flow, the empty and error states, and the screens at both desktop and phone widths.',
+    'Expected output: a checked matrix with screenshots, the defects found, and the unverified items with reasons.',
+  ].join('\n\n'),
 }
 
 /** Keys merged into the feature’s ordinary locale seat. */
@@ -238,5 +253,20 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '### 缺料也能开工',
     '> 原型截图还没拿到，先用现有的材料做。',
     '预期产出：删掉缺料章节的实施方案，以及列明删了什么、为什么的交付说明。',
+  ].join('\n\n'),
+  guideTesterIntro: '新建任务时选择「测试员」，说明项目在哪、怎么启动、哪些流程算验收；Agent 用脚本和真实浏览器验证，不靠读代码下结论。',
+  guideTesterExplanation: [
+    '### 多了什么',
+    '标准模式的能力全部保留，另加一条把任务变成验证的系统提示词：先跑现有测试，补后端单元与接口测试，真实启动前后端做联调，用真实浏览器跑端到端，再看截图判读视觉问题。mock 占位、前后端没接上、功能只留了占位实现，都要带文件与行号记账。',
+    '### 拿到什么',
+    '一份调研报告：用例矩阵、缺陷、证据、最小复现；一份 mock 与预留实现台账；一张前后端接入核对表；一份修改方案——每条都写明文件、位置和验收命令。没有实际执行的结论一律标为未验证。',
+  ].join('\n\n'),
+  guideTesterUsage: [
+    '### 体检一个半成品项目',
+    '> 这个后台说是做完了，但我怀疑不少地方是假的。把后端、联调和主要流程都验一遍，告诉我哪些是 mock、哪些没接通、该怎么改。',
+    '预期产出：带命令证据的调研报告，以及点名文件与位置的分级修改方案。',
+    '### 交付前验收',
+    '> 交付前帮我把这一版整体验一遍：主要流程、空态和错误态，以及桌面和手机两档宽度下的页面。',
+    '预期产出：带截图的验收矩阵、发现的问题，以及未验证项与原因。',
   ].join('\n\n'),
 }
