@@ -1,0 +1,47 @@
+{
+  "//": "示例：商城小程序。project/devtools/outDir/workDir/outName 与文案换成自己的即可。",
+  "project": "<小程序源码目录>",
+  "devtools": "<微信开发者工具目录>",
+  "autoPort": 9420,
+  "ffmpeg": "",
+  "python": "",
+  "outDir": "<输出目录>",
+  "outName": "示例商城-小程序端",
+  "workDir": "<工作目录>",
+  "scenes": "../scenes.json",
+  "audio": "audio",
+  "slug": "huaban-miniprogram",
+  "brand": "示例商城",
+  "tagline": "微信小程序 · 消费者端",
+  "subtitle": "从选花到售后，一套完整的花店商城体验",
+  "watermark": "示例商城 · 小程序端",
+  "footNote": "演示数据来自本地后端与 MySQL",
+  "theme": {
+    "accent": "#E24B36",
+    "bgTop": "#201614",
+    "bgBottom": "#120C0A",
+    "cream": "#F3E7E0",
+    "muted": "#B79C8F",
+    "dim": "#8A7065"
+  },
+  "phone": { "x": 104, "y": 63 },
+  "sync": {
+    "from": "/pages/home/index",
+    "to": "/pages/login/index",
+    "stableMs": 1400
+  },
+  "cover": {
+    "title": "示例商城",
+    "subtitle": "微信小程序 · 消费者端功能演示",
+    "lines": [
+      "首页 · 分类 · 搜索 · 商品详情 · 购物车",
+      "确认订单 · 订单物流 · 会员卡 · 分销 · 个人中心"
+    ],
+    "note": "11 个功能场景 · 录制自微信开发者工具模拟器",
+    "chip": "完整走通「选花 - 下单 - 售后 - 会员 - 分销」"
+  },
+  "outro": {
+    "title": "谢谢观看",
+    "lines": ["示例商城 · 微信小程序", "消费者端 · 运营后台 · 后端 API 均已联调完成"]
+  }
+}

@@ -1,7 +1,8 @@
 /**
  * The bundled 公文 (official document) skill, the bundled bootstrapmb
- * 模板源码抓取 skill, the bundled 无头演示视频 skill, the bundled 配图
- * 取用 skill, and the bundled UI 界面确认单 skill.
+ * 模板源码抓取 skill, the bundled 演示视频 skill (mini program and web
+ * engines in one entry), the bundled 配图取用 skill, and the bundled
+ * UI 界面确认单 skill.
  *
  * The 商务部 and 技术部 presets are the only rows that mount
  * `@tianma/dsh-department-prompts`, and a provider registers into the calling
@@ -49,25 +50,34 @@ const OFFICIAL_DOC_SKILL: BundledSkill = {
   packagedRoot: fileURLToPath(new URL('../skills/official-doc/', import.meta.url)),
 }
 
-/** The 无头 Web 演示视频 skill, carried by the 技术部 mode only. */
-const WEB_DEMO_VIDEO_SKILL: BundledSkill = {
-  name: 'web-demo-video',
+/** The 演示视频 skill carrying both the mini program and the web engine, 技术部 mode only. */
+const DEMO_VIDEO_SKILL: BundledSkill = {
+  name: 'demo-video',
   assetFiles: [
     'SKILL.md',
     'CHANGELOG.md',
-    'references/environment-matrix.md',
-    'references/pitfalls.md',
-    'references/plan-example-13steps.json',
-    'references/plan-example.json',
-    'references/step-dsl.md',
-    'scripts/lib/capture.mjs',
-    'scripts/lib/cdp.mjs',
-    'scripts/lib/env.mjs',
-    'scripts/lib/media.mjs',
-    'scripts/lib/page.mjs',
-    'scripts/webdemo.mjs',
+    'miniprogram/references/example.actions.cjs',
+    'miniprogram/references/example.config.json',
+    'miniprogram/references/example.scenes.json',
+    'miniprogram/references/pipeline.md',
+    'miniprogram/references/pitfalls.md',
+    'miniprogram/scripts/compose.py',
+    'miniprogram/scripts/doctor.mjs',
+    'miniprogram/scripts/record.cjs',
+    'miniprogram/scripts/tts.ps1',
+    'web/references/environment-matrix.md',
+    'web/references/pitfalls.md',
+    'web/references/plan-example-13steps.json',
+    'web/references/plan-example.json',
+    'web/references/step-dsl.md',
+    'web/scripts/core/capture.mjs',
+    'web/scripts/core/cdp.mjs',
+    'web/scripts/core/env.mjs',
+    'web/scripts/core/media.mjs',
+    'web/scripts/core/page.mjs',
+    'web/scripts/webdemo.mjs',
   ],
-  packagedRoot: fileURLToPath(new URL('../skills/web-demo-video/', import.meta.url)),
+  packagedRoot: fileURLToPath(new URL('../skills/demo-video/', import.meta.url)),
 }
 
 /** The bootstrapmb 模板源码抓取 skill, carried by both department modes. */
@@ -144,17 +154,17 @@ export const SKILL_PROVIDER_NAME = 'tianma-department'
 export const SKILL_ASSET_FILES = OFFICIAL_DOC_SKILL.assetFiles
 
 /** Skill name the 技术部-only 演示视频 skill publishes under. */
-export const WEB_DEMO_VIDEO_SKILL_NAME = WEB_DEMO_VIDEO_SKILL.name
+export const DEMO_VIDEO_SKILL_NAME = DEMO_VIDEO_SKILL.name
 
 /**
  * Provider name the 演示视频 skill registers on the skill registry. It differs
  * from `SKILL_PROVIDER_NAME` because one registry layer rejects a second
  * provider under a name it already holds.
  */
-export const WEB_DEMO_VIDEO_SKILL_PROVIDER_NAME = 'tianma-department-web-demo-video'
+export const DEMO_VIDEO_SKILL_PROVIDER_NAME = 'tianma-department-demo-video'
 
 /** Relative paths the 演示视频 skill's published copy must carry. */
-export const WEB_DEMO_VIDEO_SKILL_ASSET_FILES = WEB_DEMO_VIDEO_SKILL.assetFiles
+export const DEMO_VIDEO_SKILL_ASSET_FILES = DEMO_VIDEO_SKILL.assetFiles
 
 /** Skill name the 模板源码抓取 skill publishes under. */
 export const TEMPLATE_FETCH_SKILL_NAME = TEMPLATE_FETCH_SKILL.name
@@ -266,8 +276,8 @@ export function materializeDepartmentSkill(options: DepartmentSkillOptions = {})
  * @param options - asset and destination overrides, both optional.
  * @returns the absolute published skill directory.
  */
-export function materializeWebDemoVideoSkill(options: DepartmentSkillOptions = {}): string {
-  return materializeSkill(WEB_DEMO_VIDEO_SKILL, options)
+export function materializeDemoVideoSkill(options: DepartmentSkillOptions = {}): string {
+  return materializeSkill(DEMO_VIDEO_SKILL, options)
 }
 
 /**
@@ -386,8 +396,8 @@ export function installDepartmentSkill(ctx: Context, options: DepartmentSkillOpt
  * @param options - asset and destination overrides, both optional.
  * @returns whether the provider was registered.
  */
-export function installWebDemoVideoSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
-  return installSkill(ctx, WEB_DEMO_VIDEO_SKILL, WEB_DEMO_VIDEO_SKILL_PROVIDER_NAME, options)
+export function installDemoVideoSkill(ctx: Context, options: DepartmentSkillOptions = {}): boolean {
+  return installSkill(ctx, DEMO_VIDEO_SKILL, DEMO_VIDEO_SKILL_PROVIDER_NAME, options)
 }
 
 /**

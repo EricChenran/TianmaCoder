@@ -18,16 +18,16 @@
  *   demo    --plan p.json      tts + record + build 一把跑完
  *   open    <file>             用系统 shell 打开产物
  *
- * 环境自适应见 lib/env.mjs；交互层见 lib/page.mjs；两个致命坑的修法见 lib/capture.mjs。
+ * 环境自适应见 core/env.mjs；交互层见 core/page.mjs；两个致命坑的修法见 core/capture.mjs。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildTimeline, startCapture, writeCaptionsJson, writeSrt } from './lib/capture.mjs'
-import { getPageTarget, launchBrowser, openPage } from './lib/cdp.mjs'
-import { detectAll, detectBrowser, detectCjkFont, detectFfmpeg, detectTts, IS_WIN } from './lib/env.mjs'
-import { audioLevel, buildVideo, calibrateCaptionMetrics, probeDuration, run, synthesizeNarration, writeCaptionsAss, writeCoverAss } from './lib/media.mjs'
-import { injectHelpers, performLogin, resolveSelectors, restrictedAssert, runAction, sleep, waitFor } from './lib/page.mjs'
+import { buildTimeline, startCapture, writeCaptionsJson, writeSrt } from './core/capture.mjs'
+import { getPageTarget, launchBrowser, openPage } from './core/cdp.mjs'
+import { detectAll, detectBrowser, detectCjkFont, detectFfmpeg, detectTts, IS_WIN } from './core/env.mjs'
+import { audioLevel, buildVideo, calibrateCaptionMetrics, probeDuration, run, synthesizeNarration, writeCaptionsAss, writeCoverAss } from './core/media.mjs'
+import { injectHelpers, performLogin, resolveSelectors, restrictedAssert, runAction, sleep, waitFor } from './core/page.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 

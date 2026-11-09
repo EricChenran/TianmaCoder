@@ -1,7 +1,7 @@
 /**
- * The bundled 无头 Web 演示视频 skill: the packaged tree must publish byte for
- * byte where the model's interpreter can read it, reach the 技术部 mode alone,
- * and carry a body free of foreign harness syntax and host paths.
+ * The bundled 演示视频 skill (mini program and web engines): the packaged tree must
+ * publish byte for byte where the model's interpreter can read it, reach the
+ * 技术部 mode alone, and carry a body free of foreign harness syntax and host paths.
  */
 
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,12 +15,12 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as plugin from '@tianma/dsh-department-prompts'
 
 const PERSONA = 'You are the deployment assistant.'
-const SKILL_ASSET_ROOT = fileURLToPath(new URL('../skills/web-demo-video/', import.meta.url))
+const SKILL_ASSET_ROOT = fileURLToPath(new URL('../skills/demo-video/', import.meta.url))
 const temporaryDirectories: string[] = []
 
 /** A directory this spec owns and removes after each case. */
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'web-demo-video-skill-'))
+  const directory = mkdtempSync(join(tmpdir(), 'demo-video-skill-'))
   temporaryDirectories.push(directory)
   return directory
 }
@@ -52,24 +52,24 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
 
-describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
+describe('@tianma/dsh-department-prompts demo-video skill', () => {
   it('ships exactly the files the manifest lists', () => {
-    expect(listFiles(SKILL_ASSET_ROOT)).toEqual([...plugin.WEB_DEMO_VIDEO_SKILL_ASSET_FILES].sort())
+    expect(listFiles(SKILL_ASSET_ROOT)).toEqual([...plugin.DEMO_VIDEO_SKILL_ASSET_FILES].sort())
   })
 
   it('publishes the skill byte for byte where the interpreter reads it', () => {
     const skillDir = join(temporaryDirectory(), 'skill')
-    expect(plugin.materializeWebDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
-    for (const relativePath of plugin.WEB_DEMO_VIDEO_SKILL_ASSET_FILES) {
+    expect(plugin.materializeDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
+    for (const relativePath of plugin.DEMO_VIDEO_SKILL_ASSET_FILES) {
       expect(readFileSync(join(skillDir, relativePath))).toEqual(readFileSync(join(SKILL_ASSET_ROOT, relativePath)))
     }
     // A repeated mount keeps the published bytes and reports the same directory.
-    expect(plugin.materializeWebDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
+    expect(plugin.materializeDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(skillDir)
     // A published script that drifted from the packaged copy is rewritten.
-    const drifted = join(skillDir, 'scripts', 'lib', 'cdp.mjs')
+    const drifted = join(skillDir, 'web', 'scripts', 'core', 'cdp.mjs')
     writeFileSync(drifted, 'export const stale = true\n')
-    plugin.materializeWebDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })
-    expect(readFileSync(drifted)).toEqual(readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'lib', 'cdp.mjs')))
+    plugin.materializeDemoVideoSkill({ assetRoot: SKILL_ASSET_ROOT, skillDir })
+    expect(readFileSync(drifted)).toEqual(readFileSync(join(SKILL_ASSET_ROOT, 'web', 'scripts', 'core', 'cdp.mjs')))
   })
 
   it('publishes under the harness home when no directory is configured', () => {
@@ -77,9 +77,9 @@ describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
     const previous = process.env.DSH_HOME
     process.env.DSH_HOME = home
     try {
-      const published = plugin.materializeWebDemoVideoSkill()
-      expect(published).toBe(join(home, 'department', 'skills', plugin.WEB_DEMO_VIDEO_SKILL_NAME))
-      expect(listFiles(published)).toEqual([...plugin.WEB_DEMO_VIDEO_SKILL_ASSET_FILES].sort())
+      const published = plugin.materializeDemoVideoSkill()
+      expect(published).toBe(join(home, 'department', 'skills', plugin.DEMO_VIDEO_SKILL_NAME))
+      expect(listFiles(published)).toEqual([...plugin.DEMO_VIDEO_SKILL_ASSET_FILES].sort())
     } finally {
       if (previous === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = previous
@@ -87,7 +87,7 @@ describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
   })
 
   it('fails loud when the packaged skill is incomplete', () => {
-    expect(() => plugin.materializeWebDemoVideoSkill({
+    expect(() => plugin.materializeDemoVideoSkill({
       assetRoot: temporaryDirectory(), skillDir: join(temporaryDirectory(), 'skill'),
     })).toThrow(/missing SKILL\.md/u)
   })
@@ -97,21 +97,21 @@ describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
     try {
-      expect(plugin.installWebDemoVideoSkill(ctx, { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(true)
+      expect(plugin.installDemoVideoSkill(ctx, { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(true)
       const catalog = await ctx.skills.list()
-      expect(catalog.map(skill => skill.name)).toEqual([plugin.WEB_DEMO_VIDEO_SKILL_NAME])
+      expect(catalog.map(skill => skill.name)).toEqual([plugin.DEMO_VIDEO_SKILL_NAME])
       expect(catalog[0]).toMatchObject({
         source: 'bundled',
-        provider: plugin.WEB_DEMO_VIDEO_SKILL_PROVIDER_NAME,
+        provider: plugin.DEMO_VIDEO_SKILL_PROVIDER_NAME,
         invocation: { modelInvocable: true, userInvocable: true },
         resourceBase: { kind: 'directory', path: skillDir },
       })
       expect(catalog[0]?.description.length).toBeGreaterThan(0)
       expect(catalog[0]?.description.length).toBeLessThanOrEqual(500)
-      const loaded = await ctx.skills.get(plugin.WEB_DEMO_VIDEO_SKILL_NAME)
+      const loaded = await ctx.skills.get(plugin.DEMO_VIDEO_SKILL_NAME)
       expect(loaded?.path).toBe(join(skillDir, 'SKILL.md'))
-      expect(loaded?.content.startsWith('# 无头 Web 演示视频制作')).toBe(true)
-      expect(loaded?.content).toContain('scripts/webdemo.mjs')
+      expect(loaded?.content.startsWith('# 演示视频（小程序 + Web 后台）')).toBe(true)
+      expect(loaded?.content).toContain('web/scripts/webdemo.mjs')
     } finally {
       await ctx.fiber.dispose()
     }
@@ -125,7 +125,7 @@ describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
       try {
         const fiber = await ctx.plugin(plugin, { department })
         const names = (await ctx.skills.list()).map(skill => skill.name)
-        expect(names.includes(plugin.WEB_DEMO_VIDEO_SKILL_NAME)).toBe(department === 'tech')
+        expect(names.includes(plugin.DEMO_VIDEO_SKILL_NAME)).toBe(department === 'tech')
         expect(names.includes(plugin.SKILL_NAME)).toBe(true)
         await fiber.dispose()
         expect(await ctx.skills.list()).toEqual([])
@@ -137,19 +137,19 @@ describe('@tianma/dsh-department-prompts web-demo-video skill', () => {
 
   it('skips the skill when the composition mounts no skill registry', () => {
     const skillDir = join(temporaryDirectory(), 'skill')
-    expect(plugin.installWebDemoVideoSkill(new Context(), { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(false)
+    expect(plugin.installDemoVideoSkill(new Context(), { assetRoot: SKILL_ASSET_ROOT, skillDir })).toBe(false)
     expect(existsSync(skillDir)).toBe(false)
   })
 
   it('ships a skill body free of foreign harness syntax and host paths', () => {
     const raw = readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')
-    expect(raw.startsWith('---\nname: web-demo-video\n')).toBe(true)
+    expect(raw.startsWith('---\nname: demo-video\n')).toBe(true)
     for (const forbidden of ['zcode-file-citation', '::zcode', 'document-skills', '<本技能目录>',
       'DSH_DEPARTMENT_TOOLS', 'assets/business']) {
       expect(raw).not.toContain(forbidden)
     }
     expect(raw).not.toMatch(/[A-Za-z]:\\/u)
-    expect(raw).toContain('scripts/webdemo.mjs')
+    expect(raw).toContain('web/scripts/webdemo.mjs')
     expect(raw).toContain('plan.json')
   })
 })

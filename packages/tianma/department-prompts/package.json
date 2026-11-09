@@ -25,7 +25,7 @@
     "assets/business/*.py",
     "skills/official-doc/**",
     "skills/proposal-doc/**",
-    "skills/web-demo-video/**",
+    "skills/demo-video/**",
     "skills/image-assets/**",
     "skills/ui-confirmation-doc/**",
     "skills/bootstrapmb-template-fetch/**"

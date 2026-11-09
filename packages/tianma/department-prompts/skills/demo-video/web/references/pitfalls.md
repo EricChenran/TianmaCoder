@@ -55,7 +55,7 @@
 ### P9 🛡 concat 清单的收尾语法
 - **现象**：末帧丢失或时长异常。
 - **根因**：ffmpeg concat 要求每个 `file` 后跟 `duration`，且**结尾必须再补一行 `file`**。
-- **处理**：按此规则生成，见 `lib/capture.mjs#buildTimeline`。
+- **处理**：按此规则生成，见 `core/capture.mjs#buildTimeline`。
 
 ### P10 ⚠️ 抓帧频率与体积
 - 5fps 对以点击交互为主的演示足够；1600×900 JPEG 约 120–200KB/帧，60 秒约 60MB。

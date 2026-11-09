@@ -9,20 +9,20 @@
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: 54dd21199dc53297
+  en: c35c8c155c3ef86e
   zh: dbe077346ce3549d
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
 /tianma-dsh-department-prompts/use-this-package:
-  en: 2aa4425cc8b10d0b
-  zh: 32e1fb1410ca66e3
+  en: 80a06caef57d18f2
+  zh: bddbf186e879c7fc
 /tianma-dsh-department-prompts/understand-the-implementation:
-  en: c11c0f4484e59280
-  zh: eaf4a44f8ec34ecb
+  en: 1ea120ebf62b49e6
+  zh: 7ac5c588e76dddde
 /tianma-dsh-department-prompts/understand-the-implementation/source-map:
-  en: a100cadb2838cc9b
-  zh: 01258c246eb1445f
+  en: 53928e744068c010
+  zh: 624d6a1dd066d0d0
 /tianma-dsh-department-prompts/further-exploration:
   en: 4a1dc47d905730ba
   zh: d699dd1976957fa6
@@ -53,16 +53,16 @@
 /tianma-dsh-department-prompts/model-experience/bundled-skill/kv-cache-effect:
   en: 493f941b8b9f8727
   zh: 12d8ee9e3cba8e08
-/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only:
-  en: df13b93af59748ce
-  zh: 1c3681861e3c075a
-/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/what-the-model-sees:
-  en: d962ed1286801705
-  zh: d82116736cbd7103
-/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/token-effect:
-  en: 936dc79ce424c15f
-  zh: d374c2b15c117dc3
-/tianma-dsh-department-prompts/model-experience/bundled-headless-demo-video-skill-only/kv-cache-effect:
+/tianma-dsh-department-prompts/model-experience/bundled-demo-video-skill-only-mini-program-and-web:
+  en: 384a03df4d14e48f
+  zh: c970041f0eeebb26
+/tianma-dsh-department-prompts/model-experience/bundled-demo-video-skill-only-mini-program-and-web/what-the-model-sees:
+  en: 4779a6aed4a276a6
+  zh: 2672c1a4b200e923
+/tianma-dsh-department-prompts/model-experience/bundled-demo-video-skill-only-mini-program-and-web/token-effect:
+  en: e143b18d35232b99
+  zh: bbcc0930a40abf2b
+/tianma-dsh-department-prompts/model-experience/bundled-demo-video-skill-only-mini-program-and-web/kv-cache-effect:
   en: f4aaf1b1c37e15e1
   zh: 82b20050d1d6279b
 /tianma-dsh-department-prompts/model-experience/bundled-bootstrapmb-template-fetch-skill:
@@ -102,8 +102,8 @@
   en: f4aaf1b1c37e15e1
   zh: 82b20050d1d6279b
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work:
-  en: b49830adb8c51786
-  zh: 28031c1210dd894c
+  en: 72a338a060e5f12b
+  zh: 89811509cecc0190
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
   en: fe3fe2ab0b4c37e1
   zh: 501c74d8c2155493
