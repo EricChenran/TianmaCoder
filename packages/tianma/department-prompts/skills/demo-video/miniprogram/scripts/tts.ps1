@@ -1,6 +1,7 @@
-# 用 Windows SAPI 生成逐场景旁白（默认 Huihui 中文、2 倍速）
-# 用法：powershell -File tts.ps1 -Scenes scenes.json -Audio audio [-Rate 2] [-Voice "Microsoft Huihui Desktop"]
-# 说明：脚本本体保持纯 ASCII（Windows PowerShell 5.1 按 ANSI 解析无 BOM 文件），中文只从 JSON 读入。
+# Generate one narration WAV per scene with Windows SAPI (Huihui Chinese voice, 2x rate).
+# Usage: powershell -File tts.ps1 -Scenes scenes.json -Audio audio [-Rate 2] [-Voice "Microsoft Huihui Desktop"]
+# Keep this file pure ASCII: Windows PowerShell 5.1 reads BOM-less scripts with the ANSI code page,
+# so one non-ASCII byte in a comment already breaks the param block below. Chinese text comes from the JSON.
 param(
   [string]$Scenes = "scenes.json",
   [string]$Audio = "audio",
@@ -32,7 +33,7 @@ foreach ($s in $data.scenes) {
   $synth.Speak($s.caption)
   $synth.Dispose()
 
-  # 用 WAV 头的 byteRate（偏移 28）算真实时长，别再拿文件大小估
+  # Duration from the WAV header byteRate at offset 28; never estimate it from the file size.
   $bytes = [System.IO.File]::ReadAllBytes($file)
   $byteRate = [System.BitConverter]::ToUInt32($bytes, 28)
   $sec = [math]::Round(($bytes.Length - 44) / $byteRate, 2)

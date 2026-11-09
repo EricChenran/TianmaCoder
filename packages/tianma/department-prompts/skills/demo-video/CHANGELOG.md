@@ -1,5 +1,15 @@
 # 变更记录 · demo-video
 
+## 3.0.1
+
+- **修复 `tts.ps1` 在 Windows PowerShell 5.1 下无法解析**：脚本头部是中文注释却没有 BOM，
+  5.1 按 ANSI 代码页读无 BOM 脚本，注释里的多字节序列把 `param(...)` 块打乱，直接报
+  `Unexpected token ')'` / `赋值表达式无效`，旁白一步根本跑不起来。脚本第 3 行原本就写着
+  「本体保持纯 ASCII」，此前只是没做到——现已把 4 处中文注释改为英文，文件恢复纯 ASCII，
+  行为不变。
+- 文档补上依赖前提：`miniprogram-automator` 不随包发布，需在 `workDir` 里
+  `npm i miniprogram-automator`，或用 `config.json` 的 `automatorModule` 指定入口。
+
 ## 3.0.0
 
 两套引擎合并为一个技能 `demo-video`，随技术部模式发布；换项目只换各自那份输入。

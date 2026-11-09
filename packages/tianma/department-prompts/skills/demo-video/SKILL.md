@@ -13,7 +13,7 @@ description: >-
 description_zh: "小程序（开发者工具 + automator）与 Web 后台（无头 Chromium + CDP）两条引擎合成演示视频，按录制对象分流。"
 description_en: "Record demo videos for WeChat mini programs (DevTools + automator) and web apps (headless Chromium + CDP), picked by capture target."
 category: media
-version: 3.0.0
+version: 3.0.1
 runtime: generic
 tags:
   - "演示视频"
@@ -127,7 +127,8 @@ python <技能>/miniprogram/scripts/compose.py --config demo/config.json
 
 其它：录制前确认后端已起（空数据录出来是白板）；开发者工具必须开自动化端口
 （`cli.bat auto --project <dir> --auto-port <port>`，端口起来后 `ws://127.0.0.1:<port>`
-才连得上）；不要在录制中途跑别的 GUI 操作。
+才连得上）；`miniprogram-automator` 不随包发布，先在 `workDir` 里 `npm i miniprogram-automator`，
+或用 `config.json` 的 `automatorModule` 指向它的入口；不要在录制中途跑别的 GUI 操作。
 
 ### 产物
 
