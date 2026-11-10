@@ -5,12 +5,16 @@ import { dump, load } from 'js-yaml'
 import { describe, expect, it } from 'vitest'
 import {
   LSP_PACKS,
+  LSP_PACK_SECTION_BEGIN,
+  LSP_PACK_SECTION_END,
   findLspPack,
   lspPackDir,
   lspPackInstallCommand,
   lspPackPatchRow,
   lspPackRoot,
   lspPackServerEntry,
+  renderLspPackSection,
+  upsertLspPackSection,
 } from '../src/lsp-packs.ts'
 
 const profileDir = 'C:\\Users\\tester\\AppData\\Roaming\\TianmaCoder\\dsh\\profiles\\desktop'
@@ -78,5 +82,34 @@ describe('lsp packs', () => {
     const parsed = load(text) as { insert: { config: { servers: Record<string, { command: string; args: string[] }> } }[] }[]
     expect(parsed[0]!.insert[0]!.config.servers['mini-css']!.command).toBe(nodeExecutable)
     expect(parsed[0]!.insert[0]!.config.servers['mini-css']!.args[0]).toContain('vscode-css-language-server')
+  })
+
+  it('renders a managed section that parses as a patch list', () => {
+    const pack = findLspPack('miniprogram')!
+    const section = renderLspPackSection([lspPackPatchRow(profileDir, pack, nodeExecutable)])
+    expect(section.startsWith(LSP_PACK_SECTION_BEGIN)).toBe(true)
+    expect(section.endsWith(LSP_PACK_SECTION_END)).toBe(true)
+    const parsed = load(section) as { insert: { id: string; config: { servers: Record<string, { command: string }> } }[] }[]
+    expect(parsed[0]!.insert[0]!.id).toBe('lsp-stdio-miniprogram')
+    expect(parsed[0]!.insert[0]!.config.servers['mini-json']!.command).toBe(nodeExecutable)
+    expect(renderLspPackSection([])).toBe('')
+  })
+
+  it('appends once, then replaces the managed section in place', () => {
+    const pack = findLspPack('miniprogram')!
+    const section = renderLspPackSection([lspPackPatchRow(profileDir, pack, nodeExecutable)])
+    const userPatch = '- id: preset-standard\n  config:\n    retainRatio: 0.5\n'
+
+    const appended = upsertLspPackSection(userPatch, section)
+    expect(appended.startsWith(userPatch)).toBe(true)
+    expect(appended.indexOf(LSP_PACK_SECTION_BEGIN)).toBeGreaterThan(-1)
+
+    const replaced = upsertLspPackSection(appended, section)
+    expect(replaced).toBe(appended)
+    expect(replaced.split(LSP_PACK_SECTION_BEGIN).length - 1).toBe(1)
+
+    const removed = upsertLspPackSection(appended, '')
+    expect(removed).not.toContain(LSP_PACK_SECTION_BEGIN)
+    expect(removed.startsWith(userPatch)).toBe(true)
   })
 })

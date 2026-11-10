@@ -156,3 +156,74 @@ export function lspPackPatchRow(
   }
   return { id: `lsp-stdio-${pack.id}`, name: '@deepseek-ai/dsh-lsp-stdio', config: { servers } }
 }
+
+/** Opening marker of the managed block inside a profile patch file. */
+export const LSP_PACK_SECTION_BEGIN = '# >>> tianma lsp packs (managed)'
+
+/** Closing marker of the managed block inside a profile patch file. */
+export const LSP_PACK_SECTION_END = '# <<< tianma lsp packs'
+
+/**
+ * Quote one YAML scalar with single quotes, doubling embedded quotes.
+ * @param value - raw scalar text.
+ * @returns the quoted scalar.
+ */
+function yamlScalar(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
+}
+
+/**
+ * Render the managed block that mounts every installed pack.
+ * @param rows - rows to write; an empty list renders an empty section.
+ * @returns the block text, or an empty string when there is nothing to mount.
+ */
+export function renderLspPackSection(rows: readonly LspPackPatchRow[]): string {
+  if (rows.length === 0) return ''
+  const lines = [LSP_PACK_SECTION_BEGIN]
+  for (const row of rows) {
+    lines.push('- insert:')
+    lines.push(`    - id: ${yamlScalar(row.id)}`)
+    lines.push(`      name: ${yamlScalar(row.name)}`)
+    lines.push('      config:')
+    lines.push('        servers:')
+    for (const [id, server] of Object.entries(row.config.servers)) {
+      lines.push(`          ${id}:`)
+      lines.push(`            command: ${yamlScalar(server.command)}`)
+      lines.push('            args:')
+      for (const arg of server.args) lines.push(`              - ${yamlScalar(arg)}`)
+      lines.push('            env:')
+      for (const [key, value] of Object.entries(server.env)) {
+        lines.push(`              ${key}: ${yamlScalar(value)}`)
+      }
+      lines.push('            extensionToLanguage:')
+      for (const [extension, language] of Object.entries(server.extensionToLanguage)) {
+        lines.push(`              ${yamlScalar(extension)}: ${language}`)
+      }
+    }
+  }
+  lines.push(LSP_PACK_SECTION_END)
+  return lines.join('\n')
+}
+
+/**
+ * Replace the managed block in a profile patch, appending it when absent.
+ * @param patchText - current profile patch text.
+ * @param section - block produced by {@link renderLspPackSection}; empty removes the block.
+ * @returns the patch text that keeps every line outside the markers untouched.
+ */
+export function upsertLspPackSection(patchText: string, section: string): string {
+  const begin = patchText.indexOf(LSP_PACK_SECTION_BEGIN)
+  const end = patchText.indexOf(LSP_PACK_SECTION_END)
+  const replaceable = begin !== -1 && end > begin
+  const before = replaceable ? patchText.slice(0, begin) : patchText
+  const after = replaceable ? patchText.slice(end + LSP_PACK_SECTION_END.length) : ''
+
+  if (section === '') {
+    const trimmed = `${before}${after}`.replace(/\n{3,}/gu, '\n\n')
+    return trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`
+  }
+
+  const head = before === '' || before.endsWith('\n') ? before : `${before}\n`
+  const tail = after === '' ? '\n' : after.startsWith('\n') ? after : `\n${after}`
+  return `${head}${section}${tail}`
+}
