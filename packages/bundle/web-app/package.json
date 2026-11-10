@@ -192,6 +192,7 @@
     "@tianma/dsh-mps-node-ui": "workspace:*",
     "@tianma/dsh-oa-account": "workspace:*",
     "@tianma/dsh-oa-account-ui": "workspace:*",
+    "@tianma/dsh-lsp-packs-ui": "workspace:*",
     "commander": "^15.0.0",
     "open": "^11.0.2",
     "pyright": "^1.1.414",

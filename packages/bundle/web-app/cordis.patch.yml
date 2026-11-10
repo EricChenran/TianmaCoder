@@ -333,6 +333,12 @@
     - id: mps-node-ui
       name: '@tianma/dsh-mps-node-ui'
 
+    # Tianma language packs: the Plugins page card that installs and removes
+    # optional code-intelligence packs on demand. Renders only when the
+    # desktop shell exposes its pack bridge.
+    - id: lsp-packs-ui
+      name: '@tianma/dsh-lsp-packs-ui'
+
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'
 

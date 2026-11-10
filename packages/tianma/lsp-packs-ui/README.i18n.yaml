@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/tianma/lsp-packs-ui/README.md
+/:
+  en: 8cd95f4281cdd2ac
+  zh: acf3eb09365723de
+/tianma-dsh-lsp-packs-ui:
+  en: ea3b5a5b98f20b53
+  zh: 434a086fc558f32a
+/tianma-dsh-lsp-packs-ui/summary:
+  en: 43e23f5a2769322e
+  zh: 0dcb68e2b335d334
+/tianma-dsh-lsp-packs-ui/table-of-contents:
+  en: 3460b3e585e0c020
+  zh: fdc74b29af458b08
+/tianma-dsh-lsp-packs-ui/use-this-package:
+  en: 250b2d35284cb72b
+  zh: b07a25ff08d28a74
+/tianma-dsh-lsp-packs-ui/understand-the-implementation:
+  en: af6b29d00feead0e
+  zh: 7a4aef8f8c463f6a
+/tianma-dsh-lsp-packs-ui/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/tianma-dsh-lsp-packs-ui/model-experience/language-pack-management-card:
+  en: ecfe46a609206627
+  zh: cdb0c80b574cc88d
+/tianma-dsh-lsp-packs-ui/model-experience/language-pack-management-card/what-the-model-sees:
+  en: dbe39fe385dd7a4f
+  zh: 45b8e070575fb4a5
+/tianma-dsh-lsp-packs-ui/model-experience/language-pack-management-card/token-effect:
+  en: 6cac7623ba3c08ce
+  zh: 715c7c5e12a0d881
+/tianma-dsh-lsp-packs-ui/model-experience/language-pack-management-card/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: a61f053154723ab3
+/tianma-dsh-lsp-packs-ui/known-limitations-and-deferred-work:
+  en: 8ff759819615d6b2
+  zh: 021297e52e2ff069
+/tianma-dsh-lsp-packs-ui/known-limitations-and-deferred-work/dev-note:
+  en: 7476778f7441aff6
+  zh: fc50a1278ba8a162

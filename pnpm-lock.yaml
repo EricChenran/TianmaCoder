@@ -2921,6 +2921,9 @@ importers:
       '@tianma/dsh-department-prompts':
         specifier: workspace:*
         version: link:../../tianma/department-prompts
+      '@tianma/dsh-lsp-packs-ui':
+        specifier: workspace:*
+        version: link:../../tianma/lsp-packs-ui
       '@tianma/dsh-mps-node-control':
         specifier: workspace:*
         version: link:../../tianma/mps-node-control
@@ -14706,6 +14709,36 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
+
+  packages/tianma/lsp-packs-ui:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../client/locale
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: workspace:*
+        version: link:../../client/ui-plugin-manager
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: workspace:*
+        version: link:../../client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:*
+        version: link:../../client/ui-slots
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      '@types/react-dom':
+        specifier: ~18.3.0
+        version: 18.3.7(@types/react@18.3.31)
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
 
   packages/tianma/mps-exec-core:
     devDependencies:
