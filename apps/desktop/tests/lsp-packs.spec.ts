@@ -53,7 +53,8 @@ describe('lsp packs', () => {
     const command = lspPackInstallCommand(pack, profileDir, 'C:\\runtime\\pnpm.cmd')
     expect(command.command).toBe('C:\\runtime\\pnpm.cmd')
     expect(command.args.slice(0, 3)).toEqual(['add', '--dir', lspPackDir(profileDir, pack)])
-    expect(command.args.slice(3)).toEqual([...pack.packages])
+    expect(command.args[3]).toBe('--ignore-scripts')
+    expect(command.args.slice(4)).toEqual([...pack.packages])
   })
 
   it('mounts every server on one provider row', () => {

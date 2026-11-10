@@ -129,7 +129,10 @@ export function lspPackInstallCommand(
 ): { readonly command: string; readonly args: readonly string[] } {
   return {
     command: pnpmPath,
-    args: ['add', '--dir', lspPackDir(profileDir, pack), ...pack.packages],
+    // Language-pack dependencies are pure JavaScript; skipping lifecycle scripts
+    // keeps an install from running unreviewed build code and from failing the
+    // runtime's strict build-script approval.
+    args: ['add', '--dir', lspPackDir(profileDir, pack), '--ignore-scripts', ...pack.packages],
   }
 }
 
