@@ -11,6 +11,28 @@
 # system prompt and it mounts no compaction group, so the quality set has no
 # mount point there — it stays the clean baseline.
 
+# LSP：代码导航（定义/引用/实现/悬浮）。服务器路径由 DSH_LSP_SERVER 指定；
+# 未设置时 provider 与工具都不挂，会话里看不到 lsp 工具，也不影响启动。
+- insert:
+    - id: lsp
+      name: '@deepseek-ai/dsh-lsp'
+    - id: lsp-stdio
+      name: '@deepseek-ai/dsh-lsp-stdio'
+      disabled: !!js (process.env.DSH_LSP_SERVER ?? '') === ''
+      config:
+        servers:
+          typescript:
+            command: !!js process.env.DSH_LSP_SERVER
+            args: ['--stdio']
+            extensionToLanguage:
+              '.ts': typescript
+              '.tsx': typescriptreact
+              '.mts': typescript
+              '.cts': typescript
+              '.js': javascript
+              '.jsx': javascriptreact
+              '.mjs': javascript
+              '.cjs': javascript
 # PR-1 (base-backed profiles): raise the AGENTS.md chain budget. The web
 # profile's effective value comes from the preset restates below.
 - id: agent-instructions
@@ -75,6 +97,9 @@
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
           sampleOverCapGlobResults: false
+      - id: tool-lsp
+        name: '@deepseek-ai/dsh-tool-lsp'
+        disabled: !!js (process.env.DSH_LSP_SERVER ?? '') === ''
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -202,6 +227,9 @@
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
           sampleOverCapGlobResults: false
+      - id: tool-lsp
+        name: '@deepseek-ai/dsh-tool-lsp'
+        disabled: !!js (process.env.DSH_LSP_SERVER ?? '') === ''
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -338,6 +366,9 @@
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:
           sampleOverCapGlobResults: false
+      - id: tool-lsp
+        name: '@deepseek-ai/dsh-tool-lsp'
+        disabled: !!js (process.env.DSH_LSP_SERVER ?? '') === ''
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule

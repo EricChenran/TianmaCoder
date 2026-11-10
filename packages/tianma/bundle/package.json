@@ -36,6 +36,9 @@
     "@tianma/dsh-compaction-summarize": "workspace:*",
     "@tianma/dsh-compaction-file-rehydrator": "workspace:*",
     "@tianma/dsh-token-meter-calibration": "workspace:*",
-    "@tianma/dsh-hooks-trust": "workspace:*"
+    "@tianma/dsh-hooks-trust": "workspace:*",
+    "@deepseek-ai/dsh-lsp": "workspace:*",
+    "@deepseek-ai/dsh-lsp-stdio": "workspace:*",
+    "@deepseek-ai/dsh-tool-lsp": "workspace:*"
   }
 }

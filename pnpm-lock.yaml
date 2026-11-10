@@ -14540,6 +14540,15 @@ importers:
 
   packages/tianma/bundle:
     dependencies:
+      '@deepseek-ai/dsh-lsp':
+        specifier: workspace:*
+        version: link:../../lsp/lsp
+      '@deepseek-ai/dsh-lsp-stdio':
+        specifier: workspace:*
+        version: link:../../lsp/lsp-stdio
+      '@deepseek-ai/dsh-tool-lsp':
+        specifier: workspace:*
+        version: link:../../lsp/tool-lsp
       '@tianma/dsh-behavioral-guidelines':
         specifier: workspace:*
         version: link:../behavioral-guidelines

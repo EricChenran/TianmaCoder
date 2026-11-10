@@ -36,6 +36,9 @@
             name: '@deepseek-ai/dsh-tool-fs-search'
             config:
               sampleOverCapGlobResults: false
+          - id: tool-lsp
+            name: '@deepseek-ai/dsh-tool-lsp'
+            disabled: !!js (process.env.DSH_LSP_SERVER ?? '') === ''
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: tool-schedule

@@ -13,6 +13,7 @@ interface NestedRow {
   id?: string
   name?: string
   config?: unknown
+  disabled?: unknown
   plugins?: NestedRow[]
 }
 import * as yaml from 'js-yaml'
@@ -92,5 +93,34 @@ describe('@tianma/dsh-bundle', () => {
     expect(inserted.find(row => row.id === 'tianma-behavioral-guidelines')?.name)
       .toBe('@tianma/dsh-behavioral-guidelines')
     expect(manifest.dependencies).toHaveProperty('@tianma/dsh-behavioral-guidelines')
+  })
+
+  it('wires the opt-in lsp service and mounts its tool in every composing preset', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const loadPatch = (path: string) => yaml.load(
+      readFileSync(path, 'utf8'),
+      { schema: entryListSchema },
+    ) as { id?: string; insert?: NestedRow[]; config?: { plugins?: NestedRow[] } }[]
+
+    const patch = loadPatch(resolve(root, 'cordis.patch.yml'))
+    const inserted = patch.flatMap(op => op.insert ?? [])
+    expect(inserted.find(row => row.id === 'lsp')?.name).toBe('@deepseek-ai/dsh-lsp')
+    expect(inserted.find(row => row.id === 'lsp-stdio')?.name).toBe('@deepseek-ai/dsh-lsp-stdio')
+    expect(inserted.find(row => row.id === 'lsp-stdio')?.disabled).toBeDefined()
+
+    for (const id of ['preset-standard', 'preset-ptc', 'preset-cordis']) {
+      const plugins = patch.find(op => op.id === id)?.config?.plugins ?? []
+      const row = plugins.find(plugin => plugin.id === 'tool-lsp')
+      expect(row?.name, `${id} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
+    }
+
+    const webAppPresets = resolve(root, '../../bundle/web-app/presets')
+    for (const name of ['department-tech', 'department-business', 'department-bid', 'department-tester']) {
+      const parsed = loadPatch(resolve(webAppPresets, `${name}.patch.yml`))
+      const plugins = parsed.flatMap(op => op.insert ?? [])
+        .flatMap(row => (row as { config?: { plugins?: NestedRow[] } }).config?.plugins ?? [])
+      expect(plugins.find(plugin => plugin.id === 'tool-lsp')?.name,
+        `${name} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
+    }
   })
 })
