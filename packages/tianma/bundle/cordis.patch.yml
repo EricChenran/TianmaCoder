@@ -33,6 +33,28 @@
               '.jsx': javascriptreact
               '.mjs': javascript
               '.cjs': javascript
+# 历史会话检索：sqlite 引擎在首次检索时打开，检索范围为当前工作区。
+- insert:
+    - id: optional-session-search
+      name: cordis:group
+      group: true
+      isolate:
+        sessionQuery: true
+      config:
+        - id: optional-session-query-sqlite
+          name: '@deepseek-ai/dsh-session-query-sqlite'
+          config:
+            path: ':memory:'
+            openAt: first-search
+        - id: optional-tool-session-query
+          name: '@deepseek-ai/dsh-tool-session-query'
+
+# Git worktree 隔离副本：模型只在用户明确要求时创建，避免自动复制目录。
+- insert:
+    - id: worktree
+      name: '@deepseek-ai/dsh-experimental-worktree'
+    - id: tool-worktree
+      name: '@deepseek-ai/dsh-experimental-tool-worktree'
 # PR-1 (base-backed profiles): raise the AGENTS.md chain budget. The web
 # profile's effective value comes from the preset restates below.
 - id: agent-instructions

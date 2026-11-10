@@ -123,4 +123,36 @@ describe('@tianma/dsh-bundle', () => {
         `${name} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
     }
   })
+
+  it('wires session search and worktree as profile-level capabilities', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
+    const patch = yaml.load(
+      readFileSync(resolve(root, 'cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as { insert?: NestedRow[] }[]
+    const inserted = patch.flatMap(op => op.insert ?? [])
+
+    const search = inserted.find(row => row.id === 'optional-session-search')
+    expect(search?.name).toBe('cordis:group')
+    const searchChildren = (search?.config ?? []) as NestedRow[]
+    expect(searchChildren.find(row => row.id === 'optional-session-query-sqlite')?.name)
+      .toBe('@deepseek-ai/dsh-session-query-sqlite')
+    expect(searchChildren.find(row => row.id === 'optional-tool-session-query')?.name)
+      .toBe('@deepseek-ai/dsh-tool-session-query')
+
+    expect(inserted.find(row => row.id === 'worktree')?.name)
+      .toBe('@deepseek-ai/dsh-experimental-worktree')
+    expect(inserted.find(row => row.id === 'tool-worktree')?.name)
+      .toBe('@deepseek-ai/dsh-experimental-tool-worktree')
+
+    for (const dep of [
+      '@deepseek-ai/dsh-session-query-sqlite',
+      '@deepseek-ai/dsh-tool-session-query',
+      '@deepseek-ai/dsh-experimental-worktree',
+      '@deepseek-ai/dsh-experimental-tool-worktree',
+    ]) expect(manifest.dependencies).toHaveProperty(dep)
+  })
 })
