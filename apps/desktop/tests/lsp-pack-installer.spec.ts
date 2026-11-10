@@ -29,7 +29,7 @@ async function makeProfile(): Promise<string> {
  * @returns a runner writing the expected files.
  */
 const creatingRunner: LspPackRunner = async (_command, args) => {
-  const directory = args[2]!
+  const directory = args[3]!
   for (const pack of LSP_PACKS) {
     for (const server of pack.servers) {
       const file = join(directory, 'node_modules', server.entry)
@@ -48,7 +48,7 @@ const creatingRunner: LspPackRunner = async (_command, args) => {
 function makeInstaller(profileDir: string, runner: LspPackRunner): LspPackInstaller {
   return new LspPackInstaller({
     profileDir,
-    pnpmPath: 'C:\\runtime\\pnpm.cmd',
+    pnpmEntry: 'C:\\runtime\\pnpm.mjs',
     nodeExecutable: 'C:\\runtime\\node.exe',
     runner,
   })

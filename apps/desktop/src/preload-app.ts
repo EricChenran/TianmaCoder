@@ -2,7 +2,7 @@
 
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopLspPackStatus, type DesktopUpdatePresentation } from './ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
 import { syncWindowsAppearance } from './preload-windows.ts'
@@ -55,6 +55,11 @@ function createProductApi(): DshDesktopProductApi {
         ipcRenderer.on(DESKTOP_IPC.updatesPresentation, handle)
         return () => { ipcRenderer.off(DESKTOP_IPC.updatesPresentation, handle) }
       },
+    },
+    lspPacks: {
+      list: () => ipcRenderer.invoke(DESKTOP_IPC.lspPacksList) as Promise<readonly DesktopLspPackStatus[]>,
+      install: id => ipcRenderer.invoke(DESKTOP_IPC.lspPacksInstall, id) as Promise<DesktopLspPackStatus>,
+      uninstall: id => ipcRenderer.invoke(DESKTOP_IPC.lspPacksUninstall, id) as Promise<DesktopLspPackStatus>,
     },
   }
 }

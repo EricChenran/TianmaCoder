@@ -52,10 +52,10 @@ export const runLspPackCommand: LspPackRunner = async (command, args) => {
 export interface LspPackInstallerOptions {
   /** Profile directory that holds `cordis.patch.yml`. */
   readonly profileDir: string
-  /** pnpm executable from the running runtime. */
-  readonly pnpmPath: string
-  /** Executable that runs pack entries as Node. */
+  /** Node executable that runs pnpm and the pack entries. */
   readonly nodeExecutable: string
+  /** pnpm entry script from the running runtime. */
+  readonly pnpmEntry: string
   /** Command runner override for tests. */
   readonly runner?: LspPackRunner
 }
@@ -89,7 +89,10 @@ export class LspPackInstaller {
     const pack = requirePack(id)
     const directory = lspPackDir(this.options.profileDir, pack)
     await mkdir(directory, { recursive: true })
-    const command = lspPackInstallCommand(pack, this.options.profileDir, this.options.pnpmPath)
+    const command = lspPackInstallCommand(pack, this.options.profileDir, {
+      node: this.options.nodeExecutable,
+      pnpmEntry: this.options.pnpmEntry,
+    })
     try {
       await (this.options.runner ?? runLspPackCommand)(command.command, command.args)
       await this.requireEntries(pack)

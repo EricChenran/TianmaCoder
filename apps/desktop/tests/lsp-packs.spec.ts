@@ -50,11 +50,12 @@ describe('lsp packs', () => {
 
   it('installs the catalog packages into the pack directory', () => {
     const pack = findLspPack('miniprogram')!
-    const command = lspPackInstallCommand(pack, profileDir, 'C:\\runtime\\pnpm.cmd')
-    expect(command.command).toBe('C:\\runtime\\pnpm.cmd')
-    expect(command.args.slice(0, 3)).toEqual(['add', '--dir', lspPackDir(profileDir, pack)])
-    expect(command.args[3]).toBe('--ignore-scripts')
-    expect(command.args.slice(4)).toEqual([...pack.packages])
+    const command = lspPackInstallCommand(pack, profileDir, { node: 'C:\\runtime\\node.exe', pnpmEntry: 'C:\\runtime\\pnpm.mjs' })
+    expect(command.command).toBe('C:\\runtime\\node.exe')
+    expect(command.args.slice(0, 2)).toEqual(['C:\\runtime\\pnpm.mjs', 'add'])
+    expect(command.args.slice(2, 4)).toEqual(['--dir', lspPackDir(profileDir, pack)])
+    expect(command.args[4]).toBe('--ignore-scripts')
+    expect(command.args.slice(5)).toEqual([...pack.packages])
   })
 
   it('mounts every server on one provider row', () => {

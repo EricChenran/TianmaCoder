@@ -119,20 +119,20 @@ export function lspPackServerEntry(profileDir: string, pack: LspPack, server: Ls
  * Command that installs a pack's registry dependencies into its own directory.
  * @param pack - catalog entry to install.
  * @param profileDir - the profile directory that holds `cordis.patch.yml`.
- * @param pnpmPath - pnpm executable supplied by the running runtime.
+ * @param runtime - node executable and pnpm entry supplied by the running runtime.
  * @returns executable and argv for one install run.
  */
 export function lspPackInstallCommand(
   pack: LspPack,
   profileDir: string,
-  pnpmPath: string,
+  runtime: { readonly node: string; readonly pnpmEntry: string },
 ): { readonly command: string; readonly args: readonly string[] } {
   return {
-    command: pnpmPath,
+    command: runtime.node,
     // Language-pack dependencies are pure JavaScript; skipping lifecycle scripts
     // keeps an install from running unreviewed build code and from failing the
     // runtime's strict build-script approval.
-    args: ['add', '--dir', lspPackDir(profileDir, pack), '--ignore-scripts', ...pack.packages],
+    args: [runtime.pnpmEntry, 'add', '--dir', lspPackDir(profileDir, pack), '--ignore-scripts', ...pack.packages],
   }
 }
 

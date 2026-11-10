@@ -31,6 +31,8 @@ import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
+import { LspPackInstaller } from './lsp-pack-installer.ts'
+import { registerLspPackIpc } from './lsp-pack-ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
@@ -814,6 +816,12 @@ async function main(): Promise<void> {
   const shortcuts = installDesktopShortcuts(() => mainWindow, app.getPath('userData'),
     process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux', () => { refreshApplicationMenu() }, window => updateOverlays.input(window))
   app.on('will-quit', () => { shortcuts.dispose() })
+
+  registerLspPackIpc(ipcMain, new LspPackInstaller({
+    profileDir: paths.profile,
+    nodeExecutable: resources.node,
+    pnpmEntry: resources.pnpm,
+  }), (event) => { assertDesktopSender(event, ['app']) })
 
   ipcMain.handle(DESKTOP_IPC.boot, async (event) => {
     assertDesktopSender(event, ['app'])

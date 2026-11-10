@@ -36,6 +36,9 @@ export const DESKTOP_IPC = {
   windowFullscreen: 'dsh-desktop:window-fullscreen',
   windowsAppearance: 'dsh-desktop:windows-appearance',
   windowsMenu: 'dsh-desktop:windows-menu',
+  lspPacksList: 'dsh-desktop:lsp-packs-list',
+  lspPacksInstall: 'dsh-desktop:lsp-packs-install',
+  lspPacksUninstall: 'dsh-desktop:lsp-packs-uninstall',
 } as const
 
 /** Desktop release update state rendered by desktop-owned UI. */
@@ -73,6 +76,24 @@ export interface DesktopUpdatePresentation {
   readonly failure?: DesktopUpdateFailureKind
 }
 
+/** Installation state of one desktop language pack. */
+export interface DesktopLspPackStatus {
+  readonly id: string
+  readonly label: string
+  readonly state: 'missing' | 'installed' | 'broken'
+  readonly directory: string
+}
+
+/** Language-pack operations exposed to the Web settings page. */
+export interface DesktopLspPacksApi {
+  /** Report every catalog pack's state. */
+  list(): Promise<readonly DesktopLspPackStatus[]>
+  /** Install one pack by catalog id. */
+  install(id: string): Promise<DesktopLspPackStatus>
+  /** Remove one pack by catalog id. */
+  uninstall(id: string): Promise<DesktopLspPackStatus>
+}
+
 /** Product documents cannot supply update versions, package URLs, or installation authorization. */
 export interface DshDesktopProductApi {
   readonly protocolVersion: 1
@@ -80,6 +101,8 @@ export interface DshDesktopProductApi {
   readonly agentBrowser: DesktopAgentBrowserBridge
   readonly keyboard: DesktopKeyboardApi
   readonly shortcuts: DesktopShortcutsApi
+  /** Optional so the settings page can feature-detect an older shell. */
+  readonly lspPacks?: DesktopLspPacksApi
   /**
    * Local machine description for the feedback questionnaire.
    * @returns `name=value` fields separated by `; `, with no hostname, user name, or serial number.
