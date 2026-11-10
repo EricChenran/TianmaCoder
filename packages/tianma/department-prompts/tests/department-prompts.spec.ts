@@ -226,6 +226,20 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('脱敏')
   })
 
+  it('puts the verdict first and refuses optimization advice', () => {
+    const text = plugin.departmentPrompt('tester')
+    expect(text).toContain('结论必须前置')
+    expect(text).toContain('阻塞性 Bug')
+    expect(text).toContain('严重漏洞')
+    expect(text).toContain('能否交付')
+    expect(text).toContain('固定顺序：结论、')
+    // Scope is function and defects only; performance and refactoring are out.
+    expect(text).toContain('只对两件事负责')
+    expect(text).toContain('任何「优化建议」「建议改为」「可以考虑」类内容')
+    expect(text).toContain('修改方案里只有缺陷修复')
+    expect(text).toContain('性能、并发容量、压测与调优')
+  })
+
   it('keeps acceptance user-directed after lightweight delivery checks', () => {
     const text = plugin.departmentPrompt('tech')
     expect(text).toContain('交付前只做少量、直接相关的基础检查')
