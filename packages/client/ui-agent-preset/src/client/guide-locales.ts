@@ -119,9 +119,9 @@ export const guideEn = {
   guideTesterIntro: 'Choose Tester mode when starting a new task. State the project, how it starts, and which flows count as acceptance; the agent verifies them with scripts and a real browser instead of judging from the source.',
   guideTesterExplanation: [
     '### What it adds',
-    'Everything Standard mode provides, plus one system-prompt section that turns the task into verification: it runs the existing tests first, adds backend unit and interface tests, starts the real stack for frontend-backend integration, drives the real pages end to end, and reads screenshots for visual defects. Mocks, missing frontend-backend wiring, and unfinished placeholders are recorded with file and line as the evidence.',
+    'Everything Standard mode provides, plus one system-prompt section that turns the task into verification: it runs the existing tests first, adds backend unit and interface tests, starts the real stack for frontend-backend integration, drives the real pages end to end, and reads screenshots for visual defects. It also audits the code for defects, vulnerabilities, and backdoors, and calls a finding confirmed only when a trigger or proof of concept reproduces it. Mocks, missing frontend-backend wiring, and unfinished placeholders are recorded with file and line as the evidence.',
     '### What you get',
-    'A findings report with a test matrix, defects, evidence, and a minimal reproduction; a ledger of mocks and unimplemented placeholders; a frontend-backend contract check; and a fix plan whose every entry names a file, a location, and the command that proves the fix. Any claim that was not executed is marked unverified.',
+    'A findings report with a test matrix, defects, evidence, and a minimal reproduction; a security list with exploitability; a backdoor ledger that separates confirmed from suspected; a ledger of mocks and unimplemented placeholders; a frontend-backend contract check; and a fix plan whose every entry names a file, a location, and the command that proves the fix. Any claim that was not executed is marked unverified.',
   ].join('\n\n'),
   guideTesterUsage: [
     '### Audit a half-finished project',
@@ -257,9 +257,9 @@ export const guideZh: Record<PresetGuideKey, string> = {
   guideTesterIntro: '新建任务时选择「测试员」，说明项目在哪、怎么启动、哪些流程算验收；Agent 用脚本和真实浏览器验证，不靠读代码下结论。',
   guideTesterExplanation: [
     '### 多了什么',
-    '标准模式的能力全部保留，另加一条把任务变成验证的系统提示词：先跑现有测试，补后端单元与接口测试，真实启动前后端做联调，用真实浏览器跑端到端，再看截图判读视觉问题。mock 占位、前后端没接上、功能只留了占位实现，都要带文件与行号记账。',
+    '标准模式的能力全部保留，另加一条把任务变成验证的系统提示词：先跑现有测试，补后端单元与接口测试，真实启动前后端做联调，用真实浏览器跑端到端，再看截图判读视觉问题。另外对代码做缺陷、漏洞与后门审计——只有触发路径或 PoC 能复现的才写「已证实」，形态可疑但复现不了的写「疑似」。mock 占位、前后端没接上、功能只留了占位实现，都要带文件与行号记账。',
     '### 拿到什么',
-    '一份调研报告：用例矩阵、缺陷、证据、最小复现；一份 mock 与预留实现台账；一张前后端接入核对表；一份修改方案——每条都写明文件、位置和验收命令。没有实际执行的结论一律标为未验证。',
+    '一份调研报告：用例矩阵、缺陷、证据、最小复现；一份带可利用性判断的安全漏洞清单；一份区分已证实与疑似的后门台账；一份 mock 与预留实现台账；一张前后端接入核对表；一份修改方案——每条都写明文件、位置和验收命令。没有实际执行的结论一律标为未验证。',
   ].join('\n\n'),
   guideTesterUsage: [
     '### 体检一个半成品项目',

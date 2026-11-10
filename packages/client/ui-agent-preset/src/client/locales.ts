@@ -92,7 +92,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'A fixed mode for tender work. Keeps Standard mode capabilities and adds the bidding standard: read the tender, extract the technical requirements, and produce an implementation plan through the bundled document skill.',
   presetTesterName: 'Tester mode',
   presetTesterDescription:
-    'A fixed QA team mode. Keeps Standard mode capabilities and adds the tester standard: backend unit and interface tests, frontend-backend integration, end-to-end and visual acceptance, and a findings report with an actionable fix plan. No claim counts without the script or command that proves it.',
+    'A fixed QA team mode. Keeps Standard mode capabilities and adds the tester standard: backend unit and interface tests, frontend-backend integration, end-to-end and visual acceptance, and a code audit for defects, vulnerabilities, and backdoors, all reported with an actionable fix plan. No claim counts without the script or command that proves it.',
 
   // The picker's groups and its one-line rows. A shipped preset publishes no
   // name and no description, so these dictionaries are the only copy its menu
@@ -110,7 +110,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetTechSummary: 'Backend, frontend and ops discipline',
   presetBusinessSummary: 'Requirement documents, quotations, case retrieval',
   presetBidSummary: 'Tender reading, requirement extraction, implementation plans',
-  presetTesterSummary: 'Integration, end-to-end and visual checks, with a fix plan',
+  presetTesterSummary: 'Integration, end-to-end, visual and security checks, with a fix plan',
 
   inUse: 'New task default',
 
@@ -159,7 +159,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetBidName: '招投标专员',
   presetBidDescription: '固定投标团队模式。保留标准模式的能力，并加入招投标规范：读招标文件、提炼技术需求，固定用方案书技能产出实施方案。',
   presetTesterName: '测试员',
-  presetTesterDescription: '固定测试团队模式。保留标准模式的能力，并加入测试员规范：后端单元与接口测试、前后端联调、端到端测试与视觉验收，产出调研报告与可落地的修改方案；没有脚本或命令证据的结论不算数。',
+  presetTesterDescription: '固定测试团队模式。保留标准模式的能力，并加入测试员规范：后端单元与接口测试、前后端联调、端到端与视觉验收，外加代码缺陷、漏洞与后门审计，产出调研报告与可落地的修改方案；没有脚本或命令证据的结论不算数。',
 
   presetPickerIntro: '选择本任务使用的模式（单选）',
   presetGroupWork: '工作方式 · 决定工具怎么调',
@@ -174,7 +174,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetTechSummary: '后端／前端／运维的工程纪律与交付自检',
   presetBusinessSummary: '需求文档、报价单、案例检索',
   presetBidSummary: '读标、提炼需求、出实施方案',
-  presetTesterSummary: '联调、端到端与视觉验收，出报告与改法',
+  presetTesterSummary: '联调、端到端、视觉与安全审计，出报告与改法',
 
   inUse: '新任务默认',
 

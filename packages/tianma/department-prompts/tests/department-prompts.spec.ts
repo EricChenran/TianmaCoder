@@ -215,6 +215,17 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).not.toContain('proposal-doc')
   })
 
+  it('adds defect, vulnerability, and backdoor auditing to the 测试员 pass', () => {
+    const text = plugin.departmentPrompt('tester')
+    expect(text).toContain('代码审计：缺陷、Bug、漏洞、后门')
+    expect(text).toContain('安全漏洞清单')
+    expect(text).toContain('后门与可疑代码台账')
+    expect(text).toContain('PoC')
+    // A backdoor needs a trigger path before the report calls it one.
+    expect(text).toContain('疑似')
+    expect(text).toContain('脱敏')
+  })
+
   it('keeps acceptance user-directed after lightweight delivery checks', () => {
     const text = plugin.departmentPrompt('tech')
     expect(text).toContain('交付前只做少量、直接相关的基础检查')
