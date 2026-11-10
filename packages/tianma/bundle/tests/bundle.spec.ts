@@ -168,4 +168,14 @@ describe('@tianma/dsh-bundle', () => {
       '@deepseek-ai/dsh-experimental-tool-worktree',
     ]) expect(manifest.dependencies).toHaveProperty(dep)
   })
+
+  it('mounts the language-pack card from the web-app patch', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const parsed = yaml.load(
+      readFileSync(resolve(root, '../../bundle/web-app/cordis.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as { insert?: NestedRow[] }[]
+    const inserted = parsed.flatMap(op => op.insert ?? [])
+    expect(inserted.find(row => row.id === 'lsp-packs-ui')?.name).toBe('@tianma/dsh-lsp-packs-ui')
+  })
 })
