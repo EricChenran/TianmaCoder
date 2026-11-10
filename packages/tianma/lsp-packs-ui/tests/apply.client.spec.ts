@@ -69,4 +69,16 @@ describe('lsp-packs-ui apply', () => {
     expect(resolveSlotLabel(entry.options.label)).toBe('语言包')
     expect(entry.locale).toBe(NS)
   })
+
+  it('survives activating before the Plugins page declares its slot, registering once the declaration lands', async () => {
+    desktop.dshDesktop = { lspPacks: bridge }
+    const { ctx, slots } = await bench()
+    // Real boot order: this fiber (inject slots+locale) activates before the
+    // Plugins page (waiting on remote/configForms/layout) declares 'plugins.item'.
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    expect(slots.entries('plugins.item')).toHaveLength(0)
+    const dispose = declareRoot(slots)
+    expect(slots.entries('plugins.item')).toHaveLength(1)
+    dispose()
+  })
 })

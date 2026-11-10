@@ -33,11 +33,15 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'lsp-packs-ui: dictionaries')
   if (desktopLspPacks() === undefined) return
-  ctx.effect(() => ctx.slots.register({
+  // Boot order: this fiber (slots+locale only) activates before the Plugins
+  // page (waiting on remote/configForms/layout) declares 'plugins.item', so a
+  // direct register throws "not declared". Defer to each declaration lifetime,
+  // like every other Plugins-page card (web-search, subagent).
+  ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item',
     id: 'lsp-packs',
     order: 60,
     label: () => t('title'),
     locale: NS,
-  }, LspPacksCard), 'lsp-packs-ui: card')
+  }, LspPacksCard))
 }
