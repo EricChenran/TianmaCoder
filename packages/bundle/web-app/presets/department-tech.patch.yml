@@ -38,7 +38,7 @@
               sampleOverCapGlobResults: false
           - id: tool-lsp
             name: '@deepseek-ai/dsh-tool-lsp'
-            disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; try { process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('typescript-language-server/lib/cli.mjs'); return false } catch { return true } })()
+            disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
           - id: tool-schedule

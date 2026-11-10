@@ -107,6 +107,15 @@ describe('@tianma/dsh-bundle', () => {
     expect(inserted.find(row => row.id === 'lsp')?.name).toBe('@deepseek-ai/dsh-lsp')
     expect(inserted.find(row => row.id === 'lsp-stdio')?.name).toBe('@deepseek-ai/dsh-lsp-stdio')
     expect(inserted.find(row => row.id === 'lsp-stdio')?.disabled).toBeDefined()
+    expect(inserted.find(row => row.id === 'lsp-stdio-python')?.name).toBe('@deepseek-ai/dsh-lsp-stdio')
+    expect(inserted.find(row => row.id === 'lsp-stdio-python')?.disabled).toBeDefined()
+
+    const manifest = JSON.parse(
+      readFileSync(resolve(root, 'package.json'), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
+    for (const dep of ['typescript-language-server', 'typescript', 'pyright']) {
+      expect(manifest.dependencies).toHaveProperty(dep)
+    }
 
     for (const id of ['preset-standard', 'preset-ptc', 'preset-cordis']) {
       const plugins = patch.find(op => op.id === id)?.config?.plugins ?? []
