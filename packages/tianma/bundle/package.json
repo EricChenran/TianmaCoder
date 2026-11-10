@@ -44,6 +44,7 @@
     "@tianma/dsh-compaction-summarize": "workspace:*",
     "@tianma/dsh-hooks-trust": "workspace:*",
     "@tianma/dsh-token-meter-calibration": "workspace:*",
+    "typescript": "^6.0.3",
     "typescript-language-server": "^6.0.3"
   }
 }

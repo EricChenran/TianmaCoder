@@ -2939,6 +2939,9 @@ importers:
       open:
         specifier: ^11.0.2
         version: 11.0.4
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       typescript-language-server:
         specifier: ^6.0.3
         version: 6.0.3
@@ -14582,6 +14585,9 @@ importers:
       '@tianma/dsh-token-meter-calibration':
         specifier: workspace:*
         version: link:../token-meter-calibration
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       typescript-language-server:
         specifier: ^6.0.3
         version: 6.0.3
