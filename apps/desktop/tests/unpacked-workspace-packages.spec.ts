@@ -10,9 +10,22 @@ describe('unpacked workspace packages', () => {
   it('names every private package the product runtime reaches, and nothing else', () => {
     const packages = unpackedWorkspacePackages(REPOSITORY_ROOT, [DESKTOP_HOST_PACKAGE])
     expect(packages.map(entry => entry.name)).toEqual([
+      '@tianma/dsh-behavioral-guidelines',
+      '@tianma/dsh-bundle',
+      '@tianma/dsh-compaction-file-rehydrator',
+      '@tianma/dsh-compaction-recency-pruner',
+      '@tianma/dsh-compaction-summarize',
       '@tianma/dsh-department-prompts',
+      '@tianma/dsh-hooks-trust',
+      '@tianma/dsh-lsp-packs-ui',
+      '@tianma/dsh-mps-exec-core',
+      '@tianma/dsh-mps-executor',
+      '@tianma/dsh-mps-node-bundle',
+      '@tianma/dsh-mps-node-control',
+      '@tianma/dsh-mps-node-ui',
       '@tianma/dsh-oa-account',
       '@tianma/dsh-oa-account-ui',
+      '@tianma/dsh-token-meter-calibration',
     ])
     for (const entry of packages) {
       const manifest = JSON.parse(readFileSync(resolve(REPOSITORY_ROOT, entry.directory, 'package.json'), 'utf8')) as {
