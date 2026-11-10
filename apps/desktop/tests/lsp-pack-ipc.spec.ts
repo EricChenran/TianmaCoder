@@ -12,6 +12,7 @@ const status: LspPackStatus = {
   label: 'miniprogram',
   state: 'missing',
   directory: 'C:\\profile\\lsp-packs\\miniprogram',
+  requiresJava: false,
 }
 
 const event = { senderFrame: { url: 'dsh-app://app/index.html' } } as unknown as IpcMainInvokeEvent

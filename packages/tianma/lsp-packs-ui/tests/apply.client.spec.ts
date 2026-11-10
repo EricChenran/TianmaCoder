@@ -16,8 +16,8 @@ afterEach(() => { delete desktop.dshDesktop })
 /** Bridge double the plugin only checks for presence. */
 const bridge: DesktopLspPacksBridge = {
   list: async () => [],
-  install: async () => ({ id: 'miniprogram', label: 'miniprogram', state: 'installed', directory: '' }),
-  uninstall: async () => ({ id: 'miniprogram', label: 'miniprogram', state: 'missing', directory: '' }),
+  install: async () => ({ id: 'miniprogram', label: 'miniprogram', state: 'installed', directory: '', requiresJava: false }),
+  uninstall: async () => ({ id: 'miniprogram', label: 'miniprogram', state: 'missing', directory: '', requiresJava: false }),
 }
 
 /**

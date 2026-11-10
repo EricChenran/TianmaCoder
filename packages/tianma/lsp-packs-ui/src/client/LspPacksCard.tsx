@@ -58,9 +58,12 @@ export function LspPacksCard(props: LspPacksCardProps) {
 
   const stateLabel = (row: DesktopPackRow): string => {
     if (row.state === 'installed') return t('stateInstalled')
+    if (row.blocked === 'java-missing') return t('jdkMissing')
     if (row.state === 'broken') return t('stateBroken')
     return t('stateMissing')
   }
+
+  const canInstall = (row: DesktopPackRow): boolean => row.state === 'installed' || row.blocked === undefined
 
   return (
     <section className={styles.card}>
@@ -80,7 +83,7 @@ export function LspPacksCard(props: LspPacksCardProps) {
                   {busy === row.id ? <span className={styles.working}>{t('working')}</span> : (
                     <button
                       type="button"
-                      disabled={busy !== undefined}
+                      disabled={busy !== undefined || !canInstall(row)}
                       onClick={() => { void act(row.id, row.state === 'installed' ? 'uninstall' : 'install') }}
                     >
                       {row.state === 'installed' ? t('uninstall') : t('install')}

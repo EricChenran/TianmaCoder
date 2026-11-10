@@ -34,15 +34,15 @@ function missingBridge(): DesktopLspPacksBridge & { calls: string[] } {
     calls,
     list: async () => {
       calls.push('list')
-      return [{ id: 'miniprogram', label: 'WeChat mini-program', state: 'missing', directory: 'C:\\packs\\miniprogram' }]
+      return [{ id: 'miniprogram', label: 'WeChat mini-program', state: 'missing', directory: 'C:\\packs\\miniprogram', requiresJava: false }]
     },
     install: async (id) => {
       calls.push(`install:${id}`)
-      return { id, label: 'WeChat mini-program', state: 'installed', directory: 'C:\\packs\\miniprogram' }
+      return { id, label: 'WeChat mini-program', state: 'installed', directory: 'C:\\packs\\miniprogram', requiresJava: false }
     },
     uninstall: async (id) => {
       calls.push(`uninstall:${id}`)
-      return { id, label: 'WeChat mini-program', state: 'missing', directory: 'C:\\packs\\miniprogram' }
+      return { id, label: 'WeChat mini-program', state: 'missing', directory: 'C:\\packs\\miniprogram', requiresJava: false }
     },
   }
 }

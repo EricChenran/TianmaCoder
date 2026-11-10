@@ -3,16 +3,33 @@
 import { join } from 'node:path'
 
 /** Packs the installer recognizes. Adding one here is the only catalog change. */
-export type LspPackId = 'miniprogram'
+export type LspPackId = 'miniprogram' | 'java'
+
+/** How a pack's files reach the pack directory. */
+export type LspPackInstall =
+  | {
+    /** Registry dependencies installed with pnpm into the pack directory. */
+    readonly kind: 'npm'
+    readonly packages: readonly string[]
+  }
+  | {
+    /** Archive downloaded, extracted, and resolved through a launcher glob. */
+    readonly kind: 'archive'
+    readonly url: string
+  }
 
 /** One stdio language server a pack supplies. */
 export interface LspPackServer {
   /** Provider key reported to `dsh-lsp-stdio`. */
   readonly id: string
-  /** Entry script, relative to the pack's own `node_modules`. */
-  readonly entry: string
   /** Leading-dot extension to LSP language id. */
   readonly extensionToLanguage: Readonly<Record<string, string>>
+  /** Node entry script, relative to the pack's `node_modules`; npm packs only. */
+  readonly entry?: string
+  /** File-name prefix of the launcher jar under `<pack>/plugins`; archive packs only. */
+  readonly launcherPrefix?: string
+  /** Configuration directory, relative to the pack directory; archive packs only. */
+  readonly configurationDir?: string
 }
 
 /** Everything the installer needs for one pack. */
@@ -21,19 +38,21 @@ export interface LspPack {
   readonly id: LspPackId
   /** Label shown in the settings page. */
   readonly label: string
-  /** Registry specs installed into the pack directory. */
-  readonly packages: readonly string[]
+  /** Where the pack's files come from. */
+  readonly install: LspPackInstall
   /** Servers the row mounts. */
   readonly servers: readonly LspPackServer[]
+  /** True when the pack's servers need a `java` executable on PATH. */
+  readonly requiresJava?: boolean
 }
 
 /** One server entry as the patch writes it. */
 export interface LspPackServerConfig {
-  /** Executable that runs the entry script. */
+  /** Executable that runs the server. */
   readonly command: string
-  /** Entry script followed by the fixed protocol flag. */
+  /** Arguments for that executable. */
   readonly args: readonly string[]
-  /** Tells the Electron binary to behave as Node for the child process. */
+  /** Environment additions; empty for servers that run their own runtime. */
   readonly env: Readonly<Record<string, string>>
   /** Extension to language id for this server's documents. */
   readonly extensionToLanguage: Readonly<Record<string, string>>
@@ -49,11 +68,14 @@ export interface LspPackPatchRow {
   readonly config: { readonly servers: Readonly<Record<string, LspPackServerConfig>> }
 }
 
+/** Absolute path of one server's resolved executable file. */
+export type LspPackResolvedEntries = ReadonlyMap<string, string>
+
 /** Pack that adds WeChat mini-program page and configuration support. */
 const MINIPROGRAM_PACK: LspPack = {
   id: 'miniprogram',
   label: '微信小程序（JSON / WXML / WXSS）',
-  packages: ['vscode-langservers-extracted@4.10.0'],
+  install: { kind: 'npm', packages: ['vscode-langservers-extracted@4.10.0'] },
   servers: [
     {
       id: 'mini-json',
@@ -73,8 +95,27 @@ const MINIPROGRAM_PACK: LspPack = {
   ],
 }
 
+/** Pack that adds Eclipse JDT language support; needs a local JDK 17 or newer. */
+const JAVA_PACK: LspPack = {
+  id: 'java',
+  label: 'Java（Eclipse JDT）',
+  install: {
+    kind: 'archive',
+    url: 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz',
+  },
+  requiresJava: true,
+  servers: [
+    {
+      id: 'java',
+      launcherPrefix: 'org.eclipse.equinox.launcher_',
+      configurationDir: 'config_win',
+      extensionToLanguage: { '.java': 'java' },
+    },
+  ],
+}
+
 /** Installable packs, in settings-page order. */
-export const LSP_PACKS: readonly LspPack[] = [MINIPROGRAM_PACK]
+export const LSP_PACKS: readonly LspPack[] = [MINIPROGRAM_PACK, JAVA_PACK]
 
 /**
  * Look up an installed or installable pack.
@@ -105,18 +146,29 @@ export function lspPackDir(profileDir: string, pack: LspPack): string {
 }
 
 /**
- * Absolute entry script of one pack server.
+ * Absolute entry script of one npm pack server.
  * @param profileDir - the profile directory that holds `cordis.patch.yml`.
  * @param pack - catalog entry that supplies the server.
  * @param server - server whose entry is wanted.
  * @returns absolute path under the pack's `node_modules`.
  */
 export function lspPackServerEntry(profileDir: string, pack: LspPack, server: LspPackServer): string {
+  if (server.entry === undefined) throw new Error(`language pack ${pack.id}: server ${server.id} has no node entry`)
   return join(lspPackDir(profileDir, pack), 'node_modules', server.entry)
 }
 
 /**
- * Command that installs a pack's registry dependencies into its own directory.
+ * Directory that holds an archive pack's launcher jars.
+ * @param profileDir - the profile directory that holds `cordis.patch.yml`.
+ * @param pack - archive pack to locate.
+ * @returns the extracted `plugins` directory.
+ */
+export function lspPackLauncherDir(profileDir: string, pack: LspPack): string {
+  return join(lspPackDir(profileDir, pack), 'plugins')
+}
+
+/**
+ * Command that installs an npm pack's registry dependencies into its directory.
  * @param pack - catalog entry to install.
  * @param profileDir - the profile directory that holds `cordis.patch.yml`.
  * @param runtime - node executable and pnpm entry supplied by the running runtime.
@@ -127,12 +179,13 @@ export function lspPackInstallCommand(
   profileDir: string,
   runtime: { readonly node: string; readonly pnpmEntry: string },
 ): { readonly command: string; readonly args: readonly string[] } {
+  if (pack.install.kind !== 'npm') throw new Error(`language pack ${pack.id}: not an npm pack`)
   return {
     command: runtime.node,
     // Language-pack dependencies are pure JavaScript; skipping lifecycle scripts
     // keeps an install from running unreviewed build code and from failing the
     // runtime's strict build-script approval.
-    args: [runtime.pnpmEntry, 'add', '--dir', lspPackDir(profileDir, pack), '--ignore-scripts', ...pack.packages],
+    args: [runtime.pnpmEntry, 'add', '--dir', lspPackDir(profileDir, pack), '--ignore-scripts', ...pack.install.packages],
   }
 }
 
@@ -140,20 +193,35 @@ export function lspPackInstallCommand(
  * Patch row that mounts a pack on its own stdio provider.
  * @param profileDir - the profile directory that holds `cordis.patch.yml`.
  * @param pack - catalog entry to mount.
- * @param nodeExecutable - executable that runs the entry scripts as Node.
+ * @param nodeExecutable - executable that runs npm pack entries as Node.
+ * @param resolvedEntries - absolute executable per server, required by archive packs.
  * @returns row content for the profile patch; serialize it where it is written.
  */
 export function lspPackPatchRow(
   profileDir: string,
   pack: LspPack,
   nodeExecutable: string,
+  resolvedEntries: LspPackResolvedEntries = new Map(),
 ): LspPackPatchRow {
   const servers: Record<string, LspPackServerConfig> = {}
   for (const server of pack.servers) {
+    if (server.entry !== undefined) {
+      servers[server.id] = {
+        command: nodeExecutable,
+        args: [lspPackServerEntry(profileDir, pack, server), '--stdio'],
+        env: { ELECTRON_RUN_AS_NODE: '1' },
+        extensionToLanguage: server.extensionToLanguage,
+      }
+      continue
+    }
+    const launcher = resolvedEntries.get(server.id)
+    if (launcher === undefined || server.configurationDir === undefined) {
+      throw new Error(`language pack ${pack.id}: server ${server.id} needs a resolved launcher`)
+    }
     servers[server.id] = {
-      command: nodeExecutable,
-      args: [lspPackServerEntry(profileDir, pack, server), '--stdio'],
-      env: { ELECTRON_RUN_AS_NODE: '1' },
+      command: 'java',
+      args: [launcher, '-configuration', join(lspPackDir(profileDir, pack), server.configurationDir)],
+      env: {},
       extensionToLanguage: server.extensionToLanguage,
     }
   }
@@ -227,6 +295,6 @@ export function upsertLspPackSection(patchText: string, section: string): string
   }
 
   const head = before === '' || before.endsWith('\n') ? before : `${before}\n`
-  const tail = after === '' ? '\n' : after.startsWith('\n') ? after : `\n${after}`
-  return `${head}${section}${tail}`
+  const tailText = after === '' ? '\n' : after.startsWith('\n') ? after : `\n${after}`
+  return `${head}${section}${tailText}`
 }

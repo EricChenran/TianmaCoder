@@ -7,6 +7,7 @@ export type LspPacksLocaleKey =
   | 'stateMissing'
   | 'stateInstalled'
   | 'stateBroken'
+  | 'jdkMissing'
   | 'install'
   | 'uninstall'
   | 'working'
@@ -20,6 +21,7 @@ export const zh: Record<LspPacksLocaleKey, string> = {
   stateMissing: '未安装',
   stateInstalled: '已就绪',
   stateBroken: '安装不完整',
+  jdkMissing: '需要 JDK（本机未检测到 java）',
   install: '安装',
   uninstall: '卸载',
   working: '处理中…',
@@ -34,6 +36,7 @@ export const en: Record<LspPacksLocaleKey, string> = {
   stateMissing: 'Not installed',
   stateInstalled: 'Ready',
   stateBroken: 'Incomplete install',
+  jdkMissing: 'Needs a JDK (no java on PATH)',
   install: 'Install',
   uninstall: 'Remove',
   working: 'Working…',

@@ -82,6 +82,8 @@ export interface DesktopLspPackStatus {
   readonly label: string
   readonly state: 'missing' | 'installed' | 'broken'
   readonly directory: string
+  readonly requiresJava: boolean
+  readonly blocked?: 'java-missing'
 }
 
 /** Language-pack operations exposed to the Web settings page. */
