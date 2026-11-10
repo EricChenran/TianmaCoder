@@ -18,7 +18,7 @@
       name: '@deepseek-ai/dsh-lsp'
     - id: lsp-stdio
       name: '@deepseek-ai/dsh-lsp-stdio'
-      disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+      disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
       config:
         servers:
           typescript:
@@ -39,7 +39,7 @@
 - insert:
     - id: lsp-stdio-python
       name: '@deepseek-ai/dsh-lsp-stdio'
-      disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+      disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
       config:
         servers:
           python:
@@ -138,7 +138,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -268,7 +268,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -407,7 +407,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule

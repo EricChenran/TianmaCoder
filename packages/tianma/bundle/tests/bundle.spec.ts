@@ -109,6 +109,10 @@ describe('@tianma/dsh-bundle', () => {
     expect(inserted.find(row => row.id === 'lsp-stdio')?.disabled).toBeDefined()
     expect(inserted.find(row => row.id === 'lsp-stdio-python')?.name).toBe('@deepseek-ai/dsh-lsp-stdio')
     expect(inserted.find(row => row.id === 'lsp-stdio-python')?.disabled).toBeDefined()
+    for (const id of ['lsp-stdio', 'lsp-stdio-python']) {
+      const gate = JSON.stringify(inserted.find(row => row.id === id)?.disabled)
+      expect(gate, `${id} must expose the DSH_LSP=off kill switch`).toContain('DSH_LSP')
+    }
 
     const manifest = JSON.parse(
       readFileSync(resolve(root, 'package.json'), 'utf8'),
