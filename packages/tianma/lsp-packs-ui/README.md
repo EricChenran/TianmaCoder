@@ -60,7 +60,7 @@ None; this package neither assembles nor sends a provider request.
 ## Known Limitations and Deferred Work
 
 - **No cancellation** — the card cannot cancel an install that is already running; the shell bounds each install with its own timeout.
-- **Java is absent from the catalog** — its language server needs a local JDK and a separate download source.
+- **Java needs a recent JDK** — the catalog's Eclipse JDT snapshot requires JDK 25; the card reports `java-missing` or `java-too-old` and blocks installation instead of mounting a server that cannot start.
 - **Local styling** — the card uses its own CSS module classes and does not yet adopt the shared primitives' spacing scale.
 
 ### Dev Note
