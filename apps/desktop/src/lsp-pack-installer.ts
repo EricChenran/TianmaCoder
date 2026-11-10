@@ -65,14 +65,40 @@ export const runLspPackCommand: LspPackRunner = async (command, args) => {
   await run(command, [...args], { timeout: 10 * 60 * 1000, windowsHide: true })
 }
 
+/** Response members the downloader needs from either network stack. */
+interface DownloadResponse {
+  readonly ok: boolean
+  readonly status: number
+  arrayBuffer(): Promise<ArrayBuffer>
+}
+
 /**
- * Download one archive with the platform's HTTP stack.
+ * Fetch through Electron's network stack when it is available.
+ *
+ * The desktop main process uses Chromium's stack so the system proxy applies;
+ * Node's global fetch ignores the proxy environment, which leaves a direct
+ * connection to the archive host hanging on networks where it is blocked.
+ * @param url - archive URL to open.
+ * @returns the response from whichever stack answered.
+ */
+async function platformFetch(url: string): Promise<DownloadResponse> {
+  try {
+    const electron = await import('electron') as { net?: { fetch?: (target: string) => Promise<DownloadResponse> } }
+    if (electron.net?.fetch !== undefined) return await electron.net.fetch(url)
+  } catch {
+    // Outside Electron (tests, plain Node) the global fetch is the only stack.
+  }
+  return await fetch(url)
+}
+
+/**
+ * Download one archive with the desktop's proxy-aware network stack.
  * @param url - archive URL.
  * @param destination - file to write.
  * @returns a promise settling after the file is complete.
  */
 async function downloadArchive(url: string, destination: string): Promise<void> {
-  const response = await fetch(url)
+  const response = await platformFetch(url)
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   await writeFile(destination, Buffer.from(await response.arrayBuffer()))
 }
