@@ -59,7 +59,7 @@ function archiveTools(launcher = 'org.eclipse.equinox.launcher_1.6.900.jar'): Ls
 interface InstallerOverrides {
   readonly runner?: LspPackRunner
   readonly archive?: LspPackArchiveTools
-  readonly javaAvailable?: () => Promise<boolean>
+  readonly javaProbe?: () => Promise<{ available: boolean; major?: number }>
 }
 
 /**
@@ -75,7 +75,7 @@ function makeInstaller(profileDir: string, overrides: InstallerOverrides = {}): 
     nodeExecutable: 'C:\\runtime\\node.exe',
     runner: overrides.runner ?? creatingRunner,
     archive: overrides.archive ?? archiveTools(),
-    javaAvailable: overrides.javaAvailable ?? (async () => false),
+    javaProbe: overrides.javaProbe ?? (async () => ({ available: false })),
   })
 }
 
@@ -133,9 +133,17 @@ describe('LspPackInstaller', () => {
     expect(status.find(entry => entry.id === 'java')?.state).toBe('missing')
   })
 
+  it('refuses the Java pack when the JDK is too old', async () => {
+    const profileDir = await makeProfile()
+    const installer = makeInstaller(profileDir, { javaProbe: async () => ({ available: true, major: 21 }) })
+    await expect(installer.install('java')).rejects.toThrow(/requires JDK 25 or newer \(found 21\)/u)
+    const status = (await installer.list()).find(entry => entry.id === 'java')
+    expect(status?.blocked).toBe('java-too-old')
+  })
+
   it('installs the Java pack from an archive and mounts the launcher', async () => {
     const profileDir = await makeProfile()
-    const installer = makeInstaller(profileDir, { javaAvailable: async () => true })
+    const installer = makeInstaller(profileDir, { javaProbe: async () => ({ available: true, major: 25 }) })
     const status = await installer.install('java')
     expect(status.state).toBe('installed')
 
@@ -144,14 +152,15 @@ describe('LspPackInstaller', () => {
     const parsed = load(patch) as { insert: { config: { servers: Record<string, { command: string; args: string[] }> } }[] }[]
     const server = parsed[0]!.insert[0]!.config.servers['java']!
     expect(server.command).toBe('java')
-    expect(server.args[0]).toBe(launcher)
-    expect(server.args[2]).toContain('config_win')
+    expect(server.args[0]).toBe('-jar')
+    expect(server.args[1]).toBe(launcher)
+    expect(server.args[3]).toContain('config_win')
   })
 
   it('rolls back a failed archive install', async () => {
     const profileDir = await makeProfile()
     const installer = makeInstaller(profileDir, {
-      javaAvailable: async () => true,
+      javaProbe: async () => ({ available: true, major: 25 }),
       archive: {
         download: async () => {},
         extract: async () => { throw new Error('tar exited with 2') },

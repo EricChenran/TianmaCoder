@@ -16,7 +16,7 @@ export interface DesktopPackRow {
   /** True when the pack needs a JDK on this machine. */
   readonly requiresJava: boolean
   /** Present when the machine cannot install this pack. */
-  readonly blocked?: 'java-missing'
+  readonly blocked?: 'java-missing' | 'java-too-old'
 }
 
 /** Operations the desktop shell exposes on `dshDesktop.lspPacks`. */

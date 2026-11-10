@@ -44,6 +44,8 @@ export interface LspPack {
   readonly servers: readonly LspPackServer[]
   /** True when the pack's servers need a `java` executable on PATH. */
   readonly requiresJava?: boolean
+  /** Lowest JDK feature release the servers accept; checked against `java -version`. */
+  readonly requiresJavaMajor?: number
 }
 
 /** One server entry as the patch writes it. */
@@ -104,6 +106,7 @@ const JAVA_PACK: LspPack = {
     url: 'https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz',
   },
   requiresJava: true,
+  requiresJavaMajor: 25,
   servers: [
     {
       id: 'java',
@@ -220,7 +223,7 @@ export function lspPackPatchRow(
     }
     servers[server.id] = {
       command: 'java',
-      args: [launcher, '-configuration', join(lspPackDir(profileDir, pack), server.configurationDir)],
+      args: ['-jar', launcher, '-configuration', join(lspPackDir(profileDir, pack), server.configurationDir), '-data', join(lspPackDir(profileDir, pack), 'jdt-data')],
       env: {},
       extensionToLanguage: server.extensionToLanguage,
     }

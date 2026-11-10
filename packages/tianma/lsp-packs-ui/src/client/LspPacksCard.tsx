@@ -59,6 +59,7 @@ export function LspPacksCard(props: LspPacksCardProps) {
   const stateLabel = (row: DesktopPackRow): string => {
     if (row.state === 'installed') return t('stateInstalled')
     if (row.blocked === 'java-missing') return t('jdkMissing')
+    if (row.blocked === 'java-too-old') return t('jdkTooOld')
     if (row.state === 'broken') return t('stateBroken')
     return t('stateMissing')
   }

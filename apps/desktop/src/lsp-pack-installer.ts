@@ -26,7 +26,7 @@ const run = promisify(execFile)
 export type LspPackState = 'missing' | 'installed' | 'broken'
 
 /** Why a pack cannot be installed on this machine. */
-export type LspPackBlocked = 'java-missing'
+export type LspPackBlocked = 'java-missing' | 'java-too-old'
 
 /** What the settings page shows for one pack. */
 export interface LspPackStatus {
@@ -119,16 +119,26 @@ async function extractArchive(archive: string, destination: string): Promise<voi
 /** Default archive tools backed by fetch and the platform tar. */
 export const lspPackArchiveTools: LspPackArchiveTools = { download: downloadArchive, extract: extractArchive }
 
+/** What the JDK probe learned about the local runtime. */
+export interface LspPackJavaProbe {
+  /** True when `java -version` exits cleanly. */
+  readonly available: boolean
+  /** Feature release parsed from the version banner. */
+  readonly major?: number
+}
+
 /**
- * Report whether a JDK is on PATH.
- * @returns true when `java -version` exits cleanly.
+ * Probe the JDK on PATH.
+ * @returns availability and, when readable, the feature release.
  */
-async function javaOnPath(): Promise<boolean> {
+async function javaOnPath(): Promise<LspPackJavaProbe> {
   try {
-    await run('java', ['-version'], { timeout: 10_000, windowsHide: true })
-    return true
+    const result = await run('java', ['-version'], { timeout: 10_000, windowsHide: true })
+    const banner = `${result.stdout}\n${result.stderr}`
+    const match = /version "(\d+)/u.exec(banner)
+    return match === null ? { available: true } : { available: true, major: Number(match[1]) }
   } catch {
-    return false
+    return { available: false }
   }
 }
 
@@ -145,13 +155,13 @@ export interface LspPackInstallerOptions {
   /** Archive download and extraction override for tests. */
   readonly archive?: LspPackArchiveTools
   /** JDK probe override for tests. */
-  readonly javaAvailable?: () => Promise<boolean>
+  readonly javaProbe?: () => Promise<LspPackJavaProbe>
 }
 
 /** Installer for the catalog's packs, backed by the profile directory. */
 export class LspPackInstaller {
   private readonly options: LspPackInstallerOptions
-  private java?: Promise<boolean>
+  private java?: Promise<LspPackJavaProbe>
 
   /**
    * Bind the installer to one profile.
@@ -176,8 +186,15 @@ export class LspPackInstaller {
    */
   async install(id: string): Promise<LspPackStatus> {
     const pack = requirePack(id)
-    if (pack.requiresJava === true && !(await this.javaReadiness())) {
-      throw new Error(`language pack ${pack.id}: requires a JDK (\`java\` was not found on PATH)`)
+    if (pack.requiresJava === true) {
+      const probe = await this.javaReadiness()
+      if (!probe.available) {
+        throw new Error(`language pack ${pack.id}: requires a JDK (\`java\` was not found on PATH)`)
+      }
+      const required = pack.requiresJavaMajor
+      if (required !== undefined && probe.major !== undefined && probe.major < required) {
+        throw new Error(`language pack ${pack.id}: requires JDK ${required} or newer (found ${probe.major})`)
+      }
     }
     const directory = lspPackDir(this.options.profileDir, pack)
     await mkdir(directory, { recursive: true })
@@ -290,9 +307,13 @@ export class LspPackInstaller {
       state = present === 0 && !(await directoryExists(directory)) ? 'missing' : 'broken'
     }
     const requiresJava = pack.requiresJava === true
-    const blocked: LspPackBlocked | undefined = requiresJava && !(await this.javaReadiness())
-      ? 'java-missing'
-      : undefined
+    let blocked: LspPackBlocked | undefined
+    if (requiresJava) {
+      const probe = await this.javaReadiness()
+      const required = pack.requiresJavaMajor
+      if (!probe.available) blocked = 'java-missing'
+      else if (required !== undefined && probe.major !== undefined && probe.major < required) blocked = 'java-too-old'
+    }
     return { id: pack.id, label: pack.label, state, directory, requiresJava, ...blocked === undefined ? {} : { blocked } }
   }
 
@@ -300,8 +321,8 @@ export class LspPackInstaller {
    * Probe for a JDK once per installer instance.
    * @returns whether `java` is on PATH.
    */
-  private javaReadiness(): Promise<boolean> {
-    this.java ??= (this.options.javaAvailable ?? javaOnPath)()
+  private javaReadiness(): Promise<LspPackJavaProbe> {
+    this.java ??= (this.options.javaProbe ?? javaOnPath)()
     return this.java
   }
 

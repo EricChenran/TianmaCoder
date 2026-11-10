@@ -104,7 +104,7 @@ describe('lsp packs', () => {
     expect(row.id).toBe('lsp-stdio-java')
     const server = row.config.servers['java']!
     expect(server.command).toBe('java')
-    expect(server.args).toEqual([launcher, '-configuration', join(lspPackDir(profileDir, pack), 'config_win')])
+    expect(server.args).toEqual(['-jar', launcher, '-configuration', join(lspPackDir(profileDir, pack), 'config_win'), '-data', join(lspPackDir(profileDir, pack), 'jdt-data')])
     expect(server.env).toEqual({})
     expect(server.extensionToLanguage).toEqual({ '.java': 'java' })
   })
