@@ -11,8 +11,10 @@
 # system prompt and it mounts no compaction group, so the quality set has no
 # mount point there — it stays the clean baseline.
 
-# LSP：代码导航（定义/引用/实现/悬浮）。服务器路径由 DSH_LSP_SERVER 指定；
-# 未设置时 provider 与工具都不挂，会话里看不到 lsp 工具，也不影响启动。
+# LSP：代码导航（定义/引用/实现/悬浮）。工具默认不挂，设 DSH_LSP=on 或 DSH_LSP_SERVER 才启用；
+# provider 仅在能解析到语言服务器时挂载，缺服务器不影响启动。
+# 工具必须显式启用：它的 lsp 服务由本 bundle 的宿主行提供，预设所在组合若没有这一层，
+# 无条件挂载会让新建会话永远等 lsp 而报 agent-preset/invalid。
 - insert:
     - id: lsp
       name: '@deepseek-ai/dsh-lsp'
@@ -138,7 +140,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js ((process.env.DSH_LSP_SERVER || '').length === 0 && String(process.env.DSH_LSP || '').toLowerCase() !== 'on')
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -268,7 +270,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js ((process.env.DSH_LSP_SERVER || '').length === 0 && String(process.env.DSH_LSP || '').toLowerCase() !== 'on')
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule
@@ -407,7 +409,7 @@
           sampleOverCapGlobResults: false
       - id: tool-lsp
         name: '@deepseek-ai/dsh-tool-lsp'
-        disabled: !!js (function () { if (String(process.env.DSH_LSP || '').toLowerCase() === 'off') return true; if (process.env.DSH_LSP_SERVER) return false; var r; try { r = process.getBuiltinModule('node:module').createRequire(baseUrl); r.resolve('typescript-language-server/lib/cli.mjs'); return false } catch {} try { r.resolve('pyright/langserver.index.js'); return false } catch {} return true })()
+        disabled: !!js ((process.env.DSH_LSP_SERVER || '').length === 0 && String(process.env.DSH_LSP || '').toLowerCase() !== 'on')
       - id: tool-jobs
         name: '@deepseek-ai/dsh-tool-jobs'
       - id: tool-schedule

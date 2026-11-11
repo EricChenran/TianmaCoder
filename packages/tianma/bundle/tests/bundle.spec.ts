@@ -125,6 +125,10 @@ describe('@tianma/dsh-bundle', () => {
       const plugins = patch.find(op => op.id === id)?.config?.plugins ?? []
       const row = plugins.find(plugin => plugin.id === 'tool-lsp')
       expect(row?.name, `${id} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
+      // Opt-in only: an unconditional mount makes the preset wait for the Host `lsp`
+      // provider whenever the composing profile lacks that layer, which rejects new
+      // sessions with agent-preset/invalid.
+      expect(JSON.stringify(row?.disabled), `${id} must gate tool-lsp behind DSH_LSP`).toContain('DSH_LSP')
     }
 
     const webAppPresets = resolve(root, '../../bundle/web-app/presets')
@@ -132,8 +136,9 @@ describe('@tianma/dsh-bundle', () => {
       const parsed = loadPatch(resolve(webAppPresets, `${name}.patch.yml`))
       const plugins = parsed.flatMap(op => op.insert ?? [])
         .flatMap(row => (row as { config?: { plugins?: NestedRow[] } }).config?.plugins ?? [])
-      expect(plugins.find(plugin => plugin.id === 'tool-lsp')?.name,
-        `${name} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
+      const row = plugins.find(plugin => plugin.id === 'tool-lsp')
+      expect(row?.name, `${name} must mount tool-lsp`).toBe('@deepseek-ai/dsh-tool-lsp')
+      expect(JSON.stringify(row?.disabled), `${name} must gate tool-lsp behind DSH_LSP`).toContain('DSH_LSP')
     }
   })
 
