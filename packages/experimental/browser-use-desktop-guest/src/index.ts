@@ -23,8 +23,13 @@ import type {} from '@deepseek-ai/dsh-tools'
 /** Cordis identity for the desktop guest provider. */
 export const name = 'experimental-browser-use-desktop-guest'
 
-/** Browser, Agent, tool, and prompt services required before activation. */
-export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt', 'desktopBrowserControl']
+/**
+ * Browser, Agent, tool, and prompt services required before activation. The
+ * shell seam is resolved per request instead: the Desktop Host provides it only
+ * after the profile settles, so injecting it here would hold this entry pending
+ * through every startup audit.
+ */
+export const inject = ['browserUse', 'agents', 'tools', 'systemPrompt']
 
 /** Workspace identity whose storage partition the agent guests share. */
 export interface Config {
@@ -56,12 +61,19 @@ Cancellation waits for active browser work to drain; input already delivered is 
 /**
  * Register the desktop guest provider: one shell lease per live Session and the
  * `browser_navigate` tool. Browser startup is lazy; the first tool call asks the
- * shell to create the guest.
- * @param ctx - context providing browser registration, Agents, tools, prompts, and the shell client.
+ * shell to create the guest. The shell seam is resolved per request and the first
+ * resolved client is kept, so lease release still runs while teardown clears services.
+ * @param ctx - context providing browser registration, Agents, tools, and prompts; the shell client is resolved per request.
  * @param input - profile-owned configuration.
  */
 export function apply(ctx: Context, input: Config): void {
   const config = Config(input)
+  let control: DesktopBrowserControl | undefined
+  const shellControl = (): DesktopBrowserControl => {
+    control ??= ctx.reflect.get('desktopBrowserControl', false)
+    if (control === undefined) throw new Error('desktop guest: this host does not provide desktop browser control')
+    return control
+  }
   // Schemastery types an absent optional object as present; the runtime may still leave it unset.
   const declaredWatch = config as { watch?: { width?: number; height?: number } }
   const watchSize = declaredWatch.watch
@@ -74,7 +86,7 @@ export function apply(ctx: Context, input: Config): void {
       label: 'desktop-guest',
       exclusive: false,
       open: async (agent) => {
-        const created = await ctx.desktopBrowserControl.request<{ leaseId: string }>({
+        const created = await shellControl().request<{ leaseId: string }>({
           op: 'acquire', workspaceKey: config.workspaceKey, sessionKey: String(agent.session.id),
           ...(watch === undefined ? {} : { bounds: watch }),
         })
@@ -82,7 +94,7 @@ export function apply(ctx: Context, input: Config): void {
         return {
           value: { leaseId: created.leaseId },
           close: async () => {
-            await ctx.desktopBrowserControl.request({ op: 'release', leaseId: created.leaseId })
+            await shellControl().request({ op: 'release', leaseId: created.leaseId })
           },
         }
       },
@@ -90,7 +102,7 @@ export function apply(ctx: Context, input: Config): void {
     disposers.push(() => resources.dispose())
     const executeOnLease = async (agent: Parameters<SessionResources<{ leaseId: string }>['get']>[0], command: string, args: BrowserControlJson): Promise<{ url?: string; title?: string; base64?: string; mimeType?: string; typed?: number; pressed?: string; scrolled?: { deltaX: number; deltaY: number }; x?: number; y?: number; clicked?: boolean; elements?: Array<{ ref: string; tag: string; role?: string; name?: string; text?: string }>; checked?: boolean; changed?: boolean; value?: string; filled?: string; selected?: string; label?: string; aria?: string; copied?: number; pasted?: number; tabs?: Array<{ tabId: string; url?: string; title?: string; active?: boolean; suspended?: boolean; crashed?: boolean }>; tabId?: string; closed?: string; activeTabId?: string; ref?: string; selector?: string; source?: string; tag?: string; role?: string; name?: string; text?: string; disabled?: boolean; visible?: boolean; box?: { x: number; y: number; width: number; height: number }; width?: number; height?: number; scale?: number; follow?: boolean; suspended?: boolean; evicted?: string[]; userTabs?: Array<{ tabId: string; url?: string; title?: string }>; claimed?: string | boolean; finalized?: string; recording?: boolean; frameIntervalMs?: number; elapsedMs?: number; path?: string; bytes?: number; durationMs?: number; frames?: number; failure?: string; modifiers?: string[]; dragged?: { from: { x: number; y: number }; to: { x: number; y: number }; steps: number }; downloads?: Array<{ filename?: string; state?: string; receivedBytes?: number; totalBytes?: number; savePath?: string; tabId?: string }>; running?: number; insideFrame?: boolean; dialogs?: Array<{ id?: string; type?: string; message?: string; tabId?: string; defaultPrompt?: string; url?: string }>; pending?: number; id?: string; type?: string; message?: string; accepted?: boolean; answered?: boolean; crashed?: boolean }> => {
       const resource = await resources.get(agent)
-      return ctx.desktopBrowserControl.request({ op: 'execute', leaseId: resource.leaseId, command, args })
+      return shellControl().request({ op: 'execute', leaseId: resource.leaseId, command, args })
     }
     type GuestAgent = Parameters<SessionResources<{ leaseId: string }>['get']>[0]
     const toolSpecs: Array<{

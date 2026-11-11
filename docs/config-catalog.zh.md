@@ -850,8 +850,8 @@ export type Config = BrowserMcpConfig
 
 ## `@deepseek-ai/dsh-experimental-browser-use-desktop-guest`
 
-- `inject`: `browserUse` · `agents` · `tools` · `systemPrompt` · `desktopBrowserControl`
-- `source`: [`packages/experimental/browser-use-desktop-guest/src/index.ts:30`](../packages/experimental/browser-use-desktop-guest/src/index.ts)
+- `inject`: `browserUse` · `agents` · `tools` · `systemPrompt`
+- `source`: [`packages/experimental/browser-use-desktop-guest/src/index.ts:35`](../packages/experimental/browser-use-desktop-guest/src/index.ts)
 
 ```ts config-catalog
 /** Workspace identity whose storage partition the agent guests share. */
@@ -4575,7 +4575,7 @@ export interface RecencyPruneConfig {
 ## `@tianma/dsh-department-prompts`
 
 - `inject`: `systemPrompt`
-- `source`: [`packages/tianma/department-prompts/src/index.ts:72`](../packages/tianma/department-prompts/src/index.ts)
+- `source`: [`packages/tianma/department-prompts/src/index.ts:92`](../packages/tianma/department-prompts/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the department whose rules this row contributes. */
@@ -4603,7 +4603,7 @@ export interface DepartmentSkillOptions {
 }
 
 /** Department identifier a preset selects. */
-export type Department = 'tech' | 'business'
+export type Department = 'tech' | 'business' | 'bid' | 'tester'
 ```
 <!-- END GENERATED config-catalog:@tianma/dsh-department-prompts -->
 
@@ -4629,7 +4629,7 @@ export interface Config {
 ## `@tianma/dsh-mps-executor`
 
 - `refs`: [`PlatformScheme`](../packages/tianma/mps-exec-core/src/index.ts)
-- `source`: [`packages/tianma/mps-executor/src/config.ts:107`](../packages/tianma/mps-executor/src/config.ts)
+- `source`: [`packages/tianma/mps-executor/src/config.ts:109`](../packages/tianma/mps-executor/src/config.ts)
 
 ```ts config-catalog
 /** The executor node's plugin configuration. */
@@ -4686,7 +4686,11 @@ export interface Config {
   leaseRenewSeconds?: number
   /** Runtime ceiling in seconds for one attempt, used when the task payload states none. */
   taskRuntimeSeconds?: number
-  /** Runtime ceiling in seconds for one chat-answer attempt, before its payload states one. */
+  /**
+   * Runtime ceiling in seconds for one chat-answer attempt, before its payload states
+   * one. Zero follows the lease (capped at ten minutes); a stated value is the ceiling
+   * as stated.
+   */
   answerRuntimeSeconds?: number
   /** Budget for one ordinary platform request in milliseconds. */
   requestTimeoutMs?: number
@@ -4932,6 +4936,7 @@ export interface Config {
 | `@deepseek-ai/dsh-workspace` | `storageDomain` · `sessionPersistence` | [`packages/workspace/workspace/src/index.ts`](../packages/workspace/workspace/src/index.ts) |
 | `@tianma/dsh-behavioral-guidelines` | — | [`packages/tianma/behavioral-guidelines/src/index.ts`](../packages/tianma/behavioral-guidelines/src/index.ts) |
 | `@tianma/dsh-compaction-summarize` | — | [`packages/tianma/compaction-summarize/src/index.ts`](../packages/tianma/compaction-summarize/src/index.ts) |
+| `@tianma/dsh-lsp-packs-ui` | — | [`packages/tianma/lsp-packs-ui/src/index.ts`](../packages/tianma/lsp-packs-ui/src/index.ts) |
 | `@tianma/dsh-mps-node-ui` | — | [`packages/tianma/mps-node-ui/src/index.ts`](../packages/tianma/mps-node-ui/src/index.ts) |
 | `@tianma/dsh-oa-account-ui` | — | [`packages/tianma/oa-account-ui/src/index.ts`](../packages/tianma/oa-account-ui/src/index.ts) |
 <!-- END GENERATED config-catalog:no-config -->
