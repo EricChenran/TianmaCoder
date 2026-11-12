@@ -172,4 +172,27 @@ describe('@tianma/dsh-department-prompts ui-confirmation-doc skill', () => {
     expect(raw).toContain('scripts/mp-capture.cjs')
     expect(raw).toContain('references/scope-policy.md')
   })
+
+  it('pins the fixed tail conclusion the generator writes', () => {
+    const script = readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'build_docx.py'), 'utf8')
+    for (const line of [
+      '二、确认结论',
+      '需求匹配度：所有界面模块的布局、交互、文案均与需求文档完全一致，无遗漏或偏离。',
+      '设计还原度：UI实现像素级匹配，偏差率≤0.5%',
+      '客户方确认',
+      '我方确认',
+      '甲方：______________________',
+      '签字盖章：______________________',
+      '日期：____年____月____日',
+      '1.本确认单一式两份，双方各执一份，具有同等效力。',
+      '以下无正文---------------------------',
+    ]) {
+      expect(script).toContain(line)
+    }
+    // The tail never comes from the template: the generator drops the template
+    // tail first, then writes this text, so a different template cannot reword it.
+    expect(script).toContain('def cut_tail(')
+    expect(script).toContain('def write_tail(')
+    expect(readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')).toContain('以下无正文')
+  })
 })
