@@ -1,6 +1,7 @@
 /** Language-pack card rendered on the Plugins page. */
 
 import { useCallback, useEffect, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { desktopLspPacks, type DesktopPackRow } from './bridge.ts'
 import styles from './LspPacks.module.css'
@@ -82,13 +83,14 @@ export function LspPacksCard(props: LspPacksCardProps) {
                 <span className={styles.state}>{stateLabel(row)}</span>
                 <span className={styles.actions}>
                   {busy === row.id ? <span className={styles.working}>{t('working')}</span> : (
-                    <button
-                      type="button"
+                    <Button
+                      variant={row.state === 'installed' ? 'ghost' : 'outline'}
+                      size="sm"
                       disabled={busy !== undefined || !canInstall(row)}
                       onClick={() => { void act(row.id, row.state === 'installed' ? 'uninstall' : 'install') }}
                     >
                       {row.state === 'installed' ? t('uninstall') : t('install')}
-                    </button>
+                    </Button>
                   )}
                 </span>
               </li>

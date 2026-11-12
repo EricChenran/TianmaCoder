@@ -7,45 +7,78 @@
 
 .description {
   margin: 0;
-  opacity: 0.75;
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Rows follow the Plugins page dependency list: a hairline separator between
+   entries and no card chrome of their own. */
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
+  padding: 8px 2px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.row:last-child {
+  border-bottom: 0;
 }
 
 .label {
   flex: 1 1 auto;
   min-width: 0;
+  font-size: 13.5px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.state,
-.working,
-.hint {
-  opacity: 0.7;
-  font-size: 0.9em;
+/* Long blockers (the JDK notice) wrap inside the row instead of pushing the
+   action out of it. */
+.state {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: end;
+  overflow-wrap: anywhere;
 }
 
+/* Keeps the 28px control's place while a request runs, so the row height holds. */
 .actions {
-  flex: 0 0 auto;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 28px;
+}
+
+.working,
+.hint {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.hint {
+  margin: 0;
 }
 
 .error {
   margin: 0;
-  color: var(--dsh-color-danger, #c0392b);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
 }
