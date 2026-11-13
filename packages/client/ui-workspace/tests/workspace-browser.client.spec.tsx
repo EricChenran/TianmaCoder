@@ -1774,6 +1774,35 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it('answers a Workspace query with the Workspace row and reveals that group', async () => {
+    vi.useFakeTimers()
+    try {
+      const b = mount({
+        useSessions: hook(sessionState([summary('member', 1, { displayTitle: 'Member session' })])),
+        useWorkspaces: hook(workspaceState([workspace('proj', ['member'], 'TianmaCoder')])),
+      })
+      const input = screen.getByPlaceholderText<HTMLInputElement>('搜索会话名称')
+      fireEvent.change(input, { target: { value: 'tianmacoder' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+
+      const rows = within(screen.getByRole('tree', { name: '搜索结果' })).getAllByRole('treeitem')
+      // The Workspace answers the project query; its Session follows as a label match.
+      expect(rows[0]?.textContent).toContain('TianmaCoder')
+      expect(rows[0]?.textContent).toContain('1 个会话')
+      expect(rows[1]?.textContent).toContain('Member session')
+
+      fireEvent.click(rows[0]!)
+      expect(input.value).toBe('')
+      expect(screen.queryByRole('tree', { name: '搜索结果' })).toBeNull()
+      expect(b.store.getSnapshot().groupExpansion).toEqual({ proj: true })
+      const groupRow = screen.getByText('TianmaCoder').closest('[role="treeitem"]')
+      expect(scrollIntoView.mock.instances.at(-1)).toBe(groupRow)
+      expect(b.props.open).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows the no-sessions empty state in both modes and resolves an empty search', async () => {
     vi.useFakeTimers()
     try {

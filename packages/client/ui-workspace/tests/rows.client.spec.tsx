@@ -12,9 +12,9 @@ import type { MenuOpenState, SessionRowOwnerProps } from '../src/client/contract
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { RowDragProps } from '../src/client/rows/Rows.tsx'
 import {
-  ProjectRowItem, SearchResultItem, SessionNodeItem as SessionNodeItemComponent,
+  ProjectRowItem, SearchResultItem, SearchWorkspaceItem, SessionNodeItem as SessionNodeItemComponent,
 } from '../src/client/rows/Rows.tsx'
-import type { GroupNode, SearchResultNode, SessionNode } from '../src/client/tree.ts'
+import type { GroupNode, SearchResultNode, SearchWorkspaceNode, SessionNode } from '../src/client/tree.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 afterEach(cleanup)
@@ -104,6 +104,7 @@ describe('workspace browser rows', () => {
   it('renders a selected content-search row and opens only its session', () => {
     const onOpen = vi.fn()
     const result: SearchResultNode = {
+      kind: 'session',
       id: sid('result'),
       title: 'Result title',
       workspace: 'Workspace context',
@@ -131,7 +132,7 @@ describe('workspace browser rows', () => {
     ['question', '等待回答'],
   ] as const)('shows %s ahead of running in search results', (pendingInteraction, label) => {
     const result: SearchResultNode = {
-      id: sid(pendingInteraction), title: 'Needs input', workspace: 'Project',
+      kind: 'session', id: sid(pendingInteraction), title: 'Needs input', workspace: 'Project',
       pendingInteraction, running: true, runningSubagentCount: 0, completed: false, archived: false,
     }
     render(<SearchResultItem result={result} currentId={undefined} onOpen={vi.fn()} onUnarchive={vi.fn()} t={t} />)
@@ -419,7 +420,7 @@ describe('workspace browser rows', () => {
   it('shows the green done dot on a finished search result row', () => {
     render(<SearchResultItem
       result={{
-        id: sid('result'), title: 'Done', workspace: 'Workspace', running: false,
+        kind: 'session', id: sid('result'), title: 'Done', workspace: 'Workspace', running: false,
         runningSubagentCount: 0, completed: true, archived: false,
       }}
       currentId={undefined} onOpen={vi.fn()} onUnarchive={vi.fn()} t={t}
@@ -963,7 +964,7 @@ describe('workspace browser rows', () => {
 
   it('flags an archived content-search result', () => {
     const result: SearchResultNode = {
-      id: sid('result'), title: 'Old result', workspace: 'Workspace context',
+      kind: 'session', id: sid('result'), title: 'Old result', workspace: 'Workspace context',
       running: false, runningSubagentCount: 0, completed: false, archived: true,
     }
     render(<SearchResultItem result={result} currentId={undefined} onOpen={vi.fn()} onUnarchive={vi.fn()} t={t} />)
@@ -971,6 +972,19 @@ describe('workspace browser rows', () => {
     expect(row.className).toMatch(/archived/)
     // No leading marker: the grayed row alone carries the archived look.
     expect(screen.queryByRole('img', { name: '已归档' })).toBeNull()
+  })
+
+  it('renders a Workspace result as a folder row that reveals the group', () => {
+    const result: SearchWorkspaceNode = {
+      kind: 'workspace', workspaceId: wid('project'), title: 'TianmaCoder', sessionCount: 3,
+    }
+    const onOpen = vi.fn()
+    render(<SearchWorkspaceItem result={result} onOpen={onOpen} t={t} />)
+    const row = screen.getByRole('treeitem')
+    expect(screen.getByText('TianmaCoder')).toBeTruthy()
+    expect(screen.getByText('3 个会话')).toBeTruthy()
+    fireEvent.click(row)
+    expect(onOpen).toHaveBeenCalledWith(result.workspaceId)
   })
 })
 
@@ -1093,7 +1107,7 @@ it.each([['未命名', t], ['Untitled', tEn]])('labels unnamed history as %s', (
 })
 
 it.each([['未命名', t], ['Untitled', tEn]])('labels unnamed search results as %s', (label, translate) => {
-  const result: SearchResultNode = { id: sid('unnamed-search'), title: '', workspace: 'Project',
+  const result: SearchResultNode = { kind: 'session', id: sid('unnamed-search'), title: '', workspace: 'Project',
     running: false, runningSubagentCount: 0, completed: false, archived: false }
   const onOpen = vi.fn()
   render(<SearchResultItem result={result} currentId={undefined} onOpen={onOpen}

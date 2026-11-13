@@ -83,8 +83,24 @@ export interface GroupNode {
   sessions: readonly SessionNode[]
 }
 
-/** One flat search row combining list metadata with an optional content match. */
+/** One flat search row: a Workspace navigation target or a Session. */
+export type SearchRow = SearchWorkspaceNode | SearchResultNode
+
+/**
+ * One Workspace hit. Choosing it reveals that Workspace group instead of
+ * opening a Session: a Workspace is a browsing target, not a conversation.
+ */
+export interface SearchWorkspaceNode {
+  kind: 'workspace'
+  workspaceId: WorkspaceId
+  title: string
+  /** Member Sessions in the Workspace, archived included. */
+  sessionCount: number
+}
+
+/** One Session hit combining list metadata with an optional content match. */
 export interface SearchResultNode {
+  kind: 'session'
   id: SessionId
   title: string
   workspace: string
@@ -102,7 +118,7 @@ export interface SearchResultNode {
 
 /** Bounded merged search projection plus the refine-query hint bit. */
 export interface SearchResultSet {
-  items: readonly SearchResultNode[]
+  items: readonly SearchRow[]
   hasMore: boolean
 }
 
@@ -526,17 +542,18 @@ export function deriveFlat(
 }
 
 /**
- * Merge immediate title/Workspace substring matches with ranked Host content
- * matches. Local rows lead newest-first, content-only rows retain backend
- * order, and duplicate sessions receive the backend snippet in place.
+ * Merge Workspace hits, immediate title/Workspace substring matches, and ranked
+ * Host content matches. Workspace rows lead in registration order, local Session
+ * rows follow newest-first, content-only rows retain backend order, and duplicate
+ * sessions receive the backend snippet in place.
  * @param list - session metadata authority.
- * @param workspaces - Workspace membership and display labels.
+ * @param workspaces - Workspace membership and display labels; titles and folder names match the query.
  * @param query - caller text; surrounding whitespace is ignored.
  * @param archivedSessionIds - registry-global archive set (members match per the archived filter).
  * @param archivedFilter - archived-row visibility choice; search follows it.
  * @param statuses - unified UI status by Session.
  * @param content - ranked Host content-search page.
- * @param limit - protocol-owned maximum merged row count.
+ * @param limit - protocol-owned maximum merged row count, Workspace rows included.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -553,6 +570,18 @@ export function deriveSearchResults(
   if (q === '') return { items: [], hasMore: false }
   const archived = new Set(archivedSessionIds)
   const current = mainSessionId(list)
+
+  // Workspace hits lead the merged rows so a project-first query answers with
+  // the project itself, ahead of the Sessions that happen to sit in it.
+  const workspaceHits: SearchWorkspaceNode[] = workspaces
+    .filter(workspace => workspace.title.toLowerCase().includes(q)
+      || workspaceLabel(workspace.path).toLowerCase().includes(q))
+    .map(workspace => ({
+      kind: 'workspace',
+      workspaceId: workspace.workspaceId,
+      title: workspace.title,
+      sessionCount: workspace.sessionIds.length,
+    }))
 
   const workspaceBySession = new Map<SessionId, string>()
   for (const workspace of workspaces) {
@@ -597,26 +626,30 @@ export function deriveSearchResults(
     if (summary !== undefined && !summary.blank && sessionVisible(summary, current, archived, archivedFilter)) include(summary)
   }
 
+  const sessionRows: SearchResultNode[] = ordered.map((summary) => {
+    const match = contentBySession.get(summary.id)
+    const status = statuses.get(summary.id)
+    const pendingInteraction = visiblePendingKind(status?.pendingInteraction?.kind)
+    return {
+      kind: 'session',
+      id: summary.id,
+      title: sessionTitle(summary),
+      workspace: labelOf(summary),
+      running: status?.running ?? summary.running,
+      runningSubagentCount: runningChildCount(list, summary.id, statuses),
+      ...(pendingInteraction === undefined
+        ? {}
+        : { pendingInteraction }),
+      completed: status?.completionUnread === true,
+      archived: archived.has(summary.id),
+      ...match === undefined ? {} : { snippet: match.snippet },
+    }
+  })
+  const rows: SearchRow[] = [...workspaceHits, ...sessionRows]
+
   return {
-    items: ordered.slice(0, limit).map((summary) => {
-      const match = contentBySession.get(summary.id)
-      const status = statuses.get(summary.id)
-      const pendingInteraction = visiblePendingKind(status?.pendingInteraction?.kind)
-      return {
-        id: summary.id,
-        title: sessionTitle(summary),
-        workspace: labelOf(summary),
-        running: status?.running ?? summary.running,
-        runningSubagentCount: runningChildCount(list, summary.id, statuses),
-        ...(pendingInteraction === undefined
-          ? {}
-          : { pendingInteraction }),
-        completed: status?.completionUnread === true,
-        archived: archived.has(summary.id),
-        ...match === undefined ? {} : { snippet: match.snippet },
-      }
-    }),
-    hasMore: content.hasMore || ordered.length > limit,
+    items: rows.slice(0, limit),
+    hasMore: content.hasMore || rows.length > limit,
   }
 }
 

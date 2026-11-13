@@ -24,7 +24,7 @@ import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/cli
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { MenuOpenState, WorkspaceBrowserProps } from '../contract/slots.ts'
-import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+import type { GroupNode, SearchResultNode, SearchWorkspaceNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
 /** The standard locale seat, prop-passed from the browser root. */
@@ -213,10 +213,13 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
  * @param props.onCreate - start a frontend Session inside this Workspace.
  * @param props.drag - optional workspace-row drag wiring.
  * @param props.home - host account home for POSIX hover-path abbreviation.
+ * @param props.onReveal - scroll this row into view after search navigation, then acknowledge it.
  * @param props.t - the browser root's locale seat.
  * @returns the row element.
  */
-export function ProjectRowItem({ group, containsCurrentDescendant = false, onToggle, onCreate, actions, drag, home, newShortcut, t }: {
+export function ProjectRowItem({
+  group, containsCurrentDescendant = false, onToggle, onCreate, actions, drag, home, newShortcut, onReveal, t,
+}: {
   group: GroupNode
   newShortcut?: ShortcutCatalogEntry | undefined
   containsCurrentDescendant?: boolean
@@ -228,6 +231,8 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
+  /** Scroll this row into view after search navigation, then acknowledge it. */
+  onReveal?: (() => void) | undefined
   t: RowTranslate
 }) {
   const row = group
@@ -235,12 +240,19 @@ export function ProjectRowItem({ group, containsCurrentDescendant = false, onTog
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
   const [menuOpen, setMenuOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (onReveal === undefined) return
+    rowRef.current?.scrollIntoView({ block: 'nearest' })
+    onReveal()
+  }, [onReveal])
   const workspaceMenuItems = [
     { id: 'rename', label: t('rename'), icon: <IconEditOutlineRegular /> },
     { id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutlineRegular />, danger: true },
   ]
   const ownRow = (
     <div
+      ref={rowRef}
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
       data-row-key={`workspace:${group.key}`}
       role="treeitem"
@@ -516,6 +528,42 @@ export function SearchResultItem({ result, currentId, onOpen, onUnarchive, t }: 
         {result.snippet !== undefined && (
           <span className={css.searchResultSnippet}>{result.snippet}</span>
         )}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * One Workspace search result: the folder row a project-first query answers
+ * with. Choosing it reveals that Workspace in the list instead of opening a
+ * conversation, so the row carries no Session status and no hover card.
+ * @param props.result - matched Workspace.
+ * @param props.onOpen - reveal the Workspace group.
+ * @param props.t - Workspace-browser translation seat.
+ * @returns the result row.
+ */
+export function SearchWorkspaceItem({ result, onOpen, t }: {
+  result: SearchWorkspaceNode
+  onOpen: (workspaceId: SearchWorkspaceNode['workspaceId']) => void
+  t: RowTranslate
+}) {
+  return (
+    <div
+      className={css.searchResultRow}
+      role="treeitem"
+      aria-selected={false}
+      onClick={() => { onOpen(result.workspaceId) }}
+    >
+      <span className={css.searchResultHeading}>
+        <span className={clsx(css.slot, css.folder)}>
+          <IconFolderCloseRegular size={14} />
+        </span>
+        <span className={css.searchResultTitle}>{result.title}</span>
+      </span>
+      <span className={css.searchResultMeta}>
+        <span className={css.searchResultWorkspace}>
+          {t('search.workspaceMeta', { n: result.sessionCount })}
+        </span>
       </span>
     </div>
   )

@@ -36,7 +36,7 @@ import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
 } from '../tree.ts'
-import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
+import { ProjectRowItem, SearchResultItem, SearchWorkspaceItem, SessionNodeItem } from './Rows.tsx'
 import { AnimatedRows } from './AnimatedRows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
@@ -259,6 +259,10 @@ type SessionTreeProps = Pick<
   revealSessionId?: SessionId | undefined
   /** Acknowledge that the chosen Session row has been revealed. */
   onSessionRevealed: (sessionId: SessionId) => void
+  /** One Workspace chosen from search that must be expanded and scrolled into view. */
+  revealWorkspaceKey?: string | undefined
+  /** Acknowledge that the chosen Workspace row has been revealed. */
+  onWorkspaceRevealed: (key: string) => void
 }
 
 /** The list-empty placeholder — a glyph over the text; the archived-only view names its filter and offers the way back. */
@@ -288,6 +292,7 @@ function SessionTree({
   nestWorkspaces, groupExpansion, setGroupExpanded,
   setSessionOrder, home, t,
   revealSessionId, onSessionRevealed, shortcuts,
+  revealWorkspaceKey, onWorkspaceRevealed,
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
@@ -347,6 +352,13 @@ function SessionTree({
       }
     }
   }, [groupExpansion, parents, revealGroup, setGroupExpanded])
+  useEffect(() => {
+    if (revealWorkspaceKey === undefined || !workspaceReady) return
+    // A nested Workspace is only visible once every ancestor is open.
+    for (let key: string | undefined = revealWorkspaceKey; key !== undefined; key = parents.get(key)) {
+      if (groupExpansion[key] !== true) setGroupExpanded(key, true)
+    }
+  }, [groupExpansion, parents, revealWorkspaceKey, setGroupExpanded, workspaceReady])
   useEffect(() => {
     if (revealSessionId === undefined || revealGroup === undefined) return
     const group = groups.find(candidate => candidate.key === revealGroup)
@@ -499,6 +511,9 @@ function SessionTree({
           containsCurrentDescendant={currentAncestors.has(group.key)}
           home={home}
           t={t}
+          onReveal={group.key === revealWorkspaceKey
+            ? () => { onWorkspaceRevealed(group.key) }
+            : undefined}
           onToggle={() => {
             if (group.expanded) {
               setSessionLimits(limits => ({ ...limits, [group.key]: COLLAPSED_SESSION_LIMIT }))
@@ -735,11 +750,12 @@ interface RemoteSearchState {
   hasMore: boolean
 }
 
-/** Flat search body: local metadata matches plus the current Host result page. */
+/** Flat search body: Workspace hits, local metadata matches, and the current Host result page. */
 function SearchResults({
   useSessions,
   useSessionStatus,
   open,
+  onOpenWorkspace,
   onUnarchive,
   workspaces,
   archivedSessionIds,
@@ -754,6 +770,8 @@ function SearchResults({
   archivedSessionIds: readonly SessionNode['id'][]
   /** Search matches follow the archived filter selected for the list. */
   archivedFilter: ArchivedFilter
+  /** Reveal a matched Workspace group in the list. */
+  onOpenWorkspace: (workspaceId: WorkspaceView['workspaceId']) => void
   /** Unarchive an archived result row in place. */
   onUnarchive: (id: SessionNode['id']) => void
   query: string
@@ -788,16 +806,25 @@ function SearchResults({
     <div className={clsx(css.treeBody, css.wide)}>
       <div className={css.list}>
         <div className={css.searchTree} role="tree" aria-label={t('search.results.aria')}>
-          {results.items.map(result => (
-            <SearchResultItem
-              key={result.id}
-              result={result}
-              currentId={currentId}
-              onOpen={open}
-              onUnarchive={onUnarchive}
-              t={t}
-            />
-          ))}
+          {results.items.map(result => result.kind === 'workspace'
+            ? (
+              <SearchWorkspaceItem
+                key={`workspace:${String(result.workspaceId)}`}
+                result={result}
+                onOpen={onOpenWorkspace}
+                t={t}
+              />
+            )
+            : (
+              <SearchResultItem
+                key={result.id}
+                result={result}
+                currentId={currentId}
+                onOpen={open}
+                onUnarchive={onUnarchive}
+                t={t}
+              />
+            ))}
         </div>
         {pending && (
           /* Two skeleton rows on an empty list, one when local matches already
@@ -1014,6 +1041,7 @@ export function WorkspaceBrowser({
   const [query, setQuery] = useState('')
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [revealSessionId, setRevealSessionId] = useState<SessionId | undefined>(undefined)
+  const [revealWorkspaceKey, setRevealWorkspaceKey] = useState<string | undefined>(undefined)
   const normalizedQuery = sanitizeSearchQuery(query).trim()
   const [remoteSearch, setRemoteSearch] = useState<RemoteSearchState>({
     query: '',
@@ -1042,8 +1070,22 @@ export function WorkspaceBrowser({
   const acknowledgeSessionReveal = (sessionId: SessionId): void => {
     setRevealSessionId(current => current === sessionId ? undefined : current)
   }
+  // A Workspace hit answers a project-first query: reveal that group rather than
+  // open a Session, and leave the flat list, which renders no group row.
+  const openWorkspaceResult = (workspaceId: WorkspaceId): void => {
+    if (groupBy === 'flat') actions.setGroupBy('workspace')
+    setRevealWorkspaceKey(String(workspaceId))
+    setQuery('')
+    setSearchExpanded(false)
+  }
+  const acknowledgeWorkspaceReveal = (key: string): void => {
+    setRevealWorkspaceKey(current => current === key ? undefined : current)
+  }
   useEffect(() => {
-    if (normalizedQuery !== '') setRevealSessionId(undefined)
+    if (normalizedQuery !== '') {
+      setRevealSessionId(undefined)
+      setRevealWorkspaceKey(undefined)
+    }
   }, [normalizedQuery])
 
   // Rail search = expand + land in the search box: the flag arms before the
@@ -1348,6 +1390,7 @@ export function WorkspaceBrowser({
               useSessions={useSessions}
               useSessionStatus={useSessionStatus}
               open={openSearchResult}
+              onOpenWorkspace={openWorkspaceResult}
               onUnarchive={onSessionUnarchive}
               workspaces={workspaces}
               archivedSessionIds={archivedSessionIds}
@@ -1401,6 +1444,8 @@ export function WorkspaceBrowser({
                 insertWorkspaceBefore={insertWorkspaceBefore}
                 revealSessionId={revealSessionId}
                 onSessionRevealed={acknowledgeSessionReveal}
+                revealWorkspaceKey={revealWorkspaceKey}
+                onWorkspaceRevealed={acknowledgeWorkspaceReveal}
                 home={home}
                 t={t}
                 onRenameRequest={(workspaceId, displayTitle) => {

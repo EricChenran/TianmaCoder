@@ -8,6 +8,8 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   type ArchivedFilter,
+  type SearchResultNode,
+  type SearchRow,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
   pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
@@ -64,6 +66,9 @@ const rowState = (options: {
   archivedFilter: options.archivedFilter ?? 'default' as const,
 })
 const noRows = rowState()
+/** Session rows of a merged search result; a Workspace hit carries no Session metadata. */
+const searchSessions = (result: { items: readonly SearchRow[] }): SearchResultNode[] =>
+  result.items.flatMap(item => item.kind === 'session' ? [item] : [])
 
 describe('owningGroupKey', () => {
   it('returns the owning Workspace id or the Ungrouped key', () => {
@@ -319,7 +324,7 @@ describe('deriveGroups', () => {
       sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive, 'default',
       statuses, { items: [], hasMore: false }, 10,
     )
-    expect(search.items[0]?.completed).toBe(true)
+    expect(searchSessions(search)[0]?.completed).toBe(true)
   })
 
   it('hides subagent-origin sessions and reads direct running counts from catalogs', () => {
@@ -386,7 +391,7 @@ describe('deriveGroups', () => {
     const counts = (snapshot: SessionStatusSnapshot) => [
       deriveGroups(sessions, [workspace('first', ['parent'])], noRows, snapshot, view(['first']))[0]!.sessions[0]!.runningSubagentCount,
       deriveFlat(sessions, [parent.id], noRows, snapshot)[0]!.runningSubagentCount,
-      deriveSearchResults(sessions, [], 'parent', noArchive, 'default', snapshot, { items: [], hasMore: false }, 10).items[0]!.runningSubagentCount,
+      searchSessions(deriveSearchResults(sessions, [], 'parent', noArchive, 'default', snapshot, { items: [], hasMore: false }, 10))[0]!.runningSubagentCount,
     ]
     expect(counts(statuses)).toEqual([1, 1, 1])
     statuses.set(child.id, status(undefined, { running: false }))
@@ -599,7 +604,7 @@ describe('deriveSearchResults archive filtering', () => {
       { items: [{ sessionId: gone.id, snippet: 'needle body' }], hasMore: false },
       10,
     )
-    expect(result.items.map(item => item.id)).toEqual([hit.id])
+    expect(searchSessions(result).map(row => row.id)).toEqual([hit.id])
   })
 
   it('matches archived sessions and flags them while the view shows them', () => {
@@ -608,7 +613,7 @@ describe('deriveSearchResults archive filtering', () => {
     const result = deriveSearchResults(
       list(gone), [], 'needle', archived('gone'), 'show', noAttention, { items: [], hasMore: false }, 10,
     )
-    expect(result.items.map(item => [item.id, item.archived])).toEqual([[gone.id, true]])
+    expect(searchSessions(result).map(row => [row.id, row.archived])).toEqual([[gone.id, true]])
   })
 
   it('matches only archived sessions under the only filter', () => {
@@ -619,7 +624,7 @@ describe('deriveSearchResults archive filtering', () => {
     const result = deriveSearchResults(
       list(hit, gone), [], 'needle', archived('gone'), 'only', noAttention, { items: [], hasMore: false }, 10,
     )
-    expect(result.items.map(item => [item.id, item.archived])).toEqual([[gone.id, true]])
+    expect(searchSessions(result).map(row => [row.id, row.archived])).toEqual([[gone.id, true]])
   })
 })
 
@@ -659,6 +664,13 @@ describe('deriveSearchResults', () => {
     expect(result).toEqual({
       items: [
         {
+          kind: 'workspace',
+          workspaceId: wid('b'),
+          title: 'Needle Workspace',
+          sessionCount: 1,
+        },
+        {
+          kind: 'session',
           id: titleHit.id,
           title: 'Needle title',
           workspace: 'Alpha',
@@ -670,6 +682,7 @@ describe('deriveSearchResults', () => {
           snippet: 'title session body excerpt',
         },
         {
+          kind: 'session',
           id: workspaceHit.id,
           title: 'Ordinary title',
           workspace: 'Needle Workspace',
@@ -679,6 +692,7 @@ describe('deriveSearchResults', () => {
           archived: false,
         },
         {
+          kind: 'session',
           id: contentHit.id,
           title: 'content-hit',
           workspace: 'c',
@@ -751,6 +765,42 @@ describe('deriveSearchResults', () => {
     expect(backendMore.hasMore).toBe(true)
     expect(deriveSearchResults(list(), [], '  ', noArchive, 'default', noAttention, { items: [], hasMore: true }, 3))
       .toEqual({ items: [], hasMore: false })
+  })
+})
+
+describe('deriveSearchResults Workspace hits', () => {
+  it('answers a project-first query with the Workspace row ahead of its Sessions', () => {
+    const member = summary('member', 5, '/projects/TianmaCoder')
+    member.title = member.displayTitle = 'Ordinary session'
+    const result = deriveSearchResults(
+      list(member), [workspace('proj', ['member'], 'TianmaCoder')], 'tianmacoder', noArchive, 'default',
+      noAttention, { items: [], hasMore: false }, 10,
+    )
+    expect(result.items[0]).toEqual({
+      kind: 'workspace', workspaceId: wid('proj'), title: 'TianmaCoder', sessionCount: 1,
+    })
+    expect(result.items[1]).toMatchObject({ kind: 'session', id: member.id })
+  })
+
+  it('matches a renamed Workspace by its folder name and ignores the archived filter', () => {
+    const result = deriveSearchResults(
+      list(), [workspace('my-proj', [], 'Renamed project')], 'my-proj', archived('gone'), 'only',
+      noAttention, { items: [], hasMore: false }, 10,
+    )
+    expect(result.items).toEqual([
+      { kind: 'workspace', workspaceId: wid('my-proj'), title: 'Renamed project', sessionCount: 0 },
+    ])
+  })
+
+  it('counts Workspace rows against the merged cap', () => {
+    const hit = summary('hit', 2)
+    hit.title = hit.displayTitle = 'Needle session'
+    const result = deriveSearchResults(
+      list(hit), [workspace('needle', ['hit'])], 'needle', noArchive, 'default', noAttention,
+      { items: [], hasMore: false }, 1,
+    )
+    expect(result.items.map(item => item.kind)).toEqual(['workspace'])
+    expect(result.hasMore).toBe(true)
   })
 })
 
