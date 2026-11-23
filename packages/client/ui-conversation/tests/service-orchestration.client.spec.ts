@@ -370,6 +370,49 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
+  it('keeps the finished upload receipt when a draft move skips re-uploading', async () => {
+    const b = await bench()
+    const source = b.runtime.sessions.binding('s1')!.session
+    const sourceUpload = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: {
+        receiptId: 'source-receipt' as never,
+        file: { attachmentId: 'source-file' as never, name: 'carry.pdf', bytes: 1 },
+      },
+    }))
+    ;(source as { uploadFile?: unknown }).uploadFile = sourceUpload
+    const [attachment] = b.root.createDrafts(source.sessionId, [
+      new File([Uint8Array.of(6)], 'carry.pdf', { type: 'application/pdf' }),
+    ])
+    if (attachment === undefined) throw new Error('file draft missing')
+    await vi.waitFor(() => { expect(sourceUpload).toHaveBeenCalledOnce() })
+    await vi.waitFor(() => {
+      expect(b.root.fileUploads.getSnapshot()[attachment.id]?.status).toBe('ready')
+    })
+    const target = {
+      uploadFile: vi.fn(() => Promise.resolve({
+        ok: true as const,
+        value: {
+          receiptId: 'target-receipt' as never,
+          file: { attachmentId: 'target-file' as never, name: 'carry.pdf', bytes: 1 },
+        },
+      })),
+    }
+    await b.runtime.sessions.add({ id: 's2', session: target })
+    using _target = b.runtime.sessions.retain('s2' as SessionId)
+    await _target.ready
+
+    b.root.rebindDraftFiles(b.runtime.sessions.binding('s2')!.session.sessionId, [attachment.id], false)
+
+    expect(sourceUpload).toHaveBeenCalledOnce()
+    expect(target.uploadFile).not.toHaveBeenCalled()
+    expect(b.root.fileUploads.getSnapshot()[attachment.id]).toEqual({
+      status: 'ready', receiptId: 'source-receipt',
+      file: { attachmentId: 'source-file', name: 'carry.pdf', bytes: 1 },
+    })
+    await b.runtime.dispose()
+  })
+
   it('cancels a file upload when its draft is removed', async () => {
     const b = await bench()
     const session = b.runtime.sessions.binding('s1')!.session

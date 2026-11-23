@@ -17,8 +17,8 @@ import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type {
-  DraftAttachmentId, DraftAttachmentSerializationResult, DraftInitializationOptions, DraftInitializationResult, InputTriggerController,
-  SessionInputResolver, SessionInput, SubmitOutcome,
+  DraftAttachmentId, DraftAttachmentSerializationResult, DraftInitializationOptions, DraftInitializationResult, InputState,
+  InputTriggerController, SessionInputResolver, SessionInput, SubmitOutcome,
 } from '../contract/input.ts'
 import type { ComposerKeyboard } from '../contract/draft-editor.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
@@ -49,6 +49,18 @@ interface ConversationAttachmentFace {
   ): Promise<SubmitOutcome>
   serializeDraftAttachments(attachmentIds: readonly DraftAttachmentId[]): Promise<DraftAttachmentSerializationResult>
   releaseDraftAttachment(id: DraftAttachmentId): void
+  rebindDraftFiles(sessionId: SessionId, ids: readonly DraftAttachmentId[], uploadImages?: boolean): void
+}
+
+/**
+ * Admission lock shared by draft moves: a draft mid-adjudication, mid-claim, or
+ * mid-submission carries an in-flight transaction, so moving it would strand
+ * that transaction's attachment ids on the source Session.
+ * @param state - published input state of the candidate draft.
+ * @returns whether the draft must stay where it is.
+ */
+function draftIsBusy(state: InputState): boolean {
+  return state.phase !== 'plain' || state.claim !== undefined
 }
 
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
@@ -181,6 +193,43 @@ export class InputHub implements SessionInputResolver {
     const binding = this.sessions().binding(id)
     if (binding === undefined) throw new Error(`conversation.input: session "${id}" resolved no binding`)
     return this.shellFor(binding)
+  }
+
+  /**
+   * Carry one Session's live draft into an empty target draft, so a Session
+   * switch keeps the composer content instead of losing the attachments with
+   * the scope that owned them. Text, reference chips, and attachment ids move
+   * together; the target must still be empty (its own draft is never
+   * overwritten) and both sides must be idle. Files whose upload already
+   * finished keep their receipt rather than uploading again.
+   * @param from - Session whose draft is carried.
+   * @param next - Session that receives the draft.
+   * @returns whether any content moved.
+   */
+  moveDraft(from: SessionId, next: SessionId): boolean {
+    if (from === next) return false
+    const sessions = this.sessions()
+    const source = sessions.binding(from)
+    const target = sessions.binding(next)
+    if (source === undefined || target === undefined) return false
+    const sourceShell = this.shells.get(source)
+    if (sourceShell === undefined || draftIsBusy(sourceShell.snapshot)) return false
+    const targetShell = this.shellFor(target)
+    if (draftIsBusy(targetShell.snapshot)) return false
+    if (targetShell.snapshot.draft !== '' || targetShell.snapshot.attachmentIds.length > 0) return false
+    const draft = sourceShell.draftSnapshot
+    const ids = sourceShell.snapshot.attachmentIds
+    if (ids.length > 0 && !targetShell.addAttachments(ids)) return false
+    if (draft.text !== '') {
+      targetShell.setDraft(draft)
+      sourceShell.setDraft('')
+    }
+    for (const id of ids) sourceShell.removeAttachment(id)
+    if (ids.length > 0) {
+      const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
+      conversation?.rebindDraftFiles(next, ids)
+    }
+    return ids.length > 0 || draft.text !== '' || draft.references.length > 0
   }
 
   /**

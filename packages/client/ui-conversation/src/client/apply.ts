@@ -281,11 +281,18 @@ export function apply(ctx: Context, config: Config = Config({})): void {
 
   // Conversation assembly and input share the Session binding lifecycle. The
   // source roster is installed before any consuming Slot entry.
+  let activeSessionId: SessionId | undefined
   ctx.uiSession.provide({
     hooks: ['conversation', 'input'],
     props: ['inputActions'],
     resolve: (binding) => {
       trackBinding(binding)
+      // Session switches resolve this Provider for the incoming Session; carry
+      // the outgoing draft here so its attachments survive the scope swap.
+      if (activeSessionId !== undefined && activeSessionId !== binding.sessionId) {
+        inputHub.moveDraft(activeSessionId, binding.sessionId)
+      }
+      activeSessionId = binding.sessionId
       const shell = inputHub.shellFor(binding)
       const conversation = uiConversation.binding(binding)
       restoreView(binding.sessionId)
@@ -328,25 +335,11 @@ export function apply(ctx: Context, config: Config = Config({})): void {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
       },
       selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
-        if (sessionId !== undefined && nextId !== sessionId) {
-          const from = inputHub.shell(sessionId)
-          const draft = from.draftSnapshot
-          const attachmentIds = from.snapshot.attachmentIds
-          const next = inputHub.shell(nextId)
-          if (attachmentIds.length === 0 || next.addAttachments(attachmentIds)) {
-            if (sessions.binding(nextId) === undefined) {
-              throw new Error(`ui-conversation: session "${nextId}" resolved no binding`)
-            }
-            concreteConversation(ctx).rebindDraftFiles(nextId, attachmentIds)
-            if (draft.text !== '') {
-              next.setDraft(draft)
-              from.setDraft('')
-            }
-            if (attachmentIds.length > 0) {
-              for (const id of attachmentIds) from.removeAttachment(id)
-            }
-          }
+        if (sessionId === undefined || nextId === sessionId) return
+        if (sessions.binding(nextId) === undefined) {
+          throw new Error(`ui-conversation: session "${nextId}" resolved no binding`)
         }
+        inputHub.moveDraft(sessionId, nextId)
       }),
     }),
   }, ConversationContent)

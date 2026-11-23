@@ -339,13 +339,19 @@ export class ConversationController extends Service implements IConversation {
 
   /**
    * Stage carried file drafts again for a new Session.
-   * @param sessionId - target Agent-scope identity after a Workspace switch.
+   * @param sessionId - target Agent-scope identity after a Workspace or Session switch.
    * @param ids - carried draft attachment ids.
+   * @param uploadImages - when false, a file whose upload already finished keeps its
+   * receipt instead of uploading again; an unfinished upload still rebinds, because
+   * the transfer belongs to the Session that receives it.
    */
-  rebindDraftFiles(sessionId: SessionId, ids: readonly DraftAttachmentId[]): void {
+  rebindDraftFiles(sessionId: SessionId, ids: readonly DraftAttachmentId[], uploadImages = true): void {
+    const uploads = this.fileUploads.getSnapshot()
     for (const id of ids) {
       const attachment = this.draftAttachments.get(id)
-      if (attachment?.kind === 'file') this.beginFileUpload(sessionId, attachment)
+      if (attachment?.kind !== 'file') continue
+      if (!uploadImages && uploads[id]?.status === 'ready') continue
+      this.beginFileUpload(sessionId, attachment)
     }
   }
 
