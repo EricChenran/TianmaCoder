@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-23-oa-workbench-panel.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-23-oa-workbench-panel.md
+/agent-note-an-oa-workbench-inside-the-sidebar:
+  en: 3e8df1d34ed918da
+  zh: 4a768fc8fa933515
+/agent-note-an-oa-workbench-inside-the-sidebar/problem:
+  en: 2435a2c2ea4a637e
+  zh: 67cc88ae37a2b894
+/agent-note-an-oa-workbench-inside-the-sidebar/decision:
+  en: 310f38aff612addb
+  zh: efabd756e05b8056
+/agent-note-an-oa-workbench-inside-the-sidebar/testing:
+  en: f9123f5acafdc33c
+  zh: 22355d9c2213ddd6
+/agent-note-an-oa-workbench-inside-the-sidebar/alternatives-considered:
+  en: 93c213553c7a2f00
+  zh: 49edb377c47fd9f4
+/agent-note-an-oa-workbench-inside-the-sidebar/consequences:
+  en: 6f93038fd3b6274d
+  zh: 9c3f9b7491d90ecf
