@@ -39,9 +39,9 @@ export interface Config {
   search?: boolean
   /** Register `web_fetch`. Defaults to true. */
   fetch?: boolean
-  /** Upper bound on sources returned by one `web_search` call. */
+  /** Upper bound on sources returned by one `web_search` call. Defaults to 10. */
   searchMaxResults?: number
-  /** Upper bound on queries accepted by one `web_search` call. */
+  /** Upper bound on queries accepted by one `web_search` call. Defaults to 10. */
   searchMaxQueries?: number
   /** Cooperative timeout budget (ms) for `web_fetch`. Defaults to 30000. */
   fetchTimeoutMs?: number

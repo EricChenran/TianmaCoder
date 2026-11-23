@@ -882,6 +882,49 @@ describe('searchMaxQueries is plugin config', () => {
     await expect(ctx.plugin(ToolWeb, { searchMaxQueries: value }))
       .rejects.toThrow(/tool-web: searchMaxQueries must be a positive integer/)
   })
+
+  it('executes all ten queries at the shipped cap and merges their sources', async () => {
+    const seen: string[] = []
+    const provider: WebSearchProvider = {
+      id: 'stub-search',
+      available: () => available,
+      search: (request) => {
+        seen.push(request.query)
+        return Promise.resolve({ sources: [{ url: `https://${request.query}.test` }], truncated: false })
+      },
+    }
+    const { fiber, call } = await mountTools({ webConfig: { searchProvider: 'stub-search' }, search: provider })
+    const queries: string[] = []
+    for (let index = 0; index < WEB_SEARCH_MAX_QUERIES; index += 1) queries.push(`q${index}`)
+    const out = await call('web_search', { queries })
+    expect(out.isError).toBe(false)
+    expect(seen).toEqual(queries)
+    expect(out.value).toEqual({
+      sources: queries.map(query => ({ url: `https://${query}.test` })),
+      truncated: false,
+    })
+    await fiber.dispose()
+  })
+
+  it('rejects eleven queries at the shipped cap before any provider call', async () => {
+    const seen: string[] = []
+    const provider: WebSearchProvider = {
+      id: 'stub-search',
+      available: () => available,
+      search: (request) => {
+        seen.push(request.query)
+        return Promise.resolve({ sources: [], truncated: false })
+      },
+    }
+    const { fiber, call } = await mountTools({ webConfig: { searchProvider: 'stub-search' }, search: provider })
+    const queries: string[] = []
+    for (let index = 0; index <= WEB_SEARCH_MAX_QUERIES; index += 1) queries.push(`q${index}`)
+    const out = await call('web_search', { queries })
+    expect(out.isError).toBe(true)
+    expect(out.content).toEqual([{ type: 'text', text: 'Error: queries must contain at most 10 queries' }])
+    expect(seen).toEqual([])
+    await fiber.dispose()
+  })
 })
 
 describe('tool-call timeout budget is plugin config', () => {

@@ -4074,9 +4074,9 @@ export interface Config {
   search?: boolean
   /** Register `web_fetch`. Defaults to true. */
   fetch?: boolean
-  /** Upper bound on sources returned by one `web_search` call. */
+  /** Upper bound on sources returned by one `web_search` call. Defaults to 10. */
   searchMaxResults?: number
-  /** Upper bound on queries accepted by one `web_search` call. */
+  /** Upper bound on queries accepted by one `web_search` call. Defaults to 10. */
   searchMaxQueries?: number
   /** Cooperative timeout budget (ms) for `web_fetch`. Defaults to 30000. */
   fetchTimeoutMs?: number
@@ -4573,7 +4573,7 @@ export interface RecencyPruneConfig {
 ## `@tianma/dsh-department-prompts`
 
 - `inject`: `systemPrompt`
-- `source`: [`packages/tianma/department-prompts/src/index.ts:92`](../packages/tianma/department-prompts/src/index.ts)
+- `source`: [`packages/tianma/department-prompts/src/index.ts:95`](../packages/tianma/department-prompts/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the department whose rules this row contributes. */
@@ -4584,11 +4584,11 @@ export interface Config extends BusinessToolboxOptions, DepartmentSkillOptions {
   skillAssetRoot?: string
 }
 
-/** Where the toolbox scripts are published, and where they are read from. */
+/** Where a department's toolbox scripts are published, and where they are read from. */
 export interface BusinessToolboxOptions {
-  /** Packaged script directory; defaults to this package's `assets/business/`. */
+  /** Packaged script directory; defaults to this package's `assets/<department>/`. */
   assetRoot?: string
-  /** Published script directory; defaults to `<harness home>/department/business-tools`. */
+  /** Published script directory; defaults to `<harness home>/department/<department>-tools`. */
   toolsDir?: string
 }
 

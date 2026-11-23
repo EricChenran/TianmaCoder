@@ -45,8 +45,8 @@ kind: "package-reference"
 |---|---|---|
 | `search` | `true` | 注册 `web_search` |
 | `fetch` | `true` | 注册 `web_fetch` |
-| `searchMaxResults` | `8` | 一次 `web_search` 调用返回的来源数量上限 |
-| `searchMaxQueries` | `4` | 一次 `web_search` 调用接受的查询数量上限；该值会出现在提示词指引与 schema 描述中 |
+| `searchMaxResults` | `10` | 一次 `web_search` 调用返回的来源数量上限 |
+| `searchMaxQueries` | `10` | 一次 `web_search` 调用接受的查询数量上限；该值会出现在提示词指引与 schema 描述中 |
 | `fetchTimeoutMs` | `30000` | `web_fetch` 的协作式工具调用超时预算（ms） |
 | `searchTimeoutMs` | `30000` | `web_search` 的协作式工具调用超时预算（ms） |
 | `fetchMaxOutputChars` | `200000` | 同步转换的源字符数与单次完整 `web_fetch` 输出的上限 |
