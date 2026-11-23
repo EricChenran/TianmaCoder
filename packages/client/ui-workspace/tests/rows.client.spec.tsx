@@ -1115,3 +1115,39 @@ it.each([['未命名', t], ['Untitled', tEn]])('labels unnamed search results as
   fireEvent.click(screen.getByText(label))
   expect(onOpen).toHaveBeenCalledWith(result.id)
 })
+
+describe('Session row unread marker', () => {
+  const base: SessionNode = {
+    id: sid('unread-row'), title: 'Unread Row', blank: false, running: false,
+    runningSubagentCount: 0, completed: false, updatedAt: 10, pinned: false, archived: false,
+  }
+
+  it('marks a row whose activity is newer than the last-seen mark', () => {
+    const view = render(
+      <SessionNodeItem node={{ ...base, unread: true }} currentId={undefined} now={0} onOpen={vi.fn()} t={t} />,
+    )
+    expect(view.container.querySelector('[class*="unreadDot"]')).not.toBeNull()
+    expect(screen.getByRole('img', { name: '有新活动' })).toBeTruthy()
+  })
+
+  it('keeps the unread marker beside a live status dot', () => {
+    const view = render(
+      <SessionNodeItem
+        node={{ ...base, unread: true, running: true }}
+        currentId={undefined}
+        now={0}
+        onOpen={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(view.container.querySelector('[class*="unreadDot"]')).not.toBeNull()
+    expect(screen.getByText('进行中')).toBeTruthy()
+  })
+
+  it('leaves a read row unmarked', () => {
+    const view = render(
+      <SessionNodeItem node={{ ...base, unread: false }} currentId={undefined} now={0} onOpen={vi.fn()} t={t} />,
+    )
+    expect(view.container.querySelector('[class*="unreadDot"]')).toBeNull()
+  })
+})

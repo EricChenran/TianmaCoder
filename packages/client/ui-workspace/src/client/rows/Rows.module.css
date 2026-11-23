@@ -421,3 +421,16 @@
     transition: none;
   }
 }
+
+/* Unread marker: a brand dot beside the live status dot inside the 16px leading slot. */
+.slotUnread {
+  gap: 2px;
+}
+
+.unreadDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-brand-primary);
+}

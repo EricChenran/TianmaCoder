@@ -615,6 +615,8 @@ export function SessionNodeItem({
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
   const showStatus = primaryStatus.state !== 'idle'
+  // Unread rides beside the live status: activity outranks a reminder dot, they never replace each other.
+  const unreadMark = row.unread === true && !row.archived && !row.blank
   // Archived rows hold their in-place grayed slot, so manual reorder cannot
   // move them. Pinned rows drag within the pinned block: the browser gates
   // their drop targets to fellow pinned rows.
@@ -676,7 +678,8 @@ export function SessionNodeItem({
           and is cleared by opening the session. Archived rows keep the slot
           blank — the grayed row carries the archived look — and their live
           status stays on the hover card only. */}
-      <span className={css.slot}>
+      <span className={clsx(css.slot, unreadMark && css.slotUnread)}>
+        {unreadMark && <span className={css.unreadDot} role="img" aria-label={t('status.unread')} />}
         {!row.archived && !row.blank && (showStatus
           ? <SessionStatusDots statuses={statuses} />
           : renderSlot('sidebar.session.row.leading', { sessionId: node.id }))}
