@@ -5,15 +5,20 @@
  *
  * 做三件事：
  *   1) ffmpeg ddagrab 抓整个桌面（gdigrab 抓 Electron 会全黑，别换）
- *   2) miniprogram-automator 驱动 actions.cjs 里定义的真实交互
+ *   2) 驱动 actions.cjs 里定义的真实交互：默认优先开发者工具自带的 wechatide CLI
+ *      （自带登录门禁、窗口生命周期与异步授权），CLI 不在时退回 miniprogram-automator
  *   3) 按墙上时钟记录每个场景的起止，写 marks.json —— 合成阶段的唯一时间轴
  *
  * 场景时长 = max(scenes[i].minSec, 旁白时长 + 2.0)，旁白时长读 <audio>/durations.json；
  * 没有旁白时直接按 minSec 走。
+ *
+ * 驱动选择：config.driver 或 --driver 取 auto（默认）/ wechatide / automator。
+ * auto 找到 wechatide 就用它；显式指定 wechatide 但找不到则报错，不静默降级。
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { locateCli, createDriver, mpShim } = require('./wechatide.cjs');
 
 const argv = process.argv.slice(2);
 const argOf = (name, def) => {
@@ -57,7 +62,7 @@ function resolveAutomator() {
 const FF = resolveFfmpeg();
 if (!DRY && !FF) throw new Error('找不到 ffmpeg（config.ffmpeg / DSH_FFMPEG_PATH / TEMP/ffmpeg-* / winget 路径都没有）');
 
-const automator = resolveAutomator();
+const DRIVER = String(argOf('driver', CFG.driver || 'auto')).toLowerCase();
 const ACT = require(ACTIONSPath);
 const ACTIONS = ACT.scenes || ACT;
 
@@ -73,8 +78,53 @@ let T0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - T0) / 1000).toFixed(2)}s]`, ...a);
 
 let mp = null;
+let cli = null;
+
+/** 按 config.driver / --driver 决定用哪个驱动；显式指定 wechatide 却找不到就报错。 */
+function pickDriver() {
+  if (DRIVER === 'automator') return 'automator';
+  const located = locateCli({ explicit: CFG.wechatide, devtools: CFG.devtools });
+  if (DRIVER === 'wechatide') {
+    if (!located) {
+      throw new Error('driver=wechatide，但找不到 wechatide CLI：在 config.json 写 wechatide 绝对路径，或让 devtools 指向开发者工具安装目录');
+    }
+    return 'wechatide';
+  }
+  return located ? 'wechatide' : 'automator';
+}
+
+/** 连驱动：CLI 优先（登录门禁 → 开窗 → 等首页），找不到 CLI 才退回 automator。 */
+async function connectDriver() {
+  const name = pickDriver();
+  if (name === 'wechatide') {
+    const located = locateCli({ explicit: CFG.wechatide, devtools: CFG.devtools });
+    cli = createDriver({
+      cliPath: located.path,
+      project: CFG.project,
+      clientName: CFG.clientName || 'TianmaCoder',
+      skillVersion: CFG.skillVersion,
+      authTimeoutMs: CFG.authTimeoutMs,
+      log: (...parts) => log(...parts),
+    });
+    const status = cli.ensureReady();
+    if (status && status.loginUser) {
+      log('  已登录：' + (status.loginUser.nickName || status.loginUser.openid || '(未知用户)'));
+    }
+    log(`  驱动：wechatide（${located.path}，来源 ${located.source}）`);
+    await cli.openWindow(CFG.windowMode || 'liteMode');
+    // 首次开窗要等模拟器渲染出首页；等不到不致命，后续 waitPage 还会兜一次。
+    await cli.waitPage('pages/', CFG.pageTimeoutMs || 30000).catch(() => {});
+    return name;
+  }
+  const automator = resolveAutomator();
+  const port = CFG.autoPort || 9420;
+  mp = await automator.connect({ wsEndpoint: `ws://127.0.0.1:${port}` });
+  log(`  驱动：miniprogram-automator（ws://127.0.0.1:${port}，需先跑 cli.bat auto）`);
+  return name;
+}
 
 async function waitPage(part, timeout = 9000) {
+  if (cli) return cli.waitPage(part, timeout);
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     const p = await mp.currentPage().catch(() => null);
@@ -85,6 +135,21 @@ async function waitPage(part, timeout = 9000) {
 }
 
 async function tap(sel, { index = 0, hold = 700, optional = false } = {}) {
+  if (cli) {
+    try {
+      await cli.tap(sel, { index, waitForSelector: sel });
+    } catch (e) {
+      // 索引点击不支持是配置问题，不是「元素没找到」，必须暴露给作者去改。
+      if (e.code === 'WECHATIDE_INDEX_UNSUPPORTED') throw e;
+      if (!optional) throw e;
+      log('  !! ' + e.message + '（跳过）');
+      await sleep(hold);
+      return false;
+    }
+    log('  tap', sel, '#' + index);
+    await sleep(hold);
+    return true;
+  }
   const page = await mp.currentPage();
   let els = [];
   try { els = await page.$$(sel); } catch { els = []; }
@@ -100,7 +165,23 @@ async function tap(sel, { index = 0, hold = 700, optional = false } = {}) {
   return true;
 }
 
+async function input(sel, value) {
+  if (cli) {
+    log('  input', sel);
+    return cli.input(sel, value);
+  }
+  const page = await mp.currentPage();
+  log('  input', sel);
+  return page.callMethod('onInput', { detail: { value: String(value) } });
+}
+
 async function scroll(top, ms = 700) {
+  if (cli) {
+    await cli.pageScrollTo(top);
+    log('  scroll', top);
+    await sleep(350);
+    return;
+  }
   try {
     await mp.evaluate((t, d) => new Promise((res) => {
       wx.pageScrollTo({ scrollTop: t, duration: d, complete: () => res(true) });
@@ -111,15 +192,15 @@ async function scroll(top, ms = 700) {
   await sleep(350);
 }
 
-const ctx = { mp: null, sleep, tap, scroll, waitPage, log, config: CFG, workDir: WORK };
+const ctx = { mp: null, cli: null, sleep, tap, input, scroll, waitPage, log, config: CFG, workDir: WORK };
 
 (async () => {
   fs.mkdirSync(path.join(WORK, 'capture'), { recursive: true });
   const OUT = path.resolve(argOf('out', path.join(WORK, 'capture', 'mp-demo.mkv')));
 
-  mp = await automator.connect({ wsEndpoint: `ws://127.0.0.1:${CFG.autoPort || 9420}` });
+  const driverName = await connectDriver();
   ctx.mp = mp;
-  console.log('automator connected');
+  ctx.cli = cli;
 
   for (const s of SCENES.scenes) {
     if (!ACTIONS[s.id]) throw new Error('actions.cjs 缺少场景动作: ' + s.id);
@@ -185,10 +266,20 @@ const ctx = { mp: null, sleep, tap, scroll, waitPage, log, config: CFG, workDir:
     await new Promise((res) => { rec.on('exit', res); setTimeout(res, 8000); });
   }
 
+  if (cli && CFG.closeWindow) {
+    try {
+      cli.closeWindow();
+      log('  已关闭项目窗口');
+    } catch (e) {
+      log('  [warn] 关闭项目窗口失败：' + e.message);
+    }
+  }
+
   const meta = {
     name: CFG.slug || CFG.outName || 'demo',
     title: CFG.cover ? CFG.cover.title : CFG.brand,
     fps: 25, file: OUT, dry: DRY,
+    driver: driverName, cliPath: cli ? cli.cliPath : undefined,
     spawnWall, syncWall, syncAt: (syncWall - spawnWall) / 1000,
     totalSec: (Date.now() - spawnWall) / 1000,
     scenes: marks

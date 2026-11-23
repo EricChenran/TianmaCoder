@@ -3,15 +3,20 @@
  * 小程序演示视频 · 环境体检
  * 用法：node doctor.mjs [--config demo/config.json]
  * 只依赖 Node 标准库；逐项给出「通过 / 缺失 + 修复命令」，缺失项按阶梯降级。
+ *
+ * 驱动优先级与 record.cjs 一致：wechatide CLI（开发者工具自带）优先，找不到才要求
+ * miniprogram-automator + 自动化端口。CLI 的门禁是「登录态 + 版本关系」，这里跑一次
+ * 只读状态查询；它可能先返回待授权，按提示在工具窗口点「允许」后重跑即可。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 
 const require_ = createRequire(import.meta.url);
+const { locateCli, readInstalledSkillVersion, createDriver } = require_('./wechatide.cjs');
+
 const args = process.argv.slice(2);
 const ci = args.indexOf('--config');
 const cfgPath = ci > -1 ? args[ci + 1] : 'config.json';
@@ -33,29 +38,52 @@ else { fail++; bad(`Node ${process.versions.node} 过低`, '升级到 Node 18+')
 /* 2. 开发者工具与项目 */
 title('2. 微信开发者工具');
 const devtools = cfg.devtools || 'D:\\微信web开发者工具';
-if (existsSync(path.join(devtools, 'cli.bat'))) ok('cli.bat: ' + devtools);
-else { fail++; bad('找不到 cli.bat（' + devtools + '）', 'config.json 的 devtools 指向安装目录'); }
+if (existsSync(devtools)) ok('安装目录: ' + devtools);
+else { fail++; bad('找不到开发者工具安装目录（' + devtools + '）', 'config.json 的 devtools 指向安装目录'); }
 
 const project = cfg.project;
 if (project && existsSync(path.join(project, 'app.json'))) ok('小程序项目: ' + project);
 else { fail++; bad('app.json 不存在（' + project + '）', 'config.json 的 project 指向含 app.json 的目录'); }
 
-/* 3. 自动化端口 */
-title('3. 自动化端口');
-const port = Number(cfg.autoPort || 9420);
-const probe = (p) => new Promise((resolve) => {
-  const s = net.connect({ host: '127.0.0.1', port: p }, () => { s.destroy(); resolve(true); });
-  s.on('error', () => resolve(false));
-  s.setTimeout(800, () => { s.destroy(); resolve(false); });
-});
-if (await probe(port)) ok(`ws://127.0.0.1:${port} 可连`);
-else {
-  warn('端口未监听 —— 录制前先启动：');
-  console.log(`         "${devtools}\\cli.bat" auto --project "${project}" --auto-port ${port}`);
+/* 3. 主驱动 wechatide（开发者工具自带 CLI） */
+title('3. 驱动 wechatide（优先）');
+const pref = String(cfg.driver || 'auto').toLowerCase();
+let located = null;
+try {
+  located = locateCli({ explicit: cfg.wechatide, devtools: cfg.devtools });
+} catch (e) {
+  fail++;
+  bad(e.message, '改 config.json 的 wechatide 路径，或删掉这一项让自动探测生效');
+}
+if (located) {
+  ok(`CLI: ${located.path}（来源 ${located.source}）`);
+  const skillVersion = cfg.skillVersion || readInstalledSkillVersion(cfg.devtools);
+  if (skillVersion) ok('工具自带 skill 版本: ' + skillVersion);
+  try {
+    const driver = createDriver({
+      cliPath: located.path,
+      clientName: cfg.clientName || 'TianmaCoder',
+      skillVersion,
+      authTimeoutMs: cfg.authTimeoutMs || 60000,
+    });
+    const status = driver.ensureReady();
+    const who = status && status.loginUser ? (status.loginUser.nickName || status.loginUser.openid) : null;
+    ok(`登录态正常${who ? '：' + who : ''}；版本关系 ${status && status.versionRelation ? status.versionRelation : 'unknown'}`);
+    ok('录制时会自动打开项目窗口（幂等，已开则复用）');
+  } catch (e) {
+    warn(`门禁未通过：${e.message}`);
+    console.log('         -> 首次使用在开发者工具弹窗里点「允许」；登录过期先扫码登录，再重跑 doctor');
+  }
+} else if (pref === 'wechatide') {
+  fail++;
+  bad('driver=wechatide 但没找到 CLI', '把安装目录写进 config.json 的 devtools 或 wechatide');
+} else {
+  warn('未找到 wechatide CLI —— 退回 automator 模式（见下一节）');
 }
 
-/* 4. automator 模块 */
-title('4. miniprogram-automator');
+/* 4. 备用驱动 miniprogram-automator */
+title('4. 备用驱动 miniprogram-automator');
+const needAutomator = !located || pref === 'automator';
 let found = null;
 if (cfg.automatorModule && existsSync(cfg.automatorModule)) found = cfg.automatorModule;
 if (!found) {
@@ -65,9 +93,25 @@ if (!found) {
   }
 }
 if (found) ok(found);
-else {
+else if (needAutomator) {
   fail++;
   bad('未安装', '在 workDir 里 `npm i miniprogram-automator`，或 config.json 写 automatorModule 指向入口文件');
+} else {
+  ok('未安装（不需要：已有 wechatide 驱动）');
+}
+
+const port = Number(cfg.autoPort || 9420);
+const probe = (p) => new Promise((resolve) => {
+  const s = net.connect({ host: '127.0.0.1', port: p }, () => { s.destroy(); resolve(true); });
+  s.on('error', () => resolve(false));
+  s.setTimeout(800, () => { s.destroy(); resolve(false); });
+});
+if (await probe(port)) ok(`ws://127.0.0.1:${port} 可连`);
+else if (needAutomator) {
+  warn('自动化端口未监听 —— 录制前先启动：');
+  console.log(`         "${devtools}\\cli.bat" auto --project "${project}" --auto-port ${port}`);
+} else {
+  ok('自动化端口未监听（不需要：已有 wechatide 驱动）');
 }
 
 /* 5. ffmpeg */
@@ -120,6 +164,9 @@ for (const key of ['outDir', 'workDir']) {
 }
 
 title('结论');
-if (fail === 0) console.log('  必需项全部通过，可以写 scenes.json / actions.cjs 并干跑。');
-else console.log(`  ${fail} 项必需能力缺失，先按上面的修复命令处理。`);
+if (fail === 0) {
+  console.log(`  必需项全部通过，可以写 scenes.json / actions.cjs 并干跑（驱动：${located ? 'wechatide' : 'automator'}）。`);
+} else {
+  console.log(`  ${fail} 项必需能力缺失，先按上面的修复命令处理。`);
+}
 process.exit(fail === 0 ? 0 : 1);

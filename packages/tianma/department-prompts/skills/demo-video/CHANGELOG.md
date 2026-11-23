@@ -1,5 +1,37 @@
 # 变更记录 · demo-video
 
+## 3.1.0
+
+小程序侧改用开发者工具自带的 `wechatide` CLI 驱动，`miniprogram-automator` 降为兜底。
+
+### 新增
+
+- `miniprogram/scripts/wechatide.cjs`：CLI 驱动。定位 `wechatide`（`config.wechatide` →
+  `DSH_WECHATIDE_CMD` → PATH → 安装目录），用 `check_wechatide_status` 做登录门禁、
+  `open_project_window` 幂等开窗，元素 / 页面 / 导航 / 滚动 / 截图 / 表达式 / wx API 各一层薄封装。
+  toolCall 返回 `pending + taskId` 时自动 `polling_task_result` 轮询；授权超时、登录过期、
+  `APPID_ERROR` 等分型成带 `code` 的错误。
+- `miniprogram/references/wechatide-cli.md`：录制用到的工具表、三条硬约束、失败码，以及与
+  automator 的行为差异。
+
+### 变更
+
+- `record.cjs`：`config.driver` / `--driver` 取 `auto`（默认）/ `wechatide` / `automator`；`auto`
+  优先 CLI。CLI 模式下由驱动开窗、等首页、按选择器点按，`mp` 变成兼容层（`currentPage`、
+  `navigate*`、`pageScrollTo`、`evaluate`、`callWxMethod`、`screenshot`）；`marks.json`
+  额外记录 `driver` 与 `cliPath`。新增 `ctx.input(sel, value)`。
+- `doctor.mjs`：新增 wechatide 段（CLI 路径与来源、工具自带 skill 版本、登录态、版本关系）；
+  automator 与自动化端口降为「没有 CLI 时才必需」。
+- `example.config.json`：补 `driver` / `wechatide` / `clientName` / `windowMode` / `authTimeoutMs`。
+- 同选择器多命中时，CLI 模式按包围盒中心坐标点击；取不到坐标报
+  `WECHATIDE_INDEX_UNSUPPORTED`，不再静默点第一个。
+
+### 已知限制
+
+- CLI 的元素工具没有索引语义，索引点击依赖 `createSelectorQuery` 取包围盒；写动作时优先唯一选择器。
+- 占位 appid（`touristappid`）在开发者工具 GUI 里能开，CLI 直接返回 `APPID_ERROR`，录制要用真实 appid。
+- `mpShim` 只覆盖演示录制需要的 automator 接口；automator 独有的 mock 语义没有对应实现。
+
 ## 3.0.1
 
 - **修复 `tts.ps1` 在 Windows PowerShell 5.1 下无法解析**：脚本头部是中文注释却没有 BOM，

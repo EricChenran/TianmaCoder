@@ -128,11 +128,11 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-处于技术部模式的会话多出一条目录项 `demo-video`，描述为按录制对象分流：微信小程序走开发者工具 + `miniprogram-automator`，ffmpeg 抓屏、Python 合成；Web 应用走无头 Chromium + CDP，逐帧抓屏、ffmpeg 出片，字幕必出、旁白可选。加载后返回分流表与两套引擎的输入、验收门禁、踩坑清单，以及脚本被发布到的资源基准；模型对 Web 执行 `node <基准>/web/scripts/webdemo.mjs doctor|probe|record|build`，对小程序依次执行 `<基准>/miniprogram/scripts` 下的 `doctor.mjs`、`record.cjs`、`compose.py`。商务部模式与其他模式没有这条目录项。
+处于技术部模式的会话多出一条目录项 `demo-video`，描述为按录制对象分流：微信小程序走开发者工具自带的 `wechatide` CLI（缺则 `miniprogram-automator`），ffmpeg 抓屏、Python 合成；Web 应用走无头 Chromium + CDP，逐帧抓屏、ffmpeg 出片，字幕必出、旁白可选。加载后返回分流表与两套引擎的输入、验收门禁、踩坑清单，以及脚本被发布到的资源基准；模型对 Web 执行 `node <基准>/web/scripts/webdemo.mjs doctor|probe|record|build`，对小程序依次执行 `<基准>/miniprogram/scripts` 下的 `doctor.mjs`、`record.cjs`、`compose.py`。商务部模式与其他模式没有这条目录项。
 
 #### Token 影响
 
-技术部模式下每请求一条目录行（描述 368 字符，上限 500），加上真正加载它的步骤所产生的正文开销（约 12.7 KB）。商务部模式与其他模式零开销。
+技术部模式下每请求一条目录行（描述 398 字符，上限 500），加上真正加载它的步骤所产生的正文开销（约 13.9 KB）。商务部模式与其他模式零开销。
 
 #### KV 缓存影响
 
@@ -196,7 +196,7 @@ kind: "package-reference"
 - **技术部与测试员规则点名的 Agent 浏览器能力不随该模式交付**——`browser_*` 工具族来自可选的浏览器自动化插件包，与部门无关；未启用时规则要求模型先说明，再改用其他真实入口手段验证，不谎称做过浏览器验证。
 - **每个 harness home 的工具箱目录与技能目录按名字共用**——所有部门会话共用 `department/business-tools`、`department/skills/official-doc` 与 `department/skills/bootstrapmb-template-fetch`，商务部会话另加 `department/skills/proposal-doc`，技术部会话另加 `department/skills/demo-video` 与 `department/skills/ui-confirmation-doc`。
 - **UI 界面确认单技能的小程序半边需要已登录的微信开发者工具**——截图脚本要驱动 IDE 的自动化端口，该端口须先在 IDE 的安全设置里打开，且脚本从发布目录导入 `miniprogram-automator`、不随包携带。这两项不具备时，Web 半边照常可用，小程序半边拍不了。
-- **演示视频技能的小程序半边需要已登录的微信开发者工具并打开自动化端口**——该引擎通过 `miniprogram-automator` 驱动 IDE、用 ffmpeg 抓桌面、用 Pillow 合成；缺这些时 Web 半边照常可用，小程序半边录不出来。
+- **演示视频技能的小程序半边需要已登录的微信开发者工具与真实 AppID**——该引擎通过开发者工具自带的 `wechatide` CLI 驱动 IDE（CLI 缺失时退回 `miniprogram-automator`），用 ffmpeg 抓桌面、用 Pillow 合成；`touristappid` 这类占位 appid 会被 CLI 拒绝。缺这些时 Web 半边照常可用，小程序半边录不出来。
 
 <a id="dev-note"></a>
 ### 开发备注

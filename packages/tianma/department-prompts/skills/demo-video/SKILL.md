@@ -4,16 +4,17 @@ display_name: "演示视频（小程序 + Web 后台）"
 display_name_en: "Demo Video (Mini Program and Web App)"
 description: >-
   把微信小程序和 Web 应用（后台、官网、H5）录成演示视频：先按录制对象分流——小程序侧用
-  miniprogram-automator 驱动开发者工具里的真实页面、ffmpeg 抓屏、Python 合成手机框与章节高亮、
-  逐句字幕、中文旁白；Web 侧用无头 Chromium + CDP 驱动真实点击、逐帧抓屏、ffmpeg 出片，
-  字幕必出、旁白可选。两套引擎各自只认一份输入：小程序侧 config + scenes + actions 三件套，
-  Web 侧单个 plan.json。适用于客户交付演示、版本验收留存、运营讲解素材，以及用真实点击
-  暴露静态检查发现不了的前端缺陷。触发词：演示视频、录屏、操作演示、功能演示、demo 视频、
-  小程序录屏、后台演示、miniprogram automator、无头浏览器、CDP。
+  开发者工具自带的 wechatide CLI 驱动真实页面（缺则 miniprogram-automator）、ffmpeg 抓屏、
+  Python 合成手机框与章节高亮、逐句字幕、中文旁白；Web 侧用无头 Chromium + CDP 驱动真实点击、
+  逐帧抓屏、ffmpeg 出片，字幕必出、旁白可选。两套引擎各自只认一份输入：小程序侧
+  config + scenes + actions 三件套，Web 侧单个 plan.json。适用于客户交付演示、版本验收留存、
+  运营讲解素材，以及用真实点击暴露静态检查发现不了的前端缺陷。触发词：演示视频、录屏、
+  操作演示、功能演示、demo 视频、小程序录屏、后台演示、miniprogram automator、wechatide、
+  无头浏览器、CDP。
 description_zh: "小程序（开发者工具 + automator）与 Web 后台（无头 Chromium + CDP）两条引擎合成演示视频，按录制对象分流。"
 description_en: "Record demo videos for WeChat mini programs (DevTools + automator) and web apps (headless Chromium + CDP), picked by capture target."
 category: media
-version: 3.0.1
+version: 3.1.0
 runtime: generic
 tags:
   - "演示视频"
@@ -32,10 +33,10 @@ agent_created: true
 把「一堆页面截图」变成「一段能发客户的视频」：真实页面、真实点击、真实接口数据。本技能装了
 **两套引擎**，先按录制对象分流，再照那一半做；两半的脚本、参考文档、坑清单互不依赖。
 
-| 录制对象 | 走哪一半 | 输入 | 画面来源 |
-|---|---|---|---|
-| 微信小程序（竖屏） | `miniprogram/` | `config.json` + `scenes.json` + `actions.cjs` | 微信开发者工具模拟器，ffmpeg `ddagrab` 抓整屏 |
-| 管理后台 / 官网 / H5（横屏为主） | `web/` | 单个 `plan.json` | 无头 Chromium 页面内逐帧截图 |
+| 录制对象 | 走哪一半 | 输入 | 驱动 | 画面来源 |
+|---|---|---|---|---|
+| 微信小程序（竖屏） | `miniprogram/` | `config.json` + `scenes.json` + `actions.cjs` | 开发者工具自带 `wechatide` CLI 优先，缺则 `miniprogram-automator` | 微信开发者工具模拟器，ffmpeg `ddagrab` 抓整屏 |
+| 管理后台 / 官网 / H5（横屏为主） | `web/` | 单个 `plan.json` | 无头 Chromium + CDP | 无头 Chromium 页面内逐帧截图 |
 
 命令里的 `<技能>` 指加载本技能时给出的资源基准目录（本技能被发布到磁盘上的位置），
 「相对技能目录」指相对同一个 `<技能>`。
@@ -84,6 +85,8 @@ python <技能>/miniprogram/scripts/compose.py --config demo/config.json
 
 `compose.py` 需要 Pillow + numpy；系统 Python 没装这两个库时，用应用自带的解释器。
 动作先用 `--dry` 干跑校验（约 30 秒），过了再正式录——**不要重录**是提速的关键。
+录制默认自动选驱动（见下节）；要强制走 automator，加 `--driver automator`，并先自己跑
+`cli.bat auto --project <项目> --auto-port <端口>`。
 
 ### 三份输入
 
@@ -93,8 +96,23 @@ python <技能>/miniprogram/scripts/compose.py --config demo/config.json
 - `scenes.json`：`fps` + `scenes[]`，每项 `id`、`chapter`（右侧章节条 2–5 字）、`caption`
   （字幕兼旁白，25–45 字）、`minSec`。`id` 必须与 `actions.cjs` 的键一一对应；实际时长 =
   `max(minSec, 旁白时长 + 2.0)`，保证旁白念完才切下一场。
-- `actions.cjs`：`scenes` 映射场景 id 到一个 `async` 函数，`record.cjs` 传 `{ mp, tap,
-  scroll, waitPage, sleep, log, config, workDir }`。
+- `actions.cjs`：`scenes` 映射场景 id 到一个 `async` 函数，`record.cjs` 传 `{ mp, cli, tap,
+  input, scroll, waitPage, sleep, log, config, workDir }`。
+
+### 驱动：wechatide 优先（稳定性的关键）
+
+录制时优先用开发者工具自带的 `wechatide` CLI：它替我们做掉四件最容易出事的事——登录门禁、
+按项目开窗（幂等，已开则复用）、元素操作自带的等待、以及异步授权轮询。CLI 不在（老版本工具）
+才退回 `miniprogram-automator`，那时要自己开自动化端口。
+
+- 定位顺序：`config.wechatide` → 环境变量 `DSH_WECHATIDE_CMD` → PATH 上的 `wechatide` → 常见安装目录。
+- 首次使用会在开发者工具里弹授权窗（按 clientName 记忆，本技能默认 `TianmaCoder`）；**没人点
+  「允许」就一直等**，`record.cjs` 会打印提示并在 `config.authTimeoutMs`（默认 180 秒）后报错。
+- 用模拟器窗口录制（`config.windowMode: "liteMode"`），画面里没有编辑器与调试器；**不要再手工跑
+  `cli.bat auto`**——两套自动化会抢同一个项目。
+- 索引点击（`tap(sel, { index })`）在 CLI 模式下按包围盒中心坐标实现；取不到坐标会明确报
+  `WECHATIDE_INDEX_UNSUPPORTED`，宁可失败也不点错元素，优先写唯一选择器。
+- 参数、失败码与 automator 的差异见 `miniprogram/references/wechatide-cli.md`。
 
 ### 必须知道的机制（照着做，别改）
 
@@ -109,6 +127,10 @@ python <技能>/miniprogram/scripts/compose.py --config demo/config.json
    按 176400 算会得到一半，旁白互相重叠。
 6. **TTS 语速用 `Rate = 2`。** SAPI 默认 0 太慢。
 7. 章节高亮、字幕、旁白、进度条共用一套相对时间（相对第一个场景），不要各自换算。
+8. **授权与登录是两件事。** 返回 `pending + taskId` 是「等你点允许」，不是失败；`loginExpired: true`
+   才是登录过期，得先在工具里扫码。两件事都不处理就开录，只会录到登录页。
+9. **`APPID_ERROR` 不是环境问题。** 项目 appid 必须在该账号下真实存在；`touristappid` 这类占位符
+   开发者工具 GUI 能开，CLI 不接受，要在 `project.config.json` 换成真 appid。
 
 时间轴数学见 `miniprogram/references/pipeline.md`。
 
@@ -124,8 +146,12 @@ python <技能>/miniprogram/scripts/compose.py --config demo/config.json
 | 画面里是 IDE 而不是小程序 | 开发者工具没置前 | 录制前最大化 + 置前 |
 | 画面有鼠标指针 | 桌面抓屏带光标 | 录制期间别动鼠标 |
 | 旁白比画面短很多 | `minSec` 写死 | 用 `durations.json + 2.0` 兜底 |
+| 一直卡在「等授权」 | 授权弹窗没人点，或 clientName 变了 | 在工具窗口点「允许」；同一环境保持 clientName 不变 |
+| `APPID_ERROR` | 项目用了占位 appid | `project.config.json` 换成真实 appid |
+| `tap(…, { index })` 报 `INDEX_UNSUPPORTED` | CLI 元素工具没有索引语义，且取不到包围盒 | 改唯一选择器，或 `--driver automator` |
+| 录到登录页 | 开发者工具登录过期 | 先扫码登录；`doctor` 的登录态应为正常 |
 
-其它：录制前确认后端已起（空数据录出来是白板）；开发者工具必须开自动化端口
+其它：录制前确认后端已起（空数据录出来是白板）；用 automator 兜底时开发者工具要先开自动化端口
 （`cli.bat auto --project <dir> --auto-port <port>`，端口起来后 `ws://127.0.0.1:<port>`
 才连得上）；`miniprogram-automator` 不随包发布，先在 `workDir` 里 `npm i miniprogram-automator`，
 或用 `config.json` 的 `automatorModule` 指向它的入口；不要在录制中途跑别的 GUI 操作。
@@ -248,8 +274,8 @@ ffmpeg -hide_banner -i out.mp4 -af volumedetect -f null -
 <技能>/
 ├── SKILL.md
 ├── miniprogram/
-│   ├── scripts/{doctor.mjs,record.cjs,tts.ps1,compose.py}
-│   └── references/{pipeline.md,pitfalls.md,example.config.json,example.scenes.json,example.actions.cjs}
+│   ├── scripts/{doctor.mjs,record.cjs,wechatide.cjs,tts.ps1,compose.py}
+│   └── references/{pipeline.md,pitfalls.md,wechatide-cli.md,example.config.json,example.scenes.json,example.actions.cjs}
 └── web/
     ├── scripts/webdemo.mjs + scripts/core/{capture,cdp,env,media,page}.mjs
     └── references/{environment-matrix.md,pitfalls.md,step-dsl.md,plan-example.json,plan-example-13steps.json}

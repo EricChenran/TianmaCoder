@@ -128,11 +128,11 @@ The catalog line sits in the stable prefix of a department session; loading the 
 
 #### What the model sees
 
-Sessions in the 技术部 mode carry one more catalog entry, `demo-video`, described as recording a demo video of either a WeChat mini program or a web app, routed by capture target. Loading it returns the routing table and both engines — mini programs through `miniprogram-automator` inside WeChat DevTools with ffmpeg screen capture and a Python compose step, web apps through CDP in headless Chromium with frame capture and ffmpeg assembly — plus each half's inputs, acceptance gates, pitfall list, and the base where the scripts were published. The model runs `node <base>/web/scripts/webdemo.mjs doctor|probe|record|build` for web, and `doctor.mjs`, `record.cjs`, `compose.py` under `<base>/miniprogram/scripts` for mini programs. The 商务部 mode and every other mode carry no such entry.
+Sessions in the 技术部 mode carry one more catalog entry, `demo-video`, described as recording a demo video of either a WeChat mini program or a web app, routed by capture target. Loading it returns the routing table and both engines — mini programs through the DevTools `wechatide` CLI (falling back to `miniprogram-automator` when the CLI is absent) with ffmpeg screen capture and a Python compose step, web apps through CDP in headless Chromium with frame capture and ffmpeg assembly — plus each half's inputs, acceptance gates, pitfall list, and the base where the scripts were published. The model runs `node <base>/web/scripts/webdemo.mjs doctor|probe|record|build` for web, and `doctor.mjs`, `record.cjs`, `compose.py` under `<base>/miniprogram/scripts` for mini programs. The 商务部 mode and every other mode carry no such entry.
 
 #### Token effect
 
-One catalog line per request in the 技术部 mode (368-character description, capped at 500), plus the loaded body's ~12.7 KB for the steps that load it. The 商务部 mode and other modes pay nothing.
+One catalog line per request in the 技术部 mode (398-character description, capped at 500), plus the loaded body's ~13.9 KB for the steps that load it. The 商务部 mode and other modes pay nothing.
 
 #### KV Cache effect
 
@@ -196,7 +196,7 @@ These limits define where the row is a poor fit. They are current package constr
 - **The Agent browser the 技术部 and 测试员 rules name does not ship with the mode** — the `browser_*` tool family comes from the optional browser-automation plugin bundle, independent of departments; when it is not enabled the rules require the model to say so and verify through other real-entry means instead of claiming browser verification.
 - **Toolbox and skill directories are shared by name per harness home** — every department session shares `department/business-tools`, `department/skills/official-doc`, and `department/skills/bootstrapmb-template-fetch`, a 商务部 session additionally publishes `department/skills/proposal-doc`, and a 技术部 session additionally publishes `department/skills/demo-video` and `department/skills/ui-confirmation-doc`.
 - **The UI-confirmation skill needs a logged-in WeChat DevTools for the mini-program half** — the capture script drives the IDE's automation port, which the IDE enables only after it is switched on in its security settings, and it imports `miniprogram-automator` from the published skill directory rather than shipping it. Without those the Web half still runs and the mini-program half cannot be captured.
-- **The demo-video mini program half needs a logged-in WeChat DevTools with its automation port on** — the engine drives the IDE through `miniprogram-automator`, captures the desktop with ffmpeg, and composes with Pillow; without those the web half still runs and the mini program half cannot be captured.
+- **The demo-video mini program half needs a logged-in WeChat DevTools and a real AppID** — the engine drives the IDE through the DevTools `wechatide` CLI (falling back to `miniprogram-automator` when the CLI is absent), captures the desktop with ffmpeg, and composes with Pillow; placeholder AppIDs such as `touristappid` are rejected by the CLI. Without those the web half still runs and the mini program half cannot be captured.
 
 <a id="dev-note"></a>
 ### Dev Note
