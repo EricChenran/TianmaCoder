@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Browse a Session's workspace tree and open files in Sidebar previews. The root and expanded directories refresh automatically from direct-entry watches; manual reload remains available. The tab is reached from the guide and claims no resource address.
+Browse a Session's workspace tree and open files in Sidebar previews. Right-clicking a row opens a menu whose "Add to chat" item appends that file or directory to the Session composer as a reference chip, without sending it. The root and expanded directories refresh automatically from direct-entry watches; manual reload remains available. The tab is reached from the guide and claims no resource address.
 
 ## Table of Contents
 

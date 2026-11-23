@@ -16,6 +16,8 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { FILES_ID, filesDefinition } from './definition.tsx'
 import { createList, createWatch, filesFace } from './face.ts'
 import { FilesBody } from './FilesBody.tsx'
@@ -49,7 +51,7 @@ const NS = 'sidebarFiles'
  * Required browser services: the tab registry, the keyed seat, the Remote
  * carrier and its namespace, and copy.
  */
-export const inject = ['slots', 'locale', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.workspaceFiles']
+export const inject = ['slots', 'locale', 'sessions', 'sidebarRightTabs', 'sidebarRight', 'remote', 'remote.workspaceFiles']
 
 /**
  * Client plugin body: register the type, its dictionaries, its body, and its chip title.
@@ -82,7 +84,35 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-sidebar-files: dictionaries')
 
   const store = createFilesStore()
-  const inject = filesFace(createList(ctx.remote), createWatch(ctx.remote))
+  /**
+   * Append one workspace path to a session's draft as an `@` reference chip.
+   * @param sessionId - session owning the composer.
+   * @param path - path as the tree addresses it.
+   * @param kind - whether the row is a file or a directory.
+   * @returns whether the chip was inserted.
+   */
+  const insertFileReference = (sessionId: SessionId, path: string, kind: 'file' | 'directory'): boolean => {
+    const scoped = ctx.sessions.scope(sessionId)
+    const conversation = scoped?.get('conversation')
+    if (scoped === undefined || conversation === undefined) return false
+    const input = conversation.input.for(scoped)
+    const state = input.state.getSnapshot()
+    if (state.phase !== 'plain') return false
+    const at = state.draft.length
+    const separator = at > 0 && !/s$/u.test(state.draft) ? ' ' : ''
+    const label = path.slice(path.lastIndexOf('/') + 1)
+    const mention = formatFileMention({ path, kind }, false)
+    if (mention === undefined) return false
+    input.setDraft(state.draft + separator)
+    const appended = input.state.getSnapshot()
+    const caret = appended.draft.length
+    return input.insertReference(
+      { source: 'file', ref: path, label, clipboardText: mention },
+      { start: caret, end: caret, draftRev: appended.draftRev },
+    )
+  }
+
+  const inject = filesFace(createList(ctx.remote), createWatch(ctx.remote), insertFileReference)
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     {
       name: 'sidebar.right.pane.tab', key: FILES_ID, locale: NS, store, inject,

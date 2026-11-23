@@ -8,7 +8,7 @@
  * anything else is shown but refuses to open. The header uses the shared
  * PathLabel for the root, followed by reload and workspace directory actions.
  */
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
@@ -16,7 +16,7 @@ import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, TranslateNS,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import {
-  FileTypeIcon, IconFolderCloseRegular, IconFolderOpenRegular, IconRefreshOutlineRegular, Tooltip, classifyFileType,
+  FileTypeIcon, IconFolderCloseRegular, IconFolderOpenRegular, IconRefreshOutlineRegular, Menu, Tooltip, classifyFileType,
   IconPauseOutlineRegular, IconPlayOutlineRegular, PathLabel,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
@@ -74,6 +74,8 @@ interface TreeContext {
   readonly state: FilesTabState
   readonly onToggle: (parent: string, path: string) => void
   readonly onOpen: (path: string) => void
+  /** Open the row's context menu at the pointer. */
+  readonly onContextMenu: (path: string, kind: 'file' | 'directory', event: { clientX: number; clientY: number }) => void
   readonly t: TranslateNS<'sidebarFiles'>
 }
 
@@ -84,7 +86,13 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
     const expanded = tree.state.expanded.includes(path)
     return (
       <li className={css.item} data-files-entry="directory" data-files-path={path}>
-        <button type="button" className={css.row} aria-expanded={expanded} onClick={() => { tree.onToggle(parent, path) }}>
+        <button
+          type="button"
+          className={css.row}
+          aria-expanded={expanded}
+          onClick={() => { tree.onToggle(parent, path) }}
+          onContextMenu={(event) => { event.preventDefault(); tree.onContextMenu(path, 'directory', event) }}
+        >
           {expanded ? <IconFolderOpenRegular className={css.icon} /> : <IconFolderCloseRegular className={css.icon} />}
           <span className={css.name}>{entry.name}</span>
         </button>
@@ -95,7 +103,12 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
   if (entry.type === 'file') {
     return (
       <li className={css.item} data-files-entry="file" data-files-path={path}>
-        <button type="button" className={css.row} onClick={() => { tree.onOpen(path) }}>
+        <button
+          type="button"
+          className={css.row}
+          onClick={() => { tree.onOpen(path) }}
+          onContextMenu={(event) => { event.preventDefault(); tree.onContextMenu(path, 'file', event) }}
+        >
           <FileTypeIcon kind={classifyFileType(entry.name)} size={16} className={css.fileIcon} />
           <span className={css.name}>{entry.name}</span>
         </button>
@@ -138,7 +151,7 @@ function Level({ path, tree }: { path: string; tree: TreeContext }): ReactNode {
 
 /** The file tree's body: the workspace root and whatever the reader has opened under it. */
 export function FilesBody({
-  useTabInfo, sessionId, useSessions, useStore, actions,
+  useTabInfo, sessionId, useSessions, useStore, actions, addToChat,
   start, refresh, setAutoRefresh, toggle, t, renderSlot,
 }: FilesBodyProps): ReactNode {
   const { tab } = useTabInfo()
@@ -172,6 +185,8 @@ export function FilesBody({
     start(tab.id, cwd, signal)
   }, [state, cwd, tab.id, signal, start])
 
+  const [menu, setMenu] = useState<{ path: string; kind: 'file' | 'directory'; rect: DOMRect } | null>(null)
+
   if (cwd === undefined) {
     return (
       <div className={css.status} data-files-state="no-workspace">
@@ -185,6 +200,9 @@ export function FilesBody({
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
     // Every row is under the tree's root, so its address is session-relative.
     onOpen: (path) => { tabActions.openResource(fileAddressFor(sessionId, state.root, path)) },
+    onContextMenu: (path, kind, event) => {
+      setMenu({ path, kind, rect: new DOMRect(event.clientX, event.clientY, 0, 0) })
+    },
     t,
   }
   const reload = (): void => {
@@ -226,6 +244,19 @@ export function FilesBody({
       >
         <ul className={css.level}><Level path={state.root} tree={tree} /></ul>
       </div>
+      <Menu
+        open={menu !== null}
+        portal
+        anchor={null}
+        getAnchorRect={() => menu?.rect ?? null}
+        items={[{ id: 'add-to-chat', label: t('menu.addToChat') }]}
+        onSelect={() => {
+          if (menu !== null) addToChat(menu.path, menu.kind)
+          setMenu(null)
+        }}
+        onClose={() => { setMenu(null) }}
+        autoFocus
+      />
     </div>
   )
 }

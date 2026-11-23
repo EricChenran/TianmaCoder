@@ -116,6 +116,11 @@ export function childPath(parent: string, name: string): string {
 export interface FilesInjected {
   /** Refresh the open directory tree. @param tabId - owning tab. */
   readonly refresh: (tabId: TabId) => void
+  /**
+   * Insert one workspace path into the session's composer as a reference chip.
+   * @param path - path as the tree addresses it.
+   */
+  readonly addToChat: (path: string, kind: 'file' | 'directory') => void
   /** Control automatic rereads without closing watches. @param tabId - owning tab. @param enabled - automatic-refresh setting. */
   readonly setAutoRefresh: (tabId: TabId, enabled: boolean) => void
   /**
@@ -152,6 +157,7 @@ export interface FilesInjected {
 export function filesFace(
   list: ListWorkspaceDirectory,
   watch: WatchWorkspaceDirectory,
+  insertFileReference: (sessionId: SessionId, path: string, kind: 'file' | 'directory') => boolean,
 ): (sessionId: SessionId, actions: BoundActions<ReturnType<typeof createFilesStore>>) => FilesInjected {
   return (
     sessionId: SessionId,
@@ -181,6 +187,7 @@ export function filesFace(
       })
     }
     return {
+      addToChat: (path, kind) => { insertFileReference(sessionId, path, kind) },
       refresh: (tabId) => { void roots.get(tabId)?.refreshTree() },
       setAutoRefresh: (tabId, enabled) => {
         actions.autoRefresh(tabId, enabled)

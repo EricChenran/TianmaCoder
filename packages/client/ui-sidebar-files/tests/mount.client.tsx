@@ -54,6 +54,8 @@ export interface Mounted {
   readonly face: FilesInjected
   readonly controller: AbortController
   readonly tabActions: MockedTabActions
+  /** Spy standing in for the plugin's composer insertion. */
+  readonly insertFileReference: Mock<() => boolean>
   /** Render a fresh body over the same store and face, as a tab switch remounts it. */
   readonly remount: () => RenderResult
 }
@@ -62,7 +64,8 @@ export interface Mounted {
 function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut']) {
   const instance = createFilesStore().create()
   const script = scriptedList()
-  const face = filesFace(script.list, script.watch)(SESSION, instance.actions)
+  const insertFileReference = vi.fn(() => true)
+  const face = filesFace(script.list, script.watch, insertFileReference)(SESSION, instance.actions)
   const controller = new AbortController()
   onTestFinished(async () => {
     controller.abort()
@@ -95,7 +98,7 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
     ...face,
     t: makeTranslate(zh),
   }
-  return { instance, script, face, controller, tabActions, shared }
+  return { instance, script, face, controller, tabActions, insertFileReference, shared }
 }
 
 /**

@@ -59,6 +59,7 @@ async function boot() {
   ctx.provide('sidebarRightTabs', tabs as never)
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
+  ctx.provide('sessions', { scope: vi.fn(() => undefined) } as never)
   ctx.provide('remote', { workspaceFiles } as never)
   ctx.provide('remote.workspaceFiles', workspaceFiles as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })

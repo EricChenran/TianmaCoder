@@ -28,6 +28,20 @@ function names(root: HTMLElement): string[] {
 }
 
 describe('FilesBody', () => {
+  it('offers "add to chat" on a file row menu and hands the path to the session composer', async () => {
+    const { view, script, insertFileReference } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const row = view.getByRole('button', { name: /README\.md/u })
+    await act(async () => { fireEvent.contextMenu(row, { clientX: 10, clientY: 20 }) })
+    const item = [...document.body.querySelectorAll('[role="menuitem"]')]
+      .find(node => node.textContent === zh['menu.addToChat'])
+    if (item === undefined) throw new Error('no add-to-chat menu row')
+    await act(async () => { fireEvent.click(item) })
+    expect(insertFileReference).toHaveBeenCalledWith(SESSION, `${ROOT}/README.md`, 'file')
+    expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
+  })
+
   it('displays the effective file-tree refresh accelerator', async () => {
     const { view, script } = mountBody(ROOT, { id: 'page.refresh' as never, label: 'Refresh', aliases: [],
       binding: null, keys: ['Ctrl', 'R'], aria: 'Control+R', modified: true, conflicts: [], issue: null })
