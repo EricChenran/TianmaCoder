@@ -11,13 +11,16 @@ import type {
   OaApprovalActionRequest,
   OaApprovalDetail,
   OaApprovalTab,
-  OaCaptcha,
+  OaAttendanceSummary,
   OaAttendanceToday,
+  OaCaptcha,
   OaMessage,
   OaNotificationPreference,
   OaNotificationPreferencePatch,
+  OaSchedule,
   OaSessionView,
   OaStats,
+  OaTaskGroup,
   OaTodo,
   OaUser,
 } from '@tianma/dsh-oa-account/types'
@@ -93,7 +96,7 @@ export interface OaAccountInjected {
 }
 
 /** The workbench modules this panel opens. */
-export type OaWorkbenchModule = 'overview' | 'messages' | 'approval' | 'todos'
+export type OaWorkbenchModule = 'overview' | 'messages' | 'approval' | 'schedules' | 'tasks' | 'attendance' | 'todos'
 
 /** One loaded slice, so a failed read reports itself without clearing the others. */
 export interface OaWorkbenchSlice<T> {
@@ -178,4 +181,29 @@ export interface OaWorkbenchInjected {
    * @throws when the backend refuses the decision.
    */
   actOnApproval: (request: OaApprovalActionRequest) => Promise<void>
+  /**
+   * Read today's schedule.
+   * @returns today's entries, leave lines included.
+   * @throws when the backend refuses the read.
+   */
+  loadSchedules: () => Promise<readonly OaSchedule[]>
+  /**
+   * Read this account's task board.
+   * @returns the deadline buckets the backend populated.
+   * @throws when the backend refuses the read.
+   */
+  loadTaskBoard: () => Promise<readonly OaTaskGroup[]>
+  /**
+   * Mark one task complete.
+   * @param id - the task id.
+   * @throws when the backend refuses the write.
+   */
+  completeTask: (id: number) => Promise<void>
+  /**
+   * Read one month's attendance summary.
+   * @param period - `YYYY-MM`; absent reads the current month.
+   * @returns the summary the backend computed.
+   * @throws when the backend refuses the read.
+   */
+  loadAttendanceSummary: (period?: string) => Promise<OaAttendanceSummary>
 }

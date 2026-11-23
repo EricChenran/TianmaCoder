@@ -10,6 +10,7 @@ import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { OaMessage } from '@tianma/dsh-oa-account/types'
 import { OaApprovalsModule } from './Approvals.tsx'
+import { OaAttendanceModule, OaSchedulesModule, OaTasksModule } from './Modules.tsx'
 import type { OaWorkbenchInjected, OaWorkbenchModule } from '../contract.ts'
 import type { OaWorkbenchKey } from './locales.ts'
 import css from './Workbench.module.css'
@@ -24,13 +25,45 @@ type MessageFilter = 'all' | 'unread'
 /** A second-level tab inside the messages module. */
 type MessageTab = 'list' | 'settings' | `doc:${number}`
 
+/** Tab order; each module's copy key is `module` + its capitalized id. */
+const MODULE_ORDER: Readonly<Record<OaWorkbenchModule, true>> = {
+  overview: true,
+  messages: true,
+  approval: true,
+  todos: true,
+  schedules: true,
+  tasks: true,
+  attendance: true,
+}
+
+/** The module tabs, in the order the strip shows them. */
+const MODULES = Object.keys(MODULE_ORDER) as readonly OaWorkbenchModule[]
+
+/**
+ * @param t - bound copy of the workbench namespace.
+ * @param id - module id.
+ * @returns the localized tab label for that module.
+ */
+function moduleLabel(t: (key: OaWorkbenchKey) => string, id: OaWorkbenchModule): string {
+  switch (id) {
+    case 'overview': return t('moduleOverview')
+    case 'messages': return t('moduleMessages')
+    case 'approval': return t('moduleApproval')
+    case 'todos': return t('moduleTodos')
+    case 'schedules': return t('moduleSchedules')
+    case 'tasks': return t('moduleTasks')
+    case 'attendance': return t('moduleAttendance')
+  }
+}
+
 /**
  * @param props - localized copy, the workbench snapshot, and its operations.
  * @returns the workbench page.
  */
 export function OaWorkbenchPanel({
   useOaWorkbench, refresh, readMessage, readAllMessages, createTodo, toggleTodo,
-  checkIn, checkOut, setPreference, loadApprovals, loadApproval, actOnApproval, openLogin, t,
+  checkIn, checkOut, setPreference, loadApprovals, loadApproval, actOnApproval,
+  loadSchedules, loadTaskBoard, completeTask, loadAttendanceSummary, openLogin, t,
 }: OaWorkbenchProps) {
   const snapshot = useOaWorkbench(state => state)
   const [module, setModule] = useState<OaWorkbenchModule>('overview')
@@ -80,7 +113,7 @@ export function OaWorkbenchPanel({
     </header>
 
     <div className={css.moduleBar} role="tablist">
-      {(['overview', 'messages', 'approval', 'todos'] as const).map(id => (
+      {MODULES.map(id => (
         <button
           key={id}
           type="button"
@@ -89,7 +122,7 @@ export function OaWorkbenchPanel({
           className={css.moduleTab}
           onClick={() => { setModule(id) }}
         >
-          {t(id === 'overview' ? 'moduleOverview' : id === 'messages' ? 'moduleMessages' : id === 'approval' ? 'moduleApproval' : 'moduleTodos')}
+          {moduleLabel(t, id)}
           {id === 'messages' && unread > 0 ? <span className={css.count}>{unread}</span> : null}
         </button>
       ))}
@@ -277,6 +310,18 @@ export function OaWorkbenchPanel({
             />
           </div>
         </>}
+    </section>
+
+    <section className={css.body} hidden={module !== 'schedules'}>
+      <OaSchedulesModule t={t} loadSchedules={loadSchedules} />
+    </section>
+
+    <section className={css.body} hidden={module !== 'tasks'}>
+      <OaTasksModule t={t} loadTaskBoard={loadTaskBoard} completeTask={completeTask} />
+    </section>
+
+    <section className={css.body} hidden={module !== 'attendance'}>
+      <OaAttendanceModule t={t} today={attendance} loadAttendanceSummary={loadAttendanceSummary} />
     </section>
   </div>
 }

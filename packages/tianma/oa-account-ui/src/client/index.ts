@@ -244,6 +244,25 @@ export function apply(ctx: Context): void {
       const result = await ctx.remote.oaAccount.approvalAction(request)
       if (!result.ok) throw new Error(result.error.message)
     },
+    async loadSchedules() {
+      const result = await ctx.remote.oaAccount.todaySchedules()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async loadTaskBoard() {
+      const result = await ctx.remote.oaAccount.taskBoard()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async completeTask(id) {
+      const result = await ctx.remote.oaAccount.completeTask(id)
+      if (!result.ok) throw new Error(result.error.message)
+    },
+    async loadAttendanceSummary(period) {
+      const result = await ctx.remote.oaAccount.attendanceSummary(period)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
   }
   const WORKBENCH_ID = 'oa-workbench' as MainPanelId
   const stream = ctx.remote.$stream<OaSessionView>({
