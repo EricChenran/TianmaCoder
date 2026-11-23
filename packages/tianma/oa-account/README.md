@@ -11,7 +11,7 @@ English | [中文](README.zh.md)
 
 Sign the product's user in against the Tianma OA backend and decide whether a conversation may start. One Host service owns the captcha challenge, the token pair, the stored account projection, and the profile, workbench, and profile-write operations the Settings page renders. The same plugin mounts `ctx.promptAdmission`, so the browser prompt path refuses a conversation until a signed-in account is `active`. Tokens live in the credential seam's records; the browser never receives one.
 
-The service also answers the workbench reads a sidebar panel renders: station messages and their read state, the notification switches, the personal to-do list, and the approval lists, details, decisions, categories, and submissions.
+It also answers the workbench reads the sidebar panel renders.
 
 ## Table of Contents
 

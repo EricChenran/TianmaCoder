@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/oa-account-ui/README.md
 /:
-  en: b75ccd92465ff2ea
+  en: de36c8fe5279d15f
   zh: b75ccd92465ff2ea
 /tianma-dsh-oa-account-ui:
   en: 189695ccb54b3a02
   zh: b7f0f2a2d006e89b
 /tianma-dsh-oa-account-ui/summary:
-  en: c2facce211528bd6
-  zh: c142de76e03a2a3f
+  en: 595af8f4e28087be
+  zh: 55ab12d3948aaaac
 /tianma-dsh-oa-account-ui/table-of-contents:
   en: d152484eb41ac6b4
   zh: 31819dbf6d290b2f
 /tianma-dsh-oa-account-ui/use-this-package:
-  en: 90ccd90e30bc55f4
-  zh: f47b744538ad0c9a
+  en: dba64e03e8b3df58
+  zh: cce2d03b10e25216
 /tianma-dsh-oa-account-ui/understand-the-implementation:
   en: 2a258fea8792ab01
   zh: 9ecda754cfcf3d13

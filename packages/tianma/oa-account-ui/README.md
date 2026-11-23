@@ -1,5 +1,5 @@
 ---
-description: "Tianma OA account surfaces for the Web GUI: the captcha sign-in dialog, the sidebar account launcher, and the Settings page that shows and edits the signed-in profile."
+description: "Tianma OA account surfaces for the Web GUI: the captcha sign-in dialog, the sidebar account launcher, the Settings page, and the workbench panel with its seven OA modules."
 kind: "package-reference"
 ---
 
@@ -9,9 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The browser half of the Tianma OA account system: one snapshot from the Host's `oaAccount` Remote namespace backs the sign-in dialog, the sidebar launcher, and the Settings section showing the signed-in profile, its counters, and an editor for the fields its owner may change. Both surfaces read that one snapshot, so they cannot disagree about who is signed in, and no token reaches the browser. It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason.
-
-The panel entry `Workbench` opens a first-level page whose module tabs are `Overview`, `Messages`, `Approvals`, `To-do`, `Schedule`, `Tasks`, and `Attendance`. A message or an approval opens a second-level tab beside the list; every open tab stays mounted and is hidden rather than destroyed, so switching back keeps its scroll position, filters, and typed draft.
+Tianma OA account surfaces for the Web GUI: one snapshot from the Host's `oaAccount` Remote namespace backs the captcha sign-in dialog, the sidebar account launcher, the Settings section, and the workbench panel whose tabs are Overview, Messages, Approvals, To-do, Schedule, Tasks, and Attendance. Every surface reads that one snapshot, so they cannot disagree about who is signed in, and no token reaches the browser. It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason.
 
 ## Table of Contents
 
@@ -30,6 +28,8 @@ The panel entry `Workbench` opens a first-level page whose module tabs are `Over
 Mount the plugin next to the settings shell, and mount the Host half ([@tianma/dsh-oa-account](../oa-account/README.md)) in the same composition: the browser half calls `remote.oaAccount` and renders nothing meaningful without it.
 
 It registers the sidebar launcher in `settings.launcher`, the Settings page in `settings.section` (`id: 'oa-account'`, first), and the workbench as a first-level panel (`main`, key `oa-workbench`) with its own row in `sidebar.panellist` at order `-10`, under the locale namespaces `settings.oaAccount` and `workbench.oa`, in English and Chinese.
+
+The workbench page opens one module per tab. A message or an approval opens a second-level tab beside its list; every open tab stays mounted and is hidden rather than destroyed, so switching back keeps its scroll position, filters, and typed draft.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
