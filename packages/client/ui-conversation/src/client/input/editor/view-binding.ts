@@ -137,6 +137,10 @@ export function installDraftKeymap(
       ), 'enter')
     },
     intakeFiles: (files, directories) => { gate.current.intakeFiles(files, directories) },
+    recallSent: (direction) => {
+      if (gate.current.machineBusy || gate.current.locked) return false
+      return keyboard.recallSent(direction)
+    },
     pasteText: (text) => {
       if (gate.current.machineBusy || gate.current.locked) return
       keyboard.paste(text)

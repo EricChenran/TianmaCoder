@@ -25,6 +25,8 @@ import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
 import { reportMessageSubmission } from './submission-analytics.ts'
+import type { SentHistoryFace } from './sent-history.ts'
+import { createSentHistory } from './sent-history.ts'
 import { readConversationDraft } from '../stores.ts'
 
 /** Structural command face for per-session popup resolution. */
@@ -66,6 +68,8 @@ function draftIsBusy(state: InputState): boolean {
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
 export class InputHub implements SessionInputResolver {
   private readonly shells = new WeakMap<SessionBinding, SessionInputShell>()
+  /** Per-Session recall buffers for sent composer text; runtime state, never persisted. */
+  private readonly sentHistories = new Map<SessionId, SentHistoryFace>()
 
   /**
    * @param ctx - client root context (services resolved lazily per call — boot order stays free).
@@ -111,6 +115,7 @@ export class InputHub implements SessionInputResolver {
     const { session, ctx: actx } = binding
     const shell = new SessionInputShell({
       actx,
+      sentHistory: this.sentHistoryFor(binding.sessionId),
       submissionState: () => {
         const state = session.getSnapshot()
         const model = session.projections.faceOf('modelSelection').getSnapshot() as ModelSelectionProjection | undefined
@@ -331,6 +336,20 @@ export class InputHub implements SessionInputResolver {
     const sessions = this.rootCtx.get('sessions')
     if (sessions === undefined) throw new Error('conversation.input: sessions service unavailable')
     return sessions
+  }
+
+  /**
+   * The recall buffer of one Session, created on first use.
+   * @param id - session id.
+   * @returns that Session's buffer.
+   */
+  private sentHistoryFor(id: SessionId): SentHistoryFace {
+    let history = this.sentHistories.get(id)
+    if (history === undefined) {
+      history = createSentHistory()
+      this.sentHistories.set(id, history)
+    }
+    return history
   }
 
   private conversation(): ConversationAttachmentFace {

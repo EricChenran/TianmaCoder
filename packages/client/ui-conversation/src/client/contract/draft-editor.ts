@@ -74,6 +74,15 @@ export interface ComposerKeyboard {
   arbitrate(key: ArbitrateKey, composing: boolean): ArbitrateOutcome
   /** Space adjudication; true = the input applied a claim — caller preventDefaults. */
   space(): boolean
+  /**
+   * Recall an already sent text into an empty draft (the ↑/↓ gesture).
+   * Refuses while the draft holds content the user wrote, while attachments
+   * are pending, and outside the plain phase; the caller preventDefaults when
+   * this returns true.
+   * @param direction - 'older' walks back in time, 'newer' forward.
+   * @returns whether the walk consumed the key.
+   */
+  recallSent(direction: 'older' | 'newer'): boolean
   /** Dismiss the popupSelect shell (any interaction outside the box). */
   dismissPopup(): void
   /**

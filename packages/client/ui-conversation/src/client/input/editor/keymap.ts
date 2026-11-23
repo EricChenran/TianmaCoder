@@ -35,6 +35,12 @@ export interface ComposerKeymapHandlers {
   /** Plain Enter submits; exactly Ctrl+Enter or Cmd+Enter selects accelerated delivery. */
   submit(accelerated: boolean): void
   /**
+   * Recall an already sent text when ↑/↓ reaches the composer with no menu open.
+   * @param direction - 'older' walks back in time, 'newer' forward.
+   * @returns whether the gesture consumed the key.
+   */
+  recallSent(direction: 'older' | 'newer'): boolean
+  /**
    * Pasted files with directory metadata supplied by the clipboard entry API.
    * @param files - browser files in clipboard order.
    * @param directories - known directory members; absent when no entry identifies a directory.
@@ -86,7 +92,13 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
       event?.preventDefault()
       return true
     }
-    return false
+    // The menu passed: ↑/↓ recall sent text instead of moving the caret. The
+    // composition guard keeps an IME's candidate navigation away from recall.
+    if (key !== 'up' && key !== 'down') return false
+    if (inComposition) return false
+    if (!handlers.recallSent(key === 'up' ? 'older' : 'newer')) return false
+    event?.preventDefault()
+    return true
   }
 
   return mergeRegister(

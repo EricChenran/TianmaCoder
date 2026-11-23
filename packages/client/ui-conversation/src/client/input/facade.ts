@@ -24,6 +24,7 @@ import type {
 } from '../contract/draft-editor.ts'
 import type { InputSubmitMode, MessageSubmission, MessageSubmissionState } from '../contract/composer-submission.ts'
 import { SubmitMachine } from './machine.ts'
+import type { SentHistoryFace } from './sent-history.ts'
 import { resolveDraftInput, snapshotDraft } from '../draft.ts'
 import { DraftEditorRuntime } from './editor/runtime.ts'
 import type { EditorProjection } from './editor/projection.ts'
@@ -63,6 +64,11 @@ export interface SessionInputDeps {
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome>
+  /**
+   * Recall buffer for text already sent in this Session; absent = the ↑/↓
+   * gesture is unavailable (tests and the headless assembly omit it).
+   */
+  sentHistory?: SentHistoryFace
   /** Command-plane attachment plumbing (the hub owns the conversation face and the copy). */
   commandAttachments: {
     /** Resolve ordered draft ids to wire payloads without sending them; rejects when an id no longer resolves. */
@@ -167,6 +173,11 @@ export class SessionInputShell implements SessionInput {
 
   private readonly unsubscribeInbox: (() => void) | undefined
 
+  /** True while a recall writes the draft, so that write does not reset the walk. */
+  private recalling = false
+  /** The entry the last recall placed in the draft, if the user has not edited since. */
+  private recalledText: string | undefined
+
   constructor(private readonly deps: SessionInputDeps) {
     this.draftEditor = new DraftEditorRuntime({
       onUpdate: () => { this.onEditorUpdate() },
@@ -197,6 +208,12 @@ export class SessionInputShell implements SessionInput {
         this.failedRestoreRev = undefined
       }
       this.dispatchRun(({ type: 'draft-changed', draft: this.projection.clipboardText }))
+      // An ordinary edit ends the recall walk: the next ↑ starts at the newest
+      // entry instead of continuing from where the user left it.
+      if (!this.recalling) {
+        this.recalledText = undefined
+        this.deps.sentHistory?.reset()
+      }
     }
     const caret = this.projection.caret
     if (caret !== null) {
@@ -395,6 +412,34 @@ export class SessionInputShell implements SessionInput {
    */
   arbitrate(key: ArbitrateKey, composing: boolean): ArbitrateOutcome {
     return this.deps.inputTriggers?.()?.arbitrate(key, composing) ?? 'pass'
+  }
+
+  /**
+   * Walk the Session's sent-text buffer into an empty draft. Refuses outside
+   * the plain phase, with pending attachments, and when the draft holds
+   * something the user wrote (the recalled entry itself is allowed, so
+   * repeated ↑ keeps walking).
+   * @param direction - 'older' walks back in time, 'newer' forward.
+   * @returns whether the walk consumed the key.
+   */
+  recallSent(direction: 'older' | 'newer'): boolean {
+    if (this.disposed) return false
+    if (this.snapshot.phase !== 'plain') return false
+    if (this.snapshot.attachmentIds.length > 0) return false
+    const current = this.snapshot.draft
+    if (current !== '' && current !== this.recalledText) return false
+    const text = this.deps.sentHistory?.recall(direction)
+    if (text === undefined || text === null) return false
+    if (text === '') {
+      this.recalledText = undefined
+      this.recalling = true
+      try { this.setDraft('') } finally { this.recalling = false }
+      return true
+    }
+    this.recalledText = text
+    this.recalling = true
+    try { this.setDraft(text) } finally { this.recalling = false }
+    return true
   }
 
   /**
@@ -751,7 +796,9 @@ export class SessionInputShell implements SessionInput {
           this.settleDetachedFailure(attempt, outcome.text)
           return
         }
+        const record = this.detachedDrafts.get(attempt.seq)
         this.detachedDrafts.delete(attempt.seq)
+        if (record !== undefined) this.deps.sentHistory?.record(record.draft)
         this.dispatchRun(({ type: 'sink-settled', attempt, ok: true, outcome }))
       },
       (error: unknown) => {
