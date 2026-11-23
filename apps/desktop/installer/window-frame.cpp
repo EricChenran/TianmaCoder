@@ -125,10 +125,12 @@ static LRESULT CALLBACK ProgressProc(HWND window, UINT message, WPARAM wparam, L
     if (message == WM_ERASEBKGND) return 1;
     if (message == WM_TIMER) { InvalidateRect(window, nullptr, FALSE); return 0; }
     if (message == WM_LBUTTONDOWN && page) {
+        HWND parent = GetParent(window);
+        // The finish transition already runs; a modal move loop started here would race the page swap.
+        if (GetPropW(parent, L"HarnessInstaller.Finishing") != nullptr) return 0;
         const int x = LOWORD(lparam) * 96 / page->dpi;
         const int y = HIWORD(lparam) * 96 / page->dpi;
         if (y < 48) {
-            HWND parent = GetParent(window);
             if (x >= 548) PostMessageW(parent, WM_CLOSE, 0, 0);
             else if (x >= 504) ShowWindow(parent, SW_MINIMIZE);
             else { ReleaseCapture(); SendMessageW(parent, WM_NCLBUTTONDOWN, HTCAPTION, 0); }
@@ -176,6 +178,8 @@ static LRESULT CALLBACK ProgressProc(HWND window, UINT message, WPARAM wparam, L
     }
     if (message == WM_NCDESTROY && page) {
         KillTimer(window, 1);
+        HWND parent = GetParent(window);
+        if (parent && IsWindow(parent)) RemovePropW(parent, L"HarnessInstaller.Finishing");
         delete page->brand;
         GdiplusShutdown(page->gdiplus);
         delete page;
@@ -217,24 +221,18 @@ extern "C" __declspec(dllexport) HWND __cdecl InstallerShowProgress(HWND parent,
     return window;
 }
 
-// NSIS has already reported success. Pump the UI for the bounded final animation,
-// including a painted 100% frame, before constructing the interactive finish page.
+// NSIS has already reported success. Settle the progress page on its 100% frame and return without
+// pumping messages: a nested pump races the modal loops that title-bar dragging and the close button
+// start, which froze the transition and left the close button unresponsive. The caller destroys this
+// window immediately afterwards, so every later interaction belongs to the finish page.
 extern "C" __declspec(dllexport) BOOL __cdecl InstallerFinishProgress(HWND window) {
     auto* page = reinterpret_cast<ProgressPage*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     if (!page) return FALSE;
-    const ULONGLONG started = GetTickCount64();
-    SetPropW(GetParent(window), L"HarnessInstaller.Succeeded", reinterpret_cast<HANDLE>(1));
-    page->progress.Complete(started);
-    while (IsWindow(window) && GetTickCount64() - started < 750) {
-        MSG message;
-        if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-            if (message.message == WM_QUIT) { PostQuitMessage(static_cast<int>(message.wParam)); return FALSE; }
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        } else {
-            MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        }
-    }
+    HWND parent = GetParent(window);
+    SetPropW(parent, L"HarnessInstaller.Succeeded", reinterpret_cast<HANDLE>(1));
+    // Marks the swap so no modal move loop starts from this page while it is being replaced.
+    SetPropW(parent, L"HarnessInstaller.Finishing", reinterpret_cast<HANDLE>(1));
+    page->progress.Complete(GetTickCount64());
     if (!IsWindow(window)) return FALSE;
     InvalidateRect(window, nullptr, FALSE);
     UpdateWindow(window);
