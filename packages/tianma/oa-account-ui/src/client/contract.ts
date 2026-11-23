@@ -7,6 +7,10 @@
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
+  OaApproval,
+  OaApprovalActionRequest,
+  OaApprovalDetail,
+  OaApprovalTab,
   OaCaptcha,
   OaAttendanceToday,
   OaMessage,
@@ -89,7 +93,7 @@ export interface OaAccountInjected {
 }
 
 /** The workbench modules this panel opens. */
-export type OaWorkbenchModule = 'overview' | 'messages' | 'todos'
+export type OaWorkbenchModule = 'overview' | 'messages' | 'approval' | 'todos'
 
 /** One loaded slice, so a failed read reports itself without clearing the others. */
 export interface OaWorkbenchSlice<T> {
@@ -154,4 +158,24 @@ export interface OaWorkbenchInjected {
    * @param patch - the switches to change.
    */
   setPreference: (patch: OaNotificationPreferencePatch) => Promise<void>
+  /**
+   * Read one approval list.
+   * @param tab - which list to read.
+   * @returns the approvals, newest first.
+   * @throws when the backend refuses the read.
+   */
+  loadApprovals: (tab: OaApprovalTab) => Promise<readonly OaApproval[]>
+  /**
+   * Read one approval with what this account may do with it.
+   * @param id - the approval id.
+   * @returns the approval detail.
+   * @throws when the backend refuses the read.
+   */
+  loadApproval: (id: number) => Promise<OaApprovalDetail>
+  /**
+   * Apply one approval decision.
+   * @param request - the approval, the decision, and its comment.
+   * @throws when the backend refuses the decision.
+   */
+  actOnApproval: (request: OaApprovalActionRequest) => Promise<void>
 }

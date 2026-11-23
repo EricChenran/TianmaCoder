@@ -100,7 +100,8 @@ These limits define the current boundary.
 - **One status mapping.** `active` / `disabled` / `banned` are rendered from the account status; a status this build has never seen renders as unknown rather than as usable.
 - **The surfaces render only where the composition mounts the account service.** A profile without the Host half has no account surfaces at all.
 - **The client gate is pushed, not read.** The composer's block registry is the only channel the one-way dependency allows, so the plugin writes it directly and clears it when it unloads; a deployment that mounts the account UI without the conversation service keeps the Host-side refusal and loses only the disabled composer.
-- **The workbench covers overview, messages, and to-do today.** Approval, schedule, task, and attendance modules come next; their Host reads already exist.
+- **The workbench covers overview, messages, approvals, and to-do today.** Schedule, task, and attendance modules come next; their Host reads already exist.
+- **An approval decision is one request.** There is no batch action and no transfer, because the employee side exposes neither; a rejection needs a comment before the module will send it.
 - **Open message tabs live in component state.** A reload loses the open tabs; the module and its filters return to their defaults.
 
 <a id="dev-note"></a>

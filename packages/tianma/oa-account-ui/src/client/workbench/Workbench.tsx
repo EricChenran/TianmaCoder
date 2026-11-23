@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { OaMessage } from '@tianma/dsh-oa-account/types'
+import { OaApprovalsModule } from './Approvals.tsx'
 import type { OaWorkbenchInjected, OaWorkbenchModule } from '../contract.ts'
 import type { OaWorkbenchKey } from './locales.ts'
 import css from './Workbench.module.css'
@@ -29,7 +30,7 @@ type MessageTab = 'list' | 'settings' | `doc:${number}`
  */
 export function OaWorkbenchPanel({
   useOaWorkbench, refresh, readMessage, readAllMessages, createTodo, toggleTodo,
-  checkIn, checkOut, setPreference, openLogin, t,
+  checkIn, checkOut, setPreference, loadApprovals, loadApproval, actOnApproval, openLogin, t,
 }: OaWorkbenchProps) {
   const snapshot = useOaWorkbench(state => state)
   const [module, setModule] = useState<OaWorkbenchModule>('overview')
@@ -79,7 +80,7 @@ export function OaWorkbenchPanel({
     </header>
 
     <div className={css.moduleBar} role="tablist">
-      {(['overview', 'messages', 'todos'] as const).map(id => (
+      {(['overview', 'messages', 'approval', 'todos'] as const).map(id => (
         <button
           key={id}
           type="button"
@@ -88,13 +89,13 @@ export function OaWorkbenchPanel({
           className={css.moduleTab}
           onClick={() => { setModule(id) }}
         >
-          {t(id === 'overview' ? 'moduleOverview' : id === 'messages' ? 'moduleMessages' : 'moduleTodos')}
+          {t(id === 'overview' ? 'moduleOverview' : id === 'messages' ? 'moduleMessages' : id === 'approval' ? 'moduleApproval' : 'moduleTodos')}
           {id === 'messages' && unread > 0 ? <span className={css.count}>{unread}</span> : null}
         </button>
       ))}
     </div>
 
-    {module === 'overview' ? <section className={css.body}>
+    <section className={css.body} hidden={module !== 'overview'}>
       <div className={css.card}>
         <div className={css.cardHead}>{t('attendance')}</div>
         {snapshot.attendance.error !== undefined
@@ -145,9 +146,9 @@ export function OaWorkbenchPanel({
           <span className={css.statValue}>{value === undefined ? t('unknownValue') : String(value)}</span>
         </div>)}
       </div>
-    </section> : null}
+    </section>
 
-    {module === 'messages' ? <section className={css.body}>
+    <section className={css.body} hidden={module !== 'messages'}>
       <div className={css.subBar} role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'list'} className={css.subTab} onClick={() => { setTab('list') }}>{t('all')}</button>
         {openDocs.map((id) => {
@@ -232,9 +233,18 @@ export function OaWorkbenchPanel({
               </li>
             </ul>}
       </div>
-    </section> : null}
+    </section>
 
-    {module === 'todos' ? <section className={css.body}>
+    <section className={css.body} hidden={module !== 'approval'}>
+      <OaApprovalsModule
+        t={t}
+        loadApprovals={loadApprovals}
+        loadApproval={loadApproval}
+        actOnApproval={actOnApproval}
+      />
+    </section>
+
+    <section className={css.body} hidden={module !== 'todos'}>
       {snapshot.todos.error !== undefined
         ? <p className={css.error}>{t('todosFailed')}</p>
         : <>
@@ -267,6 +277,6 @@ export function OaWorkbenchPanel({
             />
           </div>
         </>}
-    </section> : null}
+    </section>
   </div>
 }

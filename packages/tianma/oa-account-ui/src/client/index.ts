@@ -230,6 +230,20 @@ export function apply(ctx: Context): void {
     async setPreference(patch) {
       publishWorkbench({ notifications: settle(await ctx.remote.oaAccount.setNotificationPreference(patch)) })
     },
+    async loadApprovals(tab) {
+      const result = await ctx.remote.oaAccount.approvals(tab)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async loadApproval(id) {
+      const result = await ctx.remote.oaAccount.approval(id)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async actOnApproval(request) {
+      const result = await ctx.remote.oaAccount.approvalAction(request)
+      if (!result.ok) throw new Error(result.error.message)
+    },
   }
   const WORKBENCH_ID = 'oa-workbench' as MainPanelId
   const stream = ctx.remote.$stream<OaSessionView>({
