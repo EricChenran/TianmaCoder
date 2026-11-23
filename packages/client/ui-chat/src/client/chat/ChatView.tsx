@@ -218,9 +218,12 @@ export function ChatView({
             )}
             {hasMore && (
               <div className={css.older}>
-                <button type="button" disabled={loadingOlder} onClick={scroll.loadEarlier}>
+                <button type="button" disabled={loadingOlder} onClick={() => { scroll.loadEarlier() }}>
                   {loadingOlder ? t('loading') : t('chat.loadOlder')}
                 </button>
+                {scroll.historyStalled && !loadingOlder && (
+                  <p className={css.hint}>{t('chat.loadOlderRetry')}</p>
+                )}
               </div>
             )}
             <MarkdownDelegateProvider openExternalLink={openExternalLink} openFile={requestOpenFile} fileImages={fileImages}>

@@ -6,6 +6,10 @@ import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { TurnRailItem } from './turn-rail-items.ts'
 import type { ChatReading, ReadingSample } from './use-chat-reading.ts'
 import type { ChatViewport } from './use-chat-viewport.ts'
+import {
+  allowsAutoPage, finishedPage, INITIAL_AUTO_HISTORY, retriedPage, startedAutoPage,
+  type AutoHistoryState, type HistoryIntent,
+} from './auto-history.ts'
 
 /** History availability and loading operations for the committed Chat window. */
 export interface ChatNavigationInput extends Pick<ChatViewSlotProps, 'loadOlder' | 'loadThrough'> {
@@ -26,6 +30,7 @@ interface TurnJump {
 export class ChatNavigation {
   private jump: TurnJump | null = null
   private settleFrame: number | null = null
+  private auto: AutoHistoryState = INITIAL_AUTO_HISTORY
 
   constructor(
     private readonly viewport: ChatViewport,
@@ -38,7 +43,15 @@ export class ChatNavigation {
    * Adopt committed history availability without starting a request.
    * @param input - history state from the latest committed render.
    */
-  setInput(input: ChatNavigationInput): void { this.input = input }
+  setInput(input: ChatNavigationInput): void {
+    this.auto = finishedPage(this.auto, this.input, input)
+    this.input = input
+  }
+
+  /** Whether the last automatic page settled without bringing older content. */
+  get historyStalled(): boolean {
+    return this.auto.stalled
+  }
 
   /** Cancel navigation when opening a Chat view. */
   reset(): void {
@@ -90,12 +103,43 @@ export class ChatNavigation {
     this.request(jump)
   }
 
-  /** Request one older page while retaining the current semantic position. */
-  readonly loadEarlier = (): void => {
+  /**
+   * Request one older page while retaining the current semantic position.
+   * @param intent - whether the reader asked or the top edge triggered it.
+   */
+  readonly loadEarlier = (intent: HistoryIntent = 'manual'): void => {
     this.cancel()
+    this.auto = intent === 'auto'
+      ? startedAutoPage(this.input.firstSeq)
+      : retriedPage(this.auto)
     this.viewport.beginPaging()
     this.reading.pauseFollowing()
     this.input.loadOlder()
+  }
+
+  /**
+   * Page once when the reader reaches the top of the loaded window.
+   * @returns whether a request started; repeated calls for the same head are ignored.
+   */
+  autoLoadEarlier(): boolean {
+    if (!this.canAutoLoadEarlier()) return false
+    this.loadEarlier('auto')
+    return true
+  }
+
+  /** Whether the top edge may start a page right now. */
+  canAutoLoadEarlier(): boolean {
+    return allowsAutoPage({
+      firstSeq: this.input.firstSeq,
+      hasMore: this.input.hasMore,
+      loadingOlder: this.input.loadingOlder,
+      jumpFree: this.jump === null && !this.viewport.preserving,
+    }, this.auto)
+  }
+
+  /** Ask for an older page again after an automatic one settled without growing history. */
+  retryEarlier(): void {
+    this.loadEarlier('manual')
   }
 
   /**

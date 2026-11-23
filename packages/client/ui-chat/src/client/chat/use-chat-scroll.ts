@@ -1,5 +1,5 @@
 /** Composes viewport operations, reading policy, and history navigation for Chat. */
-import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { TranscriptViewMode } from '../../chat-settings.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
@@ -31,9 +31,16 @@ interface ChatScrollState extends ChatReadingState {
   readonly busyTurn: number | null
   readonly navigateToTurn: ChatNavigation['navigateToTurn']
   readonly loadEarlier: ChatNavigation['loadEarlier']
+  /** Whether the last automatic page settled without bringing older content. */
+  readonly historyStalled: boolean
+  /** Ask for an older page again after a stalled automatic one. */
+  readonly retryEarlier: () => void
   readonly returnToBottom: () => void
   readonly motion: FlowMotionRows
 }
+
+/** Distance from the top of the scrollport that asks for the next older page. */
+const HISTORY_TOP_PX = 48
 
 /**
  * Coordinate scroll policy after Chat content commits. Initial history must be ready
@@ -53,6 +60,12 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     firstSeq, loadingOlder, hasMore, loadOlder, loadThrough,
   }), [firstSeq, loadingOlder, hasMore, loadOlder, loadThrough])
   const { navigation, busyTurn } = useChatNavigation(viewport, reading, navigationInput)
+  const [historyStalled, setHistoryStalled] = useState(false)
+  const mirrorHistory = useCallback(() => { setHistoryStalled(navigation.historyStalled) }, [navigation])
+  const retryEarlier = useCallback(() => {
+    setHistoryStalled(false)
+    navigation.retryEarlier()
+  }, [navigation])
   const content = useRef<{ input: ChatScrollInput; applied: ChatScrollInput | null; opened: boolean }>({
     input, applied: null, opened: false,
   })
@@ -125,10 +138,16 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
         if (!content.current.opened) return
         if (!event.movedByReader && viewport.motion.foldActive()) return
         reading.onScroll(event)
+        if (event.movedByReader) {
+          const scroller = listRef.current
+          if (scroller !== null && scroller.scrollTop <= HISTORY_TOP_PX) navigation.autoLoadEarlier()
+          mirrorHistory()
+        }
       },
       scrollEnd: (outer) => {
         reading.onScrollEnd(outer)
         navigation.readerSettled()
+        mirrorHistory()
       },
       interact: () => { navigation.cancel() },
       intent: () => { cancelPendingFollow(); reading.interruptFollow() },
@@ -200,6 +219,8 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     listRef, columnRef, ...state, busyTurn, motion: viewport.motion,
     navigateToTurn: navigation.navigateToTurn,
     loadEarlier: navigation.loadEarlier,
+    historyStalled,
+    retryEarlier,
     returnToBottom,
   }
 }
