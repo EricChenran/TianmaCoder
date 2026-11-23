@@ -20,6 +20,7 @@ import * as plugin from '@tianma/dsh-department-prompts'
 
 const PERSONA = 'You are the deployment assistant.'
 const ASSET_ROOT = fileURLToPath(new URL('../assets/business/', import.meta.url))
+const TECH_ASSET_ROOT = fileURLToPath(new URL('../assets/tech/', import.meta.url))
 const SKILL_ASSET_ROOT = fileURLToPath(new URL('../skills/official-doc/', import.meta.url))
 const temporaryDirectories: string[] = []
 
@@ -121,6 +122,65 @@ describe('@tianma/dsh-department-prompts', () => {
     // Every validation failure is reported together instead of stopping at the first.
     expect(script).toContain('content.json 校验未通过')
     expect(script).toContain('python -m pip install openpyxl Pillow')
+  })
+
+  it('makes the 技术部 turn a work order into a disposition table', () => {
+    const text = plugin.departmentPrompt('tech')
+    // The loop the mode exists for: read, decompose, ask before parallel, dispose, deliver.
+    expect(text).toContain('# 工单处置（接单 → 拆解 → 并行派工 → 处置表）')
+    expect(text).toContain('read_workorder.py')
+    expect(text).toContain('build_disposition.py')
+    expect(text).toContain('改动任务处置表-<客户名>.xlsx')
+    // Parallel dispatch needs the user's consent; shared resources serialize.
+    expect(text).toContain('不得未经询问就开并行')
+    // Every work-order item must end up with its own row.
+    expect(text).toContain('**逐项对上**')
+    // The status vocabulary is closed and never flattered.
+    expect(text).toContain('`已修复`、`部分修复`、`未修复`、`无法复现`、`不在本次范围`、`待客户确认`')
+    expect(text).toContain('**不许美化状态**')
+    // Screenshots are before/after comparisons from files on disk.
+    expect(text).toContain('「改前｜改后」并排对比图')
+    expect(text).toContain('**不留空、不造假、不拿别的项目截图顶替**')
+  })
+
+  it('ships the disposition scripts with their fixed contracts', () => {
+    const reader = readFileSync(join(TECH_ASSET_ROOT, 'read_workorder.py'), 'utf8')
+    expect(reader).toContain('任务明细')
+    expect(reader).toContain('python -m pip install openpyxl Pillow')
+    const builder = readFileSync(join(TECH_ASSET_ROOT, 'build_disposition.py'), 'utf8')
+    for (const header of ['("任务明细"', '("处置结果"', '("证明截图"', '("状态"']) {
+      expect(builder).toContain(header)
+    }
+    // The one-to-one check belongs to the script, not to the model's good intentions.
+    expect(builder).toContain('处置表缺第')
+    expect(builder).toContain('item %d 重复出现')
+  })
+
+  it('publishes and advertises the 技术部 disposition toolbox', async () => {
+    const home = temporaryDirectory()
+    const previous = process.env.DSH_HOME
+    process.env.DSH_HOME = home
+    const toolsDir = join(temporaryDirectory(), 'tech-tools')
+    try {
+      expect(plugin.materializeTechTools({ assetRoot: TECH_ASSET_ROOT, toolsDir })).toBe(toolsDir)
+      expect(readdirSync(toolsDir).sort()).toEqual([...plugin.TECH_TOOL_FILES].sort())
+      for (const filename of plugin.TECH_TOOL_FILES) {
+        expect(readFileSync(join(toolsDir, filename), 'utf8'))
+          .toBe(readFileSync(join(TECH_ASSET_ROOT, filename), 'utf8'))
+      }
+      const ctx = await setup('tech', { withShellEnv: true, assetRoot: TECH_ASSET_ROOT, toolsDir })
+      const declared = ctx.shellEnv.list().find(variable => variable.key === plugin.TOOLS_DIR_VARIABLE)
+      expect(declared?.contributor).toBe(plugin.TOOLS_CONTRIBUTOR_NAME)
+    } finally {
+      if (previous === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previous
+    }
+  })
+
+  it('publishes no 技术部 toolbox when the composition mounts no shell environment', () => {
+    const toolsDir = join(temporaryDirectory(), 'tech-tools')
+    expect(plugin.installTechToolbox(new Context(), { assetRoot: TECH_ASSET_ROOT, toolsDir })).toBe(false)
+    expect(existsSync(toolsDir)).toBe(false)
   })
 
   it('publishes every packaged script without naming where the model reads it', () => {

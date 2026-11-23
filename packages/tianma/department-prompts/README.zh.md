@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为每种部门模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能与 UI 界面确认单技能、为商务部与招投标专员发布随包的实施方案技能，并对商务部额外把随包交付的六个文档生成脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有部门模式携带它们，其中技术部专属的技能只到技术部。
+`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为每种部门模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的无头演示视频技能与 UI 界面确认单技能、为商务部与招投标专员发布随包的实施方案技能，并对商务部额外把随包交付的六个文档生成脚本、对技术部把两个工单处置脚本发布到 harness home 下的私有目录，以 `DSH_DEPARTMENT_TOOLS` 变量暴露给模型的 shell 调用。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有部门模式携带它们，其中技术部专属的技能只到技术部。
 
 ## 目录
 
@@ -37,7 +37,7 @@ kind: "package-reference"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `department` | 必填 | 本行贡献的规则集：`tech`、`business`、`bid` 或 `tester` |
-| `assetRoot` | 包内 `assets/business/` | 脚本来源目录，供自行携带副本的部署使用 |
+| `assetRoot` | 包内 `assets/<部门>/` | 脚本来源目录，供自行携带副本的部署使用 |
 | `toolsDir` | `<harness home>/department/business-tools` | 脚本发布到的目录 |
 | `skillAssetRoot` | 包内 `skills/official-doc/` | 技能来源目录，供自行携带副本的部署使用 |
 | `skillDir` | `<harness home>/department/skills/official-doc` | 技能发布到的目录 |
@@ -52,7 +52,7 @@ kind: "package-reference"
 
 `apply` 注入 `systemPrompt` 并注册一条 `interpolate: false` 的节，因此规则里引用的 JSON 示例中的花括号会保持字面量，不会被当作提示词变量。节序 `150` 位于 `tianma:behavioral-guidelines`（100）之后、`PLAN_POLICY`（500）之前。
 
-工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
+两个部门各有一个工具箱目录：商务部是 `<harness home>/department/business-tools`，技术部是 `<harness home>/department/tech-tools`。工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
 
 公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，每个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/demo-video`，但它只由技术部那一行注册，因此即便各预设共用本行，其他模式也拿不到它。UI 界面确认单技能通过自己的提供方发布到 `<harness home>/department/skills/ui-confirmation-doc`，只有技术部那一行注册它。实施方案技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
 
@@ -68,6 +68,7 @@ kind: "package-reference"
 | [`src/toolbox.ts`](src/toolbox.ts) | 脚本发布与 `DSH_DEPARTMENT_TOOLS` 贡献者 |
 | [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc`、`bootstrapmb-template-fetch`、`demo-video`、`ui-confirmation-doc`、`proposal-doc` 提供方 |
 | [`assets/business/`](assets/business) | 随包交付的文档脚本：`gen_doc.py`、`gen_quote.py`、`gen_workorder.py`、`add_watermark.py`、`to_pdf.py`、`open_folder.py` |
+| [`assets/tech/`](assets/tech) | 随包交付的工单处置脚本：`read_workorder.py`（读工单成 JSON）、`build_disposition.py`（出逐项对上的处置表，并把改前/改后截图合成对比图） |
 | [`skills/official-doc/`](skills/official-doc) | 随包交付的公文技能：`SKILL.md`、`scripts/gen_doc.py`、`assets/logo_light.png` |
 | [`skills/bootstrapmb-template-fetch/`](skills/bootstrapmb-template-fetch) | 随包交付的模板源码抓取技能（两部门共有）：`SKILL.md`、`scripts/download-bootstrapmb.ps1`、`references/*` |
 | [`skills/demo-video/`](skills/demo-video) | 随包交付的演示视频技能（仅技术部）：`SKILL.md` 按录制对象分流，Web 半边 `web/scripts/webdemo.mjs` 与 `web/scripts/core/*.mjs`、`web/references/*`，小程序半边 `miniprogram/scripts/*`、`miniprogram/references/*` |
@@ -100,11 +101,11 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-一条字面系统提示词节 `tianma:department`，承载所选部门的完整规则：技术部覆盖后端、前端、运维三类纪律与交付自检。交付前只做少量且与改动直接相关的基础检查，提问验收方式前不启动应用，也不默认执行完整端到端测试或截图验收；基础检查后询问用户由 Agent 执行端到端验证，还是由用户自行验收。用户选择 Agent 验证后用 Agent 浏览器驱动真实页面完成端到端测试与视觉验证，再按真实入口检查相关路径（环境未提供该能力时先说明、改用其他真实入口手段）；小程序端若是跨端框架（uni-app / Taro）工程，先编译 H5 构建再在 Agent 浏览器上验证，不调用微信开发者工具，平台专有能力、包体积与提审合规仍交用户真机复核；自行验收时启动项目并提供入口和必要操作前提。前端截图与响应式实测仅在 Agent 验收确有需要时进行。用户选择 Agent 验收后，再按真实入口检查相关路径，并在并行前确认工作区、构建产物、服务端口、浏览器用户数据目录和调试端口隔离；无法隔离的共享资源操作串行执行。用户选择自行验收时，启动项目并提供可访问入口与必要操作前提，由用户亲自验证。相互独立且不共享工作区与外部资源的任务仍可并行；具体失败归因须由日志和复现证据确认，不以单张截图断定根因。商务部覆盖需求文档、报价单、案例检索、改动任务工单与共通的商务红线，其中需求文档必须以结构化正文承载完整的业务工作流并与脚本生成的流程图并存，同时写出同内容的 Markdown 副本供转交技术部；改动任务工单固定六列——时间、任务明细、当前现象、期望改动后、证明截图、状态——截图只从磁盘文件嵌入，路径不存在时脚本直接判失败，且不代客户宣布已完成。招投标专员覆盖读招标文件、提炼技术需求，固定使用实施方案技能出稿。测试员覆盖以脚本证据为准的验收：记录现有测试基线，补后端单元与接口测试，真实启动前后端做联调，用真实浏览器跑端到端并判读截图；另按缺陷、Bug、漏洞、后门四类审计代码，只有触发路径或 PoC 能复现的才写「已证实」，并按文件与行号列出 mock 占位、前后端未接入与预留实现。报告结论前置，第一屏直接给有无阻塞性 Bug、有无严重漏洞、能否交付；只对功能实现与缺陷负责，不写优化建议，也不评性能与架构。调研报告只保留命令或页面操作能复现的结论，修改方案只列缺陷修复并逐条点名文件、位置与验收命令。文本与 `departmentPrompt(department)` 逐字节一致，且该节不替换任何内容——它与 persona、工作区指令、行为规范并列组合。
+一条字面系统提示词节 `tianma:department`，承载所选部门的完整规则：技术部覆盖后端、前端、运维三类纪律与交付自检。交付前只做少量且与改动直接相关的基础检查，提问验收方式前不启动应用，也不默认执行完整端到端测试或截图验收；基础检查后询问用户由 Agent 执行端到端验证，还是由用户自行验收。用户选择 Agent 验证后用 Agent 浏览器驱动真实页面完成端到端测试与视觉验证，再按真实入口检查相关路径（环境未提供该能力时先说明、改用其他真实入口手段）；小程序端若是跨端框架（uni-app / Taro）工程，先编译 H5 构建再在 Agent 浏览器上验证，不调用微信开发者工具，平台专有能力、包体积与提审合规仍交用户真机复核；自行验收时启动项目并提供入口和必要操作前提。前端截图与响应式实测仅在 Agent 验收确有需要时进行。用户选择 Agent 验收后，再按真实入口检查相关路径，并在并行前确认工作区、构建产物、服务端口、浏览器用户数据目录和调试端口隔离；无法隔离的共享资源操作串行执行。用户选择自行验收时，启动项目并提供可访问入口与必要操作前提，由用户亲自验证。相互独立且不共享工作区与外部资源的任务仍可并行；具体失败归因须由日志和复现证据确认，不以单张截图断定根因。技术部接工单时按「读工单 → 拆解 → 询问是否并行 → 派子 Agent → 逐项处置」闭环，产出一张与工单逐项对上的处置表，每项带改前/改后对比截图或注明缺图原因。商务部覆盖需求文档、报价单、案例检索、改动任务工单与共通的商务红线，其中需求文档必须以结构化正文承载完整的业务工作流并与脚本生成的流程图并存，同时写出同内容的 Markdown 副本供转交技术部；改动任务工单固定六列——时间、任务明细、当前现象、期望改动后、证明截图、状态——截图只从磁盘文件嵌入，路径不存在时脚本直接判失败，且不代客户宣布已完成。招投标专员覆盖读招标文件、提炼技术需求，固定使用实施方案技能出稿。测试员覆盖以脚本证据为准的验收：记录现有测试基线，补后端单元与接口测试，真实启动前后端做联调，用真实浏览器跑端到端并判读截图；另按缺陷、Bug、漏洞、后门四类审计代码，只有触发路径或 PoC 能复现的才写「已证实」，并按文件与行号列出 mock 占位、前后端未接入与预留实现。报告结论前置，第一屏直接给有无阻塞性 Bug、有无严重漏洞、能否交付；只对功能实现与缺陷负责，不写优化建议，也不评性能与架构。调研报告只保留命令或页面操作能复现的结论，修改方案只列缺陷修复并逐条点名文件、位置与验收命令。文本与 `departmentPrompt(department)` 逐字节一致，且该节不替换任何内容——它与 persona、工作区指令、行为规范并列组合。
 
 #### Token 影响
 
-按 4 字符/token 的启发式估计，技术部约 6,400 token、商务部约 4,200 token、招投标专员约 300 token、测试员约 720 token，作为系统提示词的一部分每请求一次、跨轮不变。用户未选择的模式不产生任何开销。
+按 4 字符/token 的启发式估计，技术部约 7,400 token、商务部约 4,200 token、招投标专员约 300 token、测试员约 720 token，作为系统提示词的一部分每请求一次、跨轮不变。用户未选择的模式不产生任何开销。
 
 #### KV 缓存影响
 
@@ -190,11 +191,11 @@ kind: "package-reference"
 - **仅中文**——两套规则都没有本地化版本。
 - **工具箱面向 Windows**——`to_pdf.py` 通过 COM 驱动 Word，`open_folder.py` 调起桌面外壳；本机无 Word 时规则要求模型改用 harness 的 Office 转换。
 - **脚本原样发布**——随包副本保留其自身的注释与依赖（`python-docx`、`matplotlib`）；本包不维护它们。
-- **改动任务工单需要带 `openpyxl` 与 `Pillow` 的解释器**——生成脚本缺任一依赖就报错退出并打印安装命令；工单只出 xlsx，工具箱的 `to_pdf.py` 只转 Word 文档，客户要 PDF 时规则要求模型如实说明，不承诺转档。
+- **改动任务工单与处置表都需要带 `openpyxl` 与 `Pillow` 的解释器**——两个生成脚本缺任一依赖就报错退出并打印安装命令；工单与处置表只出 xlsx，工具箱的 `to_pdf.py` 只转 Word 文档，客户要 PDF 时规则要求模型如实说明，不承诺转档。
 - **公文技能需要带 `reportlab` 的解释器**——随包运行时载荷带 `python-docx` 与 `Pillow`，但不带 `reportlab`，因此机器上的 `python` 缺它时只能得到 DOCX、没有 PDF。技能正文要求模型交付 DOCX 并说明原因，而不是静默丢掉 PDF。
 - **模板源码抓取技能抓的是第三方站点**——它驱动 bootstrapmb.com 的未鉴权接口并改写下载到的文件；随包脚本把 `-OutRoot` 默认为当前工作目录，且不带任何站点凭证。其行为依赖该站点的页面结构，本包不维护它。
 - **技术部与测试员规则点名的 Agent 浏览器能力不随该模式交付**——`browser_*` 工具族来自可选的浏览器自动化插件包，与部门无关；未启用时规则要求模型先说明，再改用其他真实入口手段验证，不谎称做过浏览器验证。
-- **每个 harness home 的工具箱目录与技能目录按名字共用**——所有部门会话共用 `department/business-tools`、`department/skills/official-doc` 与 `department/skills/bootstrapmb-template-fetch`，商务部会话另加 `department/skills/proposal-doc`，技术部会话另加 `department/skills/demo-video` 与 `department/skills/ui-confirmation-doc`。
+- **每个 harness home 的工具箱目录与技能目录按名字共用**——商务部会话共用 `department/business-tools`、技术部会话共用 `department/tech-tools`，所有部门共用 `department/skills/official-doc` 与 `department/skills/bootstrapmb-template-fetch`，商务部会话另加 `department/skills/proposal-doc`，技术部会话另加 `department/skills/demo-video` 与 `department/skills/ui-confirmation-doc`。
 - **UI 界面确认单技能的小程序半边需要已登录的微信开发者工具**——截图脚本要驱动 IDE 的自动化端口，该端口须先在 IDE 的安全设置里打开，且脚本从发布目录导入 `miniprogram-automator`、不随包携带。这两项不具备时，Web 半边照常可用，小程序半边拍不了。
 - **演示视频技能的小程序半边需要已登录的微信开发者工具与真实 AppID**——该引擎通过开发者工具自带的 `wechatide` CLI 驱动 IDE（CLI 缺失时退回 `miniprogram-automator`），用 ffmpeg 抓桌面、用 Pillow 合成；`touristappid` 这类占位 appid 会被 CLI 拒绝。缺这些时 Web 半边照常可用，小程序半边录不出来。
 

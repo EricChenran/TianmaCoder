@@ -31,7 +31,7 @@ import {
   installDemoVideoSkill,
   type DepartmentSkillOptions,
 } from './skill.ts'
-import { type BusinessToolboxOptions, installBusinessToolbox } from './toolbox.ts'
+import { type BusinessToolboxOptions, installBusinessToolbox, installTechToolbox } from './toolbox.ts'
 
 export { departmentPrompt, DEPARTMENTS, DEPARTMENT_PROMPTS, type Department } from './prompts/index.ts'
 export {
@@ -70,7 +70,10 @@ export {
 export {
   BUSINESS_TOOL_FILES,
   installBusinessToolbox,
+  installTechToolbox,
   materializeBusinessTools,
+  materializeTechTools,
+  TECH_TOOL_FILES,
   TOOLS_CONTRIBUTOR_NAME,
   TOOLS_DIR_VARIABLE,
   type BusinessToolboxOptions,
@@ -107,10 +110,10 @@ export const Config: z<Config> = z.object({
 
 /**
  * Register the selected department's rules and its bundled 公文 skill; for
- * 技术部 add the bundled 演示视频、配图 and UI 确认单 skills, for 商务部 publish
- * its toolbox, and for 商务部 or 招投标专员 add the bundled 实施方案 skill. The
- * 测试员 row carries only the rules and the two skills every department mode
- * shares.
+ * 技术部 add the bundled 演示视频、配图 and UI 确认单 skills and publish its
+ * work-order disposition toolbox, for 商务部 publish its document toolbox, and
+ * for 商务部 or 招投标专员 add the bundled 实施方案 skill. The 测试员 row
+ * carries only the rules and the two skills every department mode shares.
  * @param ctx - the preset scope context this row mounts in.
  * @param config - the department selection and optional publication directories.
  */
@@ -137,8 +140,8 @@ export function apply(ctx: Context, config: Config): void {
     installDemoVideoSkill(ctx)
   }
   if (config.department === 'business' || config.department === 'bid') installProposalDocSkill(ctx)
-  if (config.department === 'business') {
-    const { assetRoot, toolsDir } = config
-    installBusinessToolbox(ctx, { ...assetRoot === undefined ? {} : { assetRoot }, ...toolsDir === undefined ? {} : { toolsDir } })
-  }
+  const toolbox = { ...config.assetRoot === undefined ? {} : { assetRoot: config.assetRoot },
+    ...config.toolsDir === undefined ? {} : { toolsDir: config.toolsDir } }
+  if (config.department === 'business') installBusinessToolbox(ctx, toolbox)
+  if (config.department === 'tech') installTechToolbox(ctx, toolbox)
 }

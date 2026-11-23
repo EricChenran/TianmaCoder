@@ -77,6 +77,8 @@ export const guideEn = {
     'Everything Standard mode provides, plus one system-prompt section carrying the department standard: layering, typed errors, database changes, authentication, logging, caching, uploads, realtime delivery, and production hardening for backend work; design tokens, mobile-first layout, motion, and accessibility for frontend work; and installation, certificates, backups, monitoring, and failure triage for server operations.',
     '### When to choose it',
     'When the work should follow the department standard without restating it, or when the delivery checks should run as part of the task.',
+    '### Work-order disposition',
+    'When a change work order arrives, the mode runs one closed loop: read every item out of the workbook, decompose each into a concrete change with its own verification, ask you whether to dispatch parallel subagents (shared ports, build outputs, and databases still run in series), verify each item, and deliver a disposition table whose rows match the order item for item. Every row carries what was done, where it changed, a before/after comparison screenshot, and an honest status — a fix that was not verified is never reported as 已修复.',
   ].join('\n\n'),
   guideTechUsage: [
     '### Ship a small API',
@@ -85,6 +87,9 @@ export const guideEn = {
     '### Review a page before delivery',
     '> Check this page against the department frontend standard: layout at both required widths, contrast and focus states, and the empty and error states. List what fails with file and line, then fix it.',
     'Expected output: a list of concrete failures and the fixes, or a statement that the page already passes.',
+    '### Work a change work order',
+    '> Here is the change work order from the business team. Read every item, decompose them, ask me whether to run the work in parallel, then deliver a disposition table with before/after screenshots.',
+    'Expected output: a disposition table (xlsx) with one row per work-order item, before/after comparison images wherever the change is visible, and a per-item status that only claims 已修复 after verification.',
   ].join('\n\n'),
   guideBusinessIntro: 'Choose Business mode when starting a new task. Provide the requirement text, the total amount, and the schedule, or let the agent ask for whichever is missing.',
   guideBusinessExplanation: [
@@ -220,6 +225,8 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：后端的分层、类型化错误、数据库变更、认证鉴权、日志、缓存、上传、实时推送与生产加固；前端的设计 token、移动优先布局、动效与无障碍；运维的安装、证书、备份、监控与故障排查。',
     '### 什么时候选',
     '当工作要按部门规范执行、又不想每次重复交代时；或者希望交付自检清单随任务一起跑。',
+    '### 工单处置',
+    '收到《改动任务工单》后跑一条闭环：把工单每一项读成条目、逐项拆解成带验收口径的改动、问你要不要派并行子 Agent（共享端口、构建产物、数据库的任务仍串行）、逐项验收，最后交付一张与工单逐项对上的处置表。每行写清做了什么、改在哪里、改前/改后对比截图与真实状态——没验收通过的一律不写「已修复」。',
   ].join('\n\n'),
   guideTechUsage: [
     '### 交付一个小接口',
@@ -228,6 +235,9 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '### 上线前检查页面',
     '> 按部门前端规范检查这个页面：规定两档宽度下的布局、对比度与聚焦态，以及空状态和错误状态。逐条列出不达标项（含文件与行号），然后修好。',
     '预期产出：具体的不达标清单与修复，或说明页面已达标。',
+    '### 按工单逐项处置',
+    '> 这是商务部给的改动任务工单。把每一项读出来逐条拆解，先问我并行还是串行，改完出一张处置表，能截图的给改前改后对比。',
+    '预期产出：一张处置表 xlsx，一行对应工单一项，界面类改动带改前/改后对比图，状态只有验收通过才写已修复。',
   ].join('\n\n'),
   guideBusinessIntro: '新建任务时选择「商务部」，提供需求文字、总金额与工期；缺哪一项就让 Agent 先问。',
   guideBusinessExplanation: [
