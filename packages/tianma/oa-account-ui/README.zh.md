@@ -11,6 +11,8 @@ kind: "package-reference"
 
 天码 OA 账户体系的浏览器半边：来自 Host `oaAccount` 远端命名空间的同一份快照，支撑登录对话框、侧栏启动器，以及展示已登录资料、工作台计数与可改字段编辑器的设置区块。两处读同一份快照，因此不会对"谁已登录"给出不一致的说法，Token 也不会到达浏览器。它还承载对话闸门的客户端半边：未登录时每个存活会话的输入框都变为惰性并说明原因。
 
+面板入口「工作台」打开一个一级页面，模块页签目前是概览、消息、待办；在消息里打开一条记录会在列表旁开一个二级页签，所有已开页签只隐藏而不销毁，切回来时滚动位置与草稿文本都还在。
+
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -27,7 +29,7 @@ kind: "package-reference"
 
 把本插件挂载在设置外壳旁边，并在同一组态里挂载 Host 半边（[@tianma/dsh-oa-account](../oa-account/README.zh.md)）：浏览器半边调用 `remote.oaAccount`，缺少 Host 半边时渲染不出有意义的内容。
 
-它在 `settings.launcher` 注册侧栏启动器、在 `settings.section`（`id: 'oa-account'`，排在最前）注册设置页，locale 命名空间为 `settings.oaAccount`，提供英文与中文。
+它在 `settings.launcher` 注册侧栏启动器、在 `settings.section`（`id: 'oa-account'`，排在最前）注册设置页，并把工作台注册为一级面板（`main`，key `oa-workbench`），同时在 `sidebar.panellist` 以 order `-10` 占一行；locale 命名空间为 `settings.oaAccount` 与 `workbench.oa`，提供英文与中文。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -98,6 +100,8 @@ kind: "package-reference"
 - **状态映射唯一。** `active` / `disabled` / `banned` 由账户状态渲染；本构建从未见过的状态按"未知"渲染，而不是按可用处理。
 - **只有组态挂载了账户服务时界面才存在。** 没有 Host 半边的档案完全没有账户界面。
 - **客户端闸门是推送而非读取。** 单向依赖下输入框的 block 注册表是唯一通道，因此插件直接写入它、并在卸载时清除；只挂载账户界面而没有对话服务的组态，仍保留 Host 侧拒绝，只是少了输入框禁用。
+- **工作台目前覆盖概览、消息与待办。** 审批、日程、任务、考勤模块随后接入；它们的 Host 读取已经就绪。
+- **已打开的消息页签存在组件状态里。** 刷新会丢掉打开过的页签，模块与其筛选回到默认值。
 
 <a id="dev-note"></a>
 ### 开发备注

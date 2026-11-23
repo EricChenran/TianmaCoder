@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 The browser half of the Tianma OA account system: one snapshot from the Host's `oaAccount` Remote namespace backs the sign-in dialog, the sidebar launcher, and the Settings section showing the signed-in profile, its counters, and an editor for the fields its owner may change. Both surfaces read that one snapshot, so they cannot disagree about who is signed in, and no token reaches the browser. It also carries the client half of the conversation gate: while no account is signed in, every live session's composer is inert and names the reason.
 
+The panel entry `Workbench` opens a first-level page whose module tabs are `Overview`, `Messages`, and `To-do` today. A message opens a second-level tab beside the list; every open tab stays mounted and is hidden rather than destroyed, so switching back keeps its scroll position and draft text.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -27,7 +29,7 @@ The browser half of the Tianma OA account system: one snapshot from the Host's `
 
 Mount the plugin next to the settings shell, and mount the Host half ([@tianma/dsh-oa-account](../oa-account/README.md)) in the same composition: the browser half calls `remote.oaAccount` and renders nothing meaningful without it.
 
-It registers the sidebar launcher in `settings.launcher` and the Settings page in `settings.section` (`id: 'oa-account'`, first) under the locale namespace `settings.oaAccount`, in English and Chinese.
+It registers the sidebar launcher in `settings.launcher`, the Settings page in `settings.section` (`id: 'oa-account'`, first), and the workbench as a first-level panel (`main`, key `oa-workbench`) with its own row in `sidebar.panellist` at order `-10`, under the locale namespaces `settings.oaAccount` and `workbench.oa`, in English and Chinese.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -98,6 +100,8 @@ These limits define the current boundary.
 - **One status mapping.** `active` / `disabled` / `banned` are rendered from the account status; a status this build has never seen renders as unknown rather than as usable.
 - **The surfaces render only where the composition mounts the account service.** A profile without the Host half has no account surfaces at all.
 - **The client gate is pushed, not read.** The composer's block registry is the only channel the one-way dependency allows, so the plugin writes it directly and clears it when it unloads; a deployment that mounts the account UI without the conversation service keeps the Host-side refusal and loses only the disabled composer.
+- **The workbench covers overview, messages, and to-do today.** Approval, schedule, task, and attendance modules come next; their Host reads already exist.
+- **Open message tabs live in component state.** A reload loses the open tabs; the module and its filters return to their defaults.
 
 <a id="dev-note"></a>
 ### Dev Note

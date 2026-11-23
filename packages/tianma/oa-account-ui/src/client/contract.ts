@@ -6,7 +6,17 @@
  * @module @tianma/dsh-oa-account-ui/contract
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
-import type { OaCaptcha, OaSessionView, OaStats, OaUser } from '@tianma/dsh-oa-account/types'
+import type {
+  OaCaptcha,
+  OaAttendanceToday,
+  OaMessage,
+  OaNotificationPreference,
+  OaNotificationPreferencePatch,
+  OaSessionView,
+  OaStats,
+  OaTodo,
+  OaUser,
+} from '@tianma/dsh-oa-account/types'
 
 /** Everything the account surfaces render. */
 export interface OaAccountSnapshot {
@@ -76,4 +86,72 @@ export interface OaAccountInjected {
    * @param draft - the fields to write; omitted fields stay unchanged.
    */
   save: (draft: OaProfileDraft) => Promise<void>
+}
+
+/** The workbench modules this panel opens. */
+export type OaWorkbenchModule = 'overview' | 'messages' | 'todos'
+
+/** One loaded slice, so a failed read reports itself without clearing the others. */
+export interface OaWorkbenchSlice<T> {
+  /** The read value, absent until it lands. */
+  value: T | undefined
+  /** Whether the read is in flight. */
+  loading: boolean
+  /** The backend's own refusal message, when the read was refused. */
+  error: string | undefined
+}
+
+/** Everything the workbench panel renders. */
+export interface OaWorkbenchSnapshot {
+  /** Whether an account is signed in; the panel shows a sign-in notice when not. */
+  signedIn: boolean
+  /** Personal counters, shared with the Settings page's read. */
+  stats: OaWorkbenchSlice<OaStats>
+  /** Station messages, newest first. */
+  messages: OaWorkbenchSlice<readonly OaMessage[]>
+  /** Personal to-dos, unfinished first. */
+  todos: OaWorkbenchSlice<readonly OaTodo[]>
+  /** Today's attendance. */
+  attendance: OaWorkbenchSlice<OaAttendanceToday>
+  /** The notification switches. */
+  notifications: OaWorkbenchSlice<OaNotificationPreference>
+}
+
+/** Host operations injected into the Cordis-free workbench components. */
+export interface OaWorkbenchInjected {
+  /** Host-owned workbench snapshot observed through framework hooks. */
+  hooks: { oaWorkbench: HostObservable<OaWorkbenchSnapshot> }
+  /** Open the sign-in dialog owned by the account surfaces. */
+  openLogin: () => void
+  /** Re-read every slice. */
+  refresh: () => Promise<void>
+  /**
+   * Mark one message read.
+   * @param id - the message id.
+   */
+  readMessage: (id: number) => Promise<void>
+  /** Mark every unread message read. */
+  readAllMessages: () => Promise<void>
+  /**
+   * Create one to-do item.
+   * @param content - the item text.
+   */
+  createTodo: (content: string) => Promise<void>
+  /**
+   * Flip one item's done flag.
+   * @param id - the item id.
+   */
+  toggleTodo: (id: number) => Promise<void>
+  /**
+   * Punch in for today.
+   * @param lunchBreak - whether the lunch break counts toward the required hours.
+   */
+  checkIn: (lunchBreak: boolean) => Promise<void>
+  /** Punch out for today. */
+  checkOut: () => Promise<void>
+  /**
+   * Write the notification switches.
+   * @param patch - the switches to change.
+   */
+  setPreference: (patch: OaNotificationPreferencePatch) => Promise<void>
 }

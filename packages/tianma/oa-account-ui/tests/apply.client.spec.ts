@@ -91,4 +91,50 @@ describe('the account apply wires the composer gate', () => {
       ['two' as SessionId, undefined],
     ])
   })
+
+  it('registers the workbench panel and its sidebar row ahead of the settings page', async () => {
+    const registrations: Array<{ name: string; id?: string; key?: string; order?: number }> = []
+    const ctx = new Context()
+    const remote = {
+      $stream: () => streamDouble(),
+      oaAccount: {
+        session: () => Promise.resolve({ ok: true as const, value: SIGNED_OUT }),
+      },
+    }
+    ctx.provide('slots', {
+      inject: (_name: string, factory: () => unknown) => { factory() },
+      register: (options: { name: string; id?: string; key?: string; order?: number }) => {
+        registrations.push(options)
+        return () => {}
+      },
+    } as never)
+    ctx.provide('locale', {
+      register: () => () => {},
+      bind: () => (key: keyof typeof zh) => zh[key],
+    } as never)
+    ctx.provide('remote', remote as never)
+    ctx.provide('remote.oaAccount', remote.oaAccount as never)
+    ctx.provide('conversation', {
+      blocks: {
+        set: (): void => {},
+        storeFor: (): never => { throw new Error('the account gate never reads a session block store') },
+        forget: (): never => { throw new Error('the account gate never forgets a session block') },
+      },
+    } as never)
+    ctx.provide('sessions', {
+      list: {
+        getSnapshot: () => ({ ids: [] as SessionId[], byId: {}, phase: 'ready' as const, projectionsBySession: {} }),
+        subscribe: () => () => {},
+      },
+    } as never)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    expect(registrations).toContainEqual(expect.objectContaining({ name: 'main', key: 'oa-workbench' }))
+    // The workbench leads the panel list, which is why it states a negative order.
+    expect(registrations).toContainEqual(
+      expect.objectContaining({ name: 'sidebar.panellist', id: 'oa-workbench', order: -10 }),
+    )
+    expect(registrations).toContainEqual(expect.objectContaining({ name: 'settings.section', id: 'oa-account' }))
+  })
 })

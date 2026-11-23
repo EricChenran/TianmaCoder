@@ -17,19 +17,29 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@tianma/dsh-oa-account/remote'
 import type { OaSessionView } from '@tianma/dsh-oa-account/types'
 import { OaAccountMenu } from './AccountMenu.tsx'
 import { OaAccountSection } from './AccountSection.tsx'
 import { syncComposerBlock } from './composer-block.ts'
 import { en, zh, type OaAccountKey } from './locales.ts'
-import type { OaAccountInjected, OaAccountSnapshot } from './contract.ts'
+import { OaWorkbenchPanel } from './workbench/Workbench.tsx'
+import { WorkbenchIcon } from './workbench/WorkbenchIcon.tsx'
+import { en as workbenchEn, zh as workbenchZh, type OaWorkbenchKey } from './workbench/locales.ts'
+import type {
+  OaAccountInjected, OaAccountSnapshot, OaWorkbenchInjected, OaWorkbenchSnapshot, OaWorkbenchSlice,
+} from './contract.ts'
 
 export type { OaAccountSnapshot, OaAccountInjected, OaProfileDraft } from './contract.ts'
 export type { OaAccountKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap { 'settings.oaAccount': OaAccountKey }
+  interface LocaleNamespaceMap {
+    'settings.oaAccount': OaAccountKey
+    'workbench.oa': OaWorkbenchKey
+  }
 }
 
 /** Services required by the account surfaces. The conversation and session
@@ -44,7 +54,9 @@ export const inject = ['slots', 'locale', 'remote', 'remote.oaAccount', 'convers
  */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register('settings.oaAccount', { en, zh }), 'oa-account: dictionaries')
+  ctx.effect(() => ctx.locale.register('workbench.oa', { en: workbenchEn, zh: workbenchZh }), 'oa-account: workbench dictionaries')
   const t = ctx.locale.bind('settings.oaAccount')
+  const tWorkbench = ctx.locale.bind('workbench.oa')
   let snapshot: OaAccountSnapshot = {
     session: undefined,
     profile: undefined,
@@ -64,6 +76,26 @@ export function apply(ctx: Context): void {
     snapshot = { ...snapshot, ...patch }
     for (const listener of listeners) listener()
   }
+  // The workbench keeps its own snapshot: it loads five independent reads and a
+  // refused one reports itself without clearing the others.
+  const emptySlice = <T>(): OaWorkbenchSlice<T> => ({ value: undefined, loading: false, error: undefined })
+  let workbench: OaWorkbenchSnapshot = {
+    signedIn: false,
+    stats: emptySlice(),
+    messages: emptySlice(),
+    todos: emptySlice(),
+    attendance: emptySlice(),
+    notifications: emptySlice(),
+  }
+  const workbenchListeners = new Set<() => void>()
+  const publishWorkbench = (patch: Partial<OaWorkbenchSnapshot>): void => {
+    workbench = { ...workbench, ...patch }
+    for (const listener of workbenchListeners) listener()
+  }
+  const settle = <T>(result: { ok: true; value: T } | { ok: false; error: { message?: string } }): OaWorkbenchSlice<T> =>
+    result.ok
+      ? { value: result.value, loading: false, error: undefined }
+      : { value: undefined, loading: false, error: result.error.message ?? '' }
   // A refused Remote call carries the backend's own message, which is what the
   // dialog shows; an empty string means "failed without one", and the component
   // then renders its localized copy.
@@ -72,6 +104,7 @@ export function apply(ctx: Context): void {
     const session = await ctx.remote.oaAccount.session()
     if (!session.ok) { publish({ failed: true }); return }
     publish({ session: session.value, failed: false, loading: session.value.signedIn })
+    publishWorkbench({ signedIn: session.value.signedIn })
     if (!session.value.signedIn) { publish({ profile: undefined, stats: undefined, loading: false }); return }
     const [profile, stats] = await Promise.all([
       ctx.remote.oaAccount.profile(),
@@ -87,15 +120,16 @@ export function apply(ctx: Context): void {
     const result = await ctx.remote.oaAccount.captcha()
     publish({ captcha: result.ok ? result.value : undefined })
   }
+  const openLogin = (): void => {
+    publish({ loginVisible: true, loginError: undefined })
+    void refreshCaptcha()
+  }
   const operations: OaAccountInjected = {
     hooks: { oaAccount: {
       getSnapshot: () => snapshot,
       subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     } },
-    openLogin() {
-      publish({ loginVisible: true, loginError: undefined })
-      void refreshCaptcha()
-    },
+    openLogin,
     closeLogin() { publish({ loginVisible: false, loginError: undefined }) },
     refreshCaptcha,
     async submit(account, password, captcha) {
@@ -131,6 +165,73 @@ export function apply(ctx: Context): void {
       publish({ saving: false, saved: true, profile: result.value })
     },
   }
+  const loadWorkbench = async (): Promise<void> => {
+    const [stats, messages, todos, attendance, notifications] = await Promise.all([
+      ctx.remote.oaAccount.stats(),
+      ctx.remote.oaAccount.messages('all'),
+      ctx.remote.oaAccount.todos(),
+      ctx.remote.oaAccount.attendanceToday(),
+      ctx.remote.oaAccount.notificationPreference(),
+    ])
+    publishWorkbench({
+      stats: settle(stats),
+      messages: settle(messages),
+      todos: settle(todos),
+      attendance: settle(attendance),
+      notifications: settle(notifications),
+    })
+  }
+  const reloadMessages = async (): Promise<void> => {
+    publishWorkbench({ messages: settle(await ctx.remote.oaAccount.messages('all')) })
+  }
+  const reloadTodos = async (): Promise<void> => {
+    publishWorkbench({ todos: settle(await ctx.remote.oaAccount.todos()) })
+  }
+  const reloadAttendance = async (): Promise<void> => {
+    publishWorkbench({ attendance: settle(await ctx.remote.oaAccount.attendanceToday()) })
+  }
+  const workbenchOperations: OaWorkbenchInjected = {
+    hooks: { oaWorkbench: {
+      getSnapshot: () => workbench,
+      subscribe: (listener) => {
+        workbenchListeners.add(listener)
+        return () => { workbenchListeners.delete(listener) }
+      },
+    } },
+    openLogin,
+    async refresh() {
+      if (!workbench.signedIn) return
+      await loadWorkbench()
+    },
+    async readMessage(id) {
+      const result = await ctx.remote.oaAccount.readMessage(id)
+      if (result.ok) await reloadMessages()
+    },
+    async readAllMessages() {
+      const result = await ctx.remote.oaAccount.readAllMessages()
+      if (result.ok) await reloadMessages()
+    },
+    async createTodo(content) {
+      const result = await ctx.remote.oaAccount.createTodo(content)
+      if (result.ok) await reloadTodos()
+    },
+    async toggleTodo(id) {
+      const result = await ctx.remote.oaAccount.toggleTodo(id)
+      if (result.ok) await reloadTodos()
+    },
+    async checkIn(lunchBreak) {
+      const result = await ctx.remote.oaAccount.checkIn(lunchBreak)
+      if (result.ok) await reloadAttendance()
+    },
+    async checkOut() {
+      const result = await ctx.remote.oaAccount.checkOut()
+      if (result.ok) await reloadAttendance()
+    },
+    async setPreference(patch) {
+      publishWorkbench({ notifications: settle(await ctx.remote.oaAccount.setNotificationPreference(patch)) })
+    },
+  }
+  const WORKBENCH_ID = 'oa-workbench' as MainPanelId
   const stream = ctx.remote.$stream<OaSessionView>({
     name: 'oaAccount',
     open: signal => ctx.remote.oaAccount.watch(signal),
@@ -152,6 +253,15 @@ export function apply(ctx: Context): void {
     name: 'settings.section', id: 'oa-account', order: -10, label: () => t('nav'),
     locale: 'settings.oaAccount', inject: () => operations,
   }, OaAccountSection))
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: WORKBENCH_ID, locale: 'workbench.oa', inject: () => workbenchOperations,
+  }, OaWorkbenchPanel))
+  // The workbench is the first entry of the sidebar's panel list: it is the
+  // surface a signed-in employee opens before starting any conversation.
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: WORKBENCH_ID, order: -10, label: () => tWorkbench('panel'),
+    locale: 'workbench.oa',
+  }, WorkbenchIcon))
   // The composer cannot read this plugin (the dependency runs one way), so the
   // gate is pushed: while no account is signed in, every live session's input is
   // inert and names the reason, and signing in clears it again. The Host refuses
