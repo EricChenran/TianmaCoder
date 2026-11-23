@@ -28,15 +28,21 @@ import {
   fetchApprovalDetail,
   fetchApprovalTypes,
   fetchApprovals,
+  fetchAttendanceSummary,
+  fetchAttendanceToday,
   fetchCaptcha,
   fetchMessages,
   fetchNotificationPreference,
   fetchProfile,
   fetchStats,
+  fetchTaskBoard,
+  fetchTodaySchedules,
   fetchTodos,
   oaBaseUrl,
   postApproval,
   postApprovalAction,
+  postCheckIn,
+  postCheckOut,
   postNotificationPreference,
   postRefresh,
   postSignIn,
@@ -45,6 +51,7 @@ import {
   putMessageRead,
   putMessagesReadAll,
   putProfile,
+  putTaskComplete,
   putTodoToggle,
 } from './protocol.ts'
 import type {
@@ -54,6 +61,9 @@ import type {
   OaApprovalSubmitRequest,
   OaApprovalTab,
   OaApprovalType,
+  OaAttendanceRecord,
+  OaAttendanceSummary,
+  OaAttendanceToday,
   OaCaptcha,
   OaGateDecision,
   OaMessage,
@@ -61,9 +71,12 @@ import type {
   OaNotificationPreference,
   OaNotificationPreferencePatch,
   OaProfilePatch,
+  OaSchedule,
   OaSessionView,
   OaSignInRequest,
   OaStats,
+  OaTask,
+  OaTaskGroup,
   OaTodo,
   OaUser,
 } from './types.ts'
@@ -454,6 +467,86 @@ export class OaAccountService extends TypertRemoteService {
   @Remote
   saveApprovalDraft(request: OaApprovalSubmitRequest): Promise<OaApproval> {
     return this.authorized(token => postApproval(this.base, token, request, true, this.requestTimeoutMs))
+  }
+
+  /* ────────────────────────── 工作台 · 日程 ────────────────────────── */
+
+  /**
+   * Read today's schedule, which mixes real events with leave lines derived from
+   * approved requests — including colleagues' leave.
+   * @returns the entries, start time ascending.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  todaySchedules(): Promise<OaSchedule[]> {
+    return this.authorized(token => fetchTodaySchedules(this.base, token, this.requestTimeoutMs))
+  }
+
+  /* ────────────────────────── 工作台 · 任务 ────────────────────────── */
+
+  /**
+   * Read this account's task board.
+   * @returns the deadline buckets the backend populated.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  taskBoard(): Promise<OaTaskGroup[]> {
+    return this.authorized(token => fetchTaskBoard(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Mark one task complete.
+   * @param id - the task id.
+   * @returns the task after the write.
+   * @throws {OaAccountError} code `rejected` when this account does not execute the task.
+   */
+  @Remote
+  completeTask(id: number): Promise<OaTask> {
+    return this.authorized(token => putTaskComplete(this.base, token, id, this.requestTimeoutMs))
+  }
+
+  /* ────────────────────────── 工作台 · 考勤 ────────────────────────── */
+
+  /**
+   * Read today's attendance.
+   * @returns the shift, the punches, and the remaining work of the day.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  attendanceToday(): Promise<OaAttendanceToday> {
+    return this.authorized(token => fetchAttendanceToday(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Punch in for today.
+   * @param lunchBreak - whether the lunch break counts toward the day's required hours.
+   * @returns the record after the punch.
+   * @throws {OaAccountError} code `rejected` with the backend's reason, such as an off-network address or a closed window.
+   */
+  @Remote
+  checkIn(lunchBreak: boolean): Promise<OaAttendanceRecord> {
+    return this.authorized(token => postCheckIn(this.base, token, lunchBreak, this.requestTimeoutMs))
+  }
+
+  /**
+   * Punch out for today.
+   * @returns the record after the punch.
+   * @throws {OaAccountError} code `rejected` with the backend's reason, such as the one-hour floor.
+   */
+  @Remote
+  checkOut(): Promise<OaAttendanceRecord> {
+    return this.authorized(token => postCheckOut(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Read one month's attendance summary.
+   * @param period - `YYYY-MM`; absent reads the current month.
+   * @returns the summary the backend computed.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  attendanceSummary(period?: string): Promise<OaAttendanceSummary> {
+    return this.authorized(token => fetchAttendanceSummary(this.base, token, period, this.requestTimeoutMs))
   }
 
   /**

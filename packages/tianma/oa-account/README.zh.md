@@ -31,7 +31,7 @@ kind: "package-reference"
 
 配置：`baseUrl`（必填，OA API 根地址并含版本段）、`requestTimeoutMs`（默认 30 000）、`requireSignIn`（默认 `true`；关闭后仍挂载界面但不拦截产品）。
 
-远端命名空间 `oaAccount` 暴露 `session`、`captcha`、`signIn`、`signOut`、`profile`、`stats`、`updateProfile`、`gate` 与 `watch` 流，以及工作台读取 `messages`、`readMessage`、`readAllMessages`、`notificationPreference`、`setNotificationPreference`、`todos`、`createTodo`、`toggleTodo`、`removeTodo`、`approvals`、`approval`、`approvalAction`、`approvalTypes`、`submitApproval` 与 `saveApprovalDraft`。浏览器半边 [@tianma/dsh-oa-account-ui](../oa-account-ui/README.zh.md) 消费它。
+远端命名空间 `oaAccount` 暴露 `session`、`captcha`、`signIn`、`signOut`、`profile`、`stats`、`updateProfile`、`gate` 与 `watch` 流，以及工作台读取 `messages`、`readMessage`、`readAllMessages`、`notificationPreference`、`setNotificationPreference`、`todos`、`createTodo`、`toggleTodo`、`removeTodo`、`approvals`、`approval`、`approvalAction`、`approvalTypes`、`submitApproval`、`saveApprovalDraft`、`todaySchedules`、`taskBoard`、`completeTask`、`attendanceToday`、`checkIn`、`checkOut` 与 `attendanceSummary`。浏览器半边 [@tianma/dsh-oa-account-ui](../oa-account-ui/README.zh.md) 消费它。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -117,7 +117,8 @@ kind: "package-reference"
 - **不做定时续签。** access token 在下一次 `401` 时续签，而不是在其两小时有效期前主动续签。
 - **验证码答案发送两种字段名。** 这层容错源于规范与实际后端不一致；待后端定稿后可收敛为一种。
 - **资料写入覆盖账户所有者可改的字段**（`name`、`phone`、`avatar`）；改密码是后端另一条流程，未实现。
-- **工作台读取覆盖消息、通知开关、待办与审批。** 日程、任务、考勤、工资条与文件云传尚未暴露。
+- **工作台读取覆盖消息、通知开关、待办、审批、今日日程、任务看板与考勤。** 工资条与文件云传尚未暴露。
+- **不读打卡记录列表。** `GET /attendance/records` 会把历史上"只有上班卡"的日期改写成早退，因此本服务只暴露今日状态与月度汇总，不提供记录列表。
 - **消息列表是全量读取。** 后端没有分页，客户端拿到全部消息后自行决定渲染多少。
 
 <a id="dev-note"></a>

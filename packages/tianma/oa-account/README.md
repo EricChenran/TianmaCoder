@@ -31,7 +31,7 @@ Mount the plugin in a bundle that carries an interactive user. Only the Web appl
 
 Config: `baseUrl` (required; the OA API root including its version segment), `requestTimeoutMs` (default 30 000), `requireSignIn` (default `true`; turning it off mounts the surfaces without gating the product).
 
-The Remote namespace `oaAccount` exposes `session`, `captcha`, `signIn`, `signOut`, `profile`, `stats`, `updateProfile`, `gate`, and the `watch` stream, plus the workbench reads `messages`, `readMessage`, `readAllMessages`, `notificationPreference`, `setNotificationPreference`, `todos`, `createTodo`, `toggleTodo`, `removeTodo`, `approvals`, `approval`, `approvalAction`, `approvalTypes`, `submitApproval`, and `saveApprovalDraft`. The browser half of [@tianma/dsh-oa-account-ui](../oa-account-ui/README.md) consumes it.
+The Remote namespace `oaAccount` exposes `session`, `captcha`, `signIn`, `signOut`, `profile`, `stats`, `updateProfile`, `gate`, and the `watch` stream, plus the workbench reads `messages`, `readMessage`, `readAllMessages`, `notificationPreference`, `setNotificationPreference`, `todos`, `createTodo`, `toggleTodo`, `removeTodo`, `approvals`, `approval`, `approvalAction`, `approvalTypes`, `submitApproval`, `saveApprovalDraft`, `todaySchedules`, `taskBoard`, `completeTask`, `attendanceToday`, `checkIn`, `checkOut`, and `attendanceSummary`. The browser half of [@tianma/dsh-oa-account-ui](../oa-account-ui/README.md) consumes it.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -117,7 +117,8 @@ These limits define the current boundary.
 - **No scheduled renewal.** The access token is refreshed on the next `401` rather than ahead of its two-hour expiry.
 - **Two spellings are sent for the captcha answer.** The tolerance exists because the specification and the shipped backend disagree; it can be reduced to one spelling once the backend settles.
 - **The profile write covers the fields the account owner may change** (`name`, `phone`, `avatar`); password changes are a separate backend flow and are not implemented.
-- **The workbench reads cover messages, notification switches, to-dos, and approvals.** Schedules, tasks, attendance, salary slips, and file transfer are not exposed yet.
+- **The workbench reads cover messages, notification switches, to-dos, approvals, today's schedule, the task board, and attendance.** Salary slips and file transfer are not exposed yet.
+- **Attendance records are not read.** `GET /attendance/records` rewrites historical days that only carry a clock-in as early leave, so this service exposes today's state and the monthly summary instead of a record list.
 - **A message list is read in full.** The backend has no pagination, so the client receives every message and decides what to render.
 
 <a id="dev-note"></a>

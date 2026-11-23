@@ -16,14 +16,22 @@ import type {
   OaApprovalSubmitRequest,
   OaApprovalTab,
   OaApprovalType,
+  OaAttendanceDayStatus,
+  OaAttendanceRecord,
+  OaAttendanceSummary,
+  OaAttendanceToday,
   OaCaptcha,
   OaMessage,
   OaMessageKind,
   OaMessageTab,
   OaNotificationPreference,
   OaNotificationPreferencePatch,
+  OaSchedule,
   OaSignInRequest,
   OaStats,
+  OaTask,
+  OaTaskGroup,
+  OaTaskStatus,
   OaTodo,
   OaUser,
 } from './types.ts'
@@ -926,8 +934,318 @@ export async function postApproval(
   return toApproval(parsed.data)
 }
 
-/* ─────────────────────── 投影：wire → service 词汇 ─────────────────────── */
+/* ────────────────────────── 工作台：日程 ────────────────────────── */
 
+/** Wire shape of one today entry: a real event, or a leave line derived from an approval. */
+const wireSchedule = zod.object({
+  id: zod.union([zod.number(), zod.string()]),
+  kind: zod.string().optional(),
+  title: zod.string().optional(),
+  text: zod.string().optional(),
+  startTime: zod.string().nullable().optional(),
+  endTime: zod.string().nullable().optional(),
+  location: zod.string().nullable().optional(),
+  inviteStatus: zod.string().nullable().optional(),
+  can_view_detail: zod.boolean().optional(),
+})
+
+/** Wire shape of the today payload. */
+const wireSchedules = zod.object({ schedules: zod.array(wireSchedule) })
+
+/**
+ * Read today's schedule.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the entries, start time ascending, leave lines mixed in.
+ * @throws {OaAccountError} the classified failure of this request.
+ */
+export async function fetchTodaySchedules(
+  base: URL, token: string, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaSchedule[]> {
+  const response = await send({
+    url: new URL('schedules/today', base).href, method: 'GET', token, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireSchedules.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account schedule list was not understood')
+  return parsed.data.schedules.map(schedule => ({
+    id: String(schedule.id),
+    kind: schedule.kind === 'approval' ? 'leave' : 'event',
+    title: schedule.title ?? schedule.text ?? '',
+    text: schedule.text ?? schedule.title ?? '',
+    startTime: schedule.startTime ?? null,
+    endTime: schedule.endTime ?? null,
+    location: schedule.location ?? '',
+    myInvite: schedule.inviteStatus ?? null,
+    // A derived leave line states whether the reader may open it; a real event
+    // this account can see is always openable.
+    mine: schedule.can_view_detail ?? true,
+  }))
+}
+
+/* ────────────────────────── 工作台：任务 ────────────────────────── */
+
+/** Documented task states; anything else reads as `unknown`. */
+const TASK_STATUSES = new Set<string>(['ongoing', 'completed', 'deleted'])
+
+/** Wire shape of one assignee. */
+const wireTaskAssignee = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  avatar: zod.string().nullable().optional(),
+})
+
+/** Wire shape of one task. */
+const wireTask = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  typeLabel: zod.string(),
+  deadline: zod.string().nullable().optional(),
+  overdue: zod.boolean(),
+  status: zod.string(),
+  estimatedHours: zod.number().nullable().optional(),
+  actualHours: zod.number().nullable().optional(),
+  description: zod.string().nullable().optional(),
+  assignees: zod.array(wireTaskAssignee).optional(),
+})
+
+/** Wire shape of one task bucket. */
+const wireTaskGroup = zod.object({
+  name: zod.string(),
+  count: zod.number(),
+  tasks: zod.array(wireTask),
+})
+
+/** Wire shape of the task board payload. */
+const wireTaskBoard = zod.object({ groups: zod.array(wireTaskGroup) })
+
+/**
+ * Read this account's task board.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the groups the backend actually populated.
+ * @throws {OaAccountError} the classified failure of this request.
+ */
+export async function fetchTaskBoard(
+  base: URL, token: string, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaTaskGroup[]> {
+  const response = await send({
+    url: new URL('tasks', base).href, method: 'GET', token, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireTaskBoard.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account task board was not understood')
+  return parsed.data.groups.map(group => ({
+    name: group.name,
+    count: group.count,
+    tasks: group.tasks.map(toTask),
+  }))
+}
+
+/**
+ * Mark one task complete.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param id - the task id.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the task after the write.
+ * @throws {OaAccountError} code `rejected` when this account does not execute the task.
+ */
+export async function putTaskComplete(
+  base: URL, token: string, id: number, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaTask> {
+  const response = await send({
+    url: new URL(`tasks/${String(id)}/complete`, base).href, method: 'PUT', token, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireTask.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account completed task was not understood')
+  return toTask(parsed.data)
+}
+
+/* ────────────────────────── 工作台：考勤 ────────────────────────── */
+
+/** Documented day statuses; anything else reads as `unknown`. */
+const DAY_STATUSES = new Set<string>(['normal', 'late', 'early', 'absent', 'makeup', 'leave', 'rest'])
+
+/** Wire shape of one shift. */
+const wireShift = zod.object({
+  name: zod.string(),
+  work_start: zod.string(),
+  work_end: zod.string(),
+  late_grace_minutes: zod.number(),
+  early_grace_minutes: zod.number(),
+  is_flexible: zod.boolean().optional(),
+})
+
+/**
+ * Wire shape of a work plan. The backend sends `{}` for the highest
+ * administrator's exempt day, so every member is optional.
+ */
+const wireWorkPlan = zod.object({
+  required_checkout_at: zod.string().nullable().optional(),
+  remaining_minutes: zod.number().nullable().optional(),
+  checkin_window: zod.object({ text: zod.string().optional() }).optional(),
+})
+
+/** Wire shape of one attendance record. */
+const wireAttendanceRecord = zod.object({
+  id: zod.number(),
+  work_date: zod.string(),
+  clock_in_at: zod.string().nullable(),
+  clock_in_status: zod.string().nullable(),
+  clock_out_at: zod.string().nullable(),
+  clock_out_status: zod.string().nullable(),
+  day_status: zod.string(),
+  source: zod.string(),
+  remark: zod.string().nullable(),
+  work_plan: wireWorkPlan.optional(),
+})
+
+/** Wire shape of today's attendance. */
+const wireAttendanceToday = zod.object({
+  date: zod.string(),
+  shift: wireShift.nullable().optional(),
+  record: wireAttendanceRecord.nullable().optional(),
+  work_plan: wireWorkPlan.optional(),
+  checked_in: zod.boolean(),
+  checked_out: zod.boolean(),
+  no_clock_required: zod.boolean(),
+  no_clock_text: zod.string().optional(),
+})
+
+/** Wire shape of the monthly summary; the corrected variant adds keys this projection ignores. */
+const wireAttendanceSummary = zod.object({
+  period: zod.string(),
+  work_days: zod.number(),
+  actual_days: zod.number(),
+  late_count: zod.number(),
+  early_count: zod.number(),
+  absent_count: zod.number(),
+  leave_count: zod.number(),
+  full_attendance: zod.boolean(),
+  penalty_total: zod.union([zod.string(), zod.number()]).optional(),
+  comp_leave_days: zod.number().optional(),
+})
+
+/**
+ * Read today's attendance.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the shift, the punches, and the remaining work.
+ * @throws {OaAccountError} the classified failure of this request.
+ */
+export async function fetchAttendanceToday(
+  base: URL, token: string, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaAttendanceToday> {
+  const response = await send({
+    url: new URL('attendance/today', base).href, method: 'GET', token, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireAttendanceToday.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account attendance day was not understood')
+  const plan = parsed.data.record?.work_plan ?? parsed.data.work_plan
+  return {
+    date: parsed.data.date,
+    shiftName: parsed.data.shift?.name ?? '',
+    workStart: parsed.data.shift?.work_start ?? '',
+    workEnd: parsed.data.shift?.work_end ?? '',
+    checkedIn: parsed.data.checked_in,
+    checkedOut: parsed.data.checked_out,
+    noClockRequired: parsed.data.no_clock_required,
+    noClockText: parsed.data.no_clock_text ?? '',
+    record: parsed.data.record === null || parsed.data.record === undefined ? null : toAttendanceRecord(parsed.data.record),
+    requiredCheckoutAt: plan?.required_checkout_at ?? null,
+    remainingMinutes: plan?.remaining_minutes ?? null,
+    checkinWindowText: plan?.checkin_window?.text ?? '',
+  }
+}
+
+/**
+ * Punch in for today.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param lunchBreak - whether the lunch break counts toward the day's required hours.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the record after the punch.
+ * @throws {OaAccountError} code `rejected` with the backend's reason, such as an off-network address or a closed window.
+ */
+export async function postCheckIn(
+  base: URL, token: string, lunchBreak: boolean, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaAttendanceRecord> {
+  const response = await send({
+    url: new URL('attendance/checkin', base).href, method: 'POST', token,
+    // The backend reads a real boolean; a string "false" would count as lunch.
+    body: { lunch_break: lunchBreak }, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireAttendanceRecord.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account check-in record was not understood')
+  return toAttendanceRecord(parsed.data)
+}
+
+/**
+ * Punch out for today. The backend refuses a punch within one hour of the clock-in.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the record after the punch.
+ * @throws {OaAccountError} code `rejected` with the backend's reason.
+ */
+export async function postCheckOut(
+  base: URL, token: string, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaAttendanceRecord> {
+  const response = await send({
+    url: new URL('attendance/checkout', base).href, method: 'POST', token, timeoutMs,
+    ...signal === undefined ? {} : { signal },
+  })
+  const parsed = wireAttendanceRecord.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account check-out record was not understood')
+  return toAttendanceRecord(parsed.data)
+}
+
+/**
+ * Read one month's attendance summary.
+ * @param base - normalized API base URL.
+ * @param token - the access token.
+ * @param period - `YYYY-MM`; absent reads the current month.
+ * @param timeoutMs - per-request deadline.
+ * @param signal - caller lifetime.
+ * @returns the summary the backend computed.
+ * @throws {OaAccountError} the classified failure of this request.
+ */
+export async function fetchAttendanceSummary(
+  base: URL, token: string, period: string | undefined, timeoutMs: number, signal?: AbortSignal,
+): Promise<OaAttendanceSummary> {
+  const url = new URL('attendance/summary', base)
+  if (period !== undefined) url.searchParams.set('period', period)
+  const response = await send({ url: url.href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
+  const parsed = wireAttendanceSummary.safeParse(unwrap(response))
+  if (!parsed.success) throw new OaAccountError('protocol', 'oa account attendance summary was not understood')
+  return {
+    period: parsed.data.period,
+    workDays: parsed.data.work_days,
+    actualDays: parsed.data.actual_days,
+    lateCount: parsed.data.late_count,
+    earlyCount: parsed.data.early_count,
+    absentCount: parsed.data.absent_count,
+    leaveCount: parsed.data.leave_count,
+    fullAttendance: parsed.data.full_attendance,
+    penaltyTotal: parsed.data.penalty_total === undefined ? '0.00' : String(parsed.data.penalty_total),
+    compLeaveDays: parsed.data.comp_leave_days ?? 0,
+  }
+}
+
+/* ─────────────────────── 投影：wire → service 词汇 ─────────────────────── */
 /**
  * Project one message onto the service vocabulary.
  * @param raw - the validated wire payload.
@@ -1006,6 +1324,51 @@ function toApproval(raw: zod.infer<typeof wireApproval>): OaApproval {
       readAt: copy.read_at,
       createdAt: copy.created_at,
     })),
+  }
+}
+
+/**
+ * Project one task onto the service vocabulary.
+ * @param raw - the validated wire task.
+ * @returns the task with its status closed to the documented set.
+ */
+function toTask(raw: zod.infer<typeof wireTask>): OaTask {
+  return {
+    id: raw.id,
+    title: raw.title,
+    typeLabel: raw.typeLabel,
+    deadline: raw.deadline ?? null,
+    overdue: raw.overdue,
+    status: TASK_STATUSES.has(raw.status) ? raw.status as OaTaskStatus : 'unknown',
+    estimatedHours: raw.estimatedHours ?? null,
+    actualHours: raw.actualHours ?? null,
+    description: raw.description ?? '',
+    assignees: (raw.assignees ?? []).map(assignee => ({
+      id: assignee.id,
+      name: assignee.name,
+      avatar: assignee.avatar ?? '',
+    })),
+  }
+}
+
+/**
+ * Project one attendance record onto the service vocabulary.
+ * @param raw - the validated wire record.
+ * @returns the record with its day status closed to the documented set.
+ */
+function toAttendanceRecord(raw: zod.infer<typeof wireAttendanceRecord>): OaAttendanceRecord {
+  return {
+    id: raw.id,
+    workDate: raw.work_date,
+    clockInAt: raw.clock_in_at,
+    clockOutAt: raw.clock_out_at,
+    clockInStatus: raw.clock_in_status,
+    clockOutStatus: raw.clock_out_status,
+    dayStatus: DAY_STATUSES.has(raw.day_status) ? raw.day_status as OaAttendanceDayStatus : 'unknown',
+    source: raw.source,
+    remark: raw.remark,
+    requiredCheckoutAt: raw.work_plan?.required_checkout_at ?? null,
+    remainingMinutes: raw.work_plan?.remaining_minutes ?? null,
   }
 }
 

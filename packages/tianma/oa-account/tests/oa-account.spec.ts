@@ -564,3 +564,105 @@ describe('workbench: approvals', () => {
     expect(draft[0]?.body).not.toHaveProperty('approver_ids')
   })
 })
+
+describe('workbench: schedules, tasks, and attendance', () => {
+  it('reads today, separating a real event from a leave line derived from an approval', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({
+      schedules: [
+        {
+          id: 21, title: '项目评审会', date: '2026-11-23', startTime: '14:00:00', endTime: '15:30:00',
+          location: '3 楼会议室', status: 'active', inviteStatus: 'accepted', creator: { id: 3, name: '张三' },
+        },
+        {
+          id: 'approval-55-2026-11-23', approval_id: 55, kind: 'approval', title: '王五 调休', text: '王五调休',
+          startTime: null, endTime: null, location: '调休', status: 'active', can_view_detail: false, inviteStatus: null,
+        },
+      ],
+    }))
+    const [review, leave] = await service.todaySchedules()
+    expect(review?.id).toBe('21')
+    expect(review?.kind).toBe('event')
+    expect(review?.mine).toBe(true)
+    expect(review?.myInvite).toBe('accepted')
+    // A colleague's leave line is readable as context but not openable.
+    expect(leave?.kind).toBe('leave')
+    expect(leave?.mine).toBe(false)
+    expect(leave?.title).toBe('王五 调休')
+    expect(leave?.startTime).toBeNull()
+  })
+
+  it('reads the task board and completes one task on its documented route', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const task = {
+      id: 12, title: '整理报价单', type: 'system', typeLabel: '系统任务', deadline: '11月23日 18:00',
+      overdue: false, status: 'ongoing', hasWorkHours: true, estimatedHours: 4, actualHours: 0,
+      description: '……', avatars: [], assignees: [{ id: 3, name: '张三', avatar: null }],
+    }
+    recordFetch(() => ok({ groups: [{ name: '今天', count: 1, expanded: true, tasks: [task] }] }))
+    const groups = await service.taskBoard()
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.name).toBe('今天')
+    expect(groups[0]?.tasks[0]?.status).toBe('ongoing')
+    expect(groups[0]?.tasks[0]?.estimatedHours).toBe(4)
+    expect(groups[0]?.tasks[0]?.assignees[0]?.avatar).toBe('')
+
+    const seen = recordFetch(() => ok({ ...task, status: 'completed' }))
+    const completed = await service.completeTask(12)
+    expect(seen[0]?.method).toBe('PUT')
+    expect(seen[0]?.url).toContain('/tasks/12/complete')
+    expect(completed.status).toBe('completed')
+  })
+
+  it('reads the day, then punches in and out with a real boolean on the wire', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const record = {
+      id: 1, work_date: '2026-11-23', clock_in_at: '2026-11-23 09:02:11', clock_in_status: 'normal',
+      clock_out_at: null, clock_out_status: null, day_status: 'normal', source: 'app', remark: null,
+      work_plan: { required_checkout_at: '2026-11-23 19:02:11', remaining_minutes: 598, checkin_window: { text: '白班 07:00-11:30' } },
+    }
+    recordFetch(() => ok({
+      date: '2026-11-23',
+      shift: { name: '白班', work_start: '09:00', work_end: '18:00', late_grace_minutes: 0, early_grace_minutes: 0, is_flexible: false },
+      shifts: [],
+      record,
+      work_plan: { required_checkout_at: '2026-11-23 19:02:11', remaining_minutes: 598, checkin_window: { text: '白班 07:00-11:30' } },
+      checked_in: true, checked_out: false, no_clock_required: false,
+      no_clock_reason: '', no_clock_text: '', no_clock_type: '',
+    }))
+    const today = await service.attendanceToday()
+    expect(today.shiftName).toBe('白班')
+    expect(today.checkedIn).toBe(true)
+    expect(today.remainingMinutes).toBe(598)
+    expect(today.record?.dayStatus).toBe('normal')
+    expect(today.checkinWindowText).toBe('白班 07:00-11:30')
+
+    const seen = recordFetch(() => ok(record))
+    await service.checkIn(false)
+    expect(seen[0]?.method).toBe('POST')
+    expect(seen[0]?.url).toContain('/attendance/checkin')
+    // A string here would count as "with lunch" on the backend, so the wire carries a boolean.
+    expect(seen[0]?.body).toEqual({ lunch_break: false })
+
+    const out = recordFetch(() => ok({ ...record, clock_out_at: '2026-11-23 19:05:00' }))
+    await service.checkOut()
+    expect(out[0]?.url).toContain('/attendance/checkout')
+  })
+
+  it('reads one month summary, keeping the backend-formatted penalty as text', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const seen = recordFetch(() => ok({
+      period: '2026-11', work_days: 20, actual_days: 19, late_count: 2, early_count: 0,
+      absent_count: 0, leave_count: 1, full_attendance: false, penalty_total: '10.00', comp_leave_days: 0.5,
+    }))
+    const summary = await service.attendanceSummary('2026-11')
+    expect(seen[0]?.url).toContain('/attendance/summary?period=2026-11')
+    expect(summary.penaltyTotal).toBe('10.00')
+    expect(summary.compLeaveDays).toBe(0.5)
+    expect(summary.fullAttendance).toBe(false)
+  })
+})

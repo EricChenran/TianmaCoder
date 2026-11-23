@@ -412,3 +412,189 @@ export interface OaApprovalSubmitRequest {
   /** Copiers by user id. */
   ccUserIds?: readonly number[]
 }
+
+/* ────────────────────────── 工作台：日程 ────────────────────────── */
+
+/**
+ * What one today entry is. A shared meeting is an `event`; a leave line derived
+ * from an approved request is a `leave` entry, whose id is a composite string.
+ */
+export type OaScheduleKind = 'event' | 'leave'
+
+/** One entry in today's schedule. */
+export interface OaSchedule {
+  /** Entry id: a number for events, `approval-<id>-<date>` for leave lines. */
+  id: string
+  /** Whether this is a real event or a leave line derived from an approval. */
+  kind: OaScheduleKind
+  /** Title as the backend composed it. */
+  title: string
+  /** Display text; the leave line's own label. */
+  text: string
+  /** Start time `HH:MM:SS`, absent on an all-day leave line. */
+  startTime: string | null
+  /** End time `HH:MM:SS`, absent on an all-day leave line. */
+  endTime: string | null
+  /** Room, or the leave label on a derived line. */
+  location: string
+  /** This account's invitation state, absent when it is not a participant. */
+  myInvite: string | null
+  /** Whether this account may open the detail: true for events it can read, and for its own leave. */
+  mine: boolean
+}
+
+/* ────────────────────────── 工作台：任务 ────────────────────────── */
+
+/** Task state as the backend reports it; an unlisted value reads as `unknown`. */
+export type OaTaskStatus = 'ongoing' | 'completed' | 'deleted' | 'unknown'
+
+/** One assignee of a task. */
+export interface OaTaskAssignee {
+  /** User id. */
+  id: number
+  /** Display name. */
+  name: string
+  /** Avatar path. */
+  avatar: string
+}
+
+/** One task. */
+export interface OaTask {
+  /** Task id. */
+  id: number
+  /** Title. */
+  title: string
+  /** `系统任务` or `自建任务`, as the backend decides from `type`. */
+  typeLabel: string
+  /** Deadline sentence such as `11月23日 18:00`, absent when there is none. */
+  deadline: string | null
+  /** Whether the deadline has passed; the backend computes it, there is no stored state. */
+  overdue: boolean
+  /** Task state. */
+  status: OaTaskStatus
+  /** Estimated hours, absent when the task tracks none. */
+  estimatedHours: number | null
+  /** Recorded hours. */
+  actualHours: number | null
+  /** Description. */
+  description: string
+  /** Everyone executing this task. */
+  assignees: readonly OaTaskAssignee[]
+}
+
+/** One deadline bucket of the task board. */
+export interface OaTaskGroup {
+  /** Bucket name the backend fixed: `已超期`, `今天`, `未来7天`, `更远`, `无截止时间`, `已完成`. */
+  name: string
+  /** Tasks in this bucket, deadline ascending and undated last. */
+  count: number
+  /** Tasks in this bucket. */
+  tasks: readonly OaTask[]
+}
+
+/* ────────────────────────── 工作台：考勤 ────────────────────────── */
+
+/** One duty shift. */
+export interface OaAttendanceShift {
+  /** Shift name. */
+  name: string
+  /** Shift start `HH:MM`. */
+  workStart: string
+  /** Shift end `HH:MM`. */
+  workEnd: string
+  /** Grace minutes before a check-in counts late. */
+  lateGraceMinutes: number
+  /** Grace minutes before a check-out counts early. */
+  earlyGraceMinutes: number
+  /** Whether the shift allows flexible hours. */
+  isFlexible: boolean
+}
+
+/** Day status as the backend judges it; an unlisted value reads as `unknown`. */
+export type OaAttendanceDayStatus =
+  | 'normal'
+  | 'late'
+  | 'early'
+  | 'absent'
+  | 'makeup'
+  | 'leave'
+  | 'rest'
+  | 'unknown'
+
+/** One day's attendance record. */
+export interface OaAttendanceRecord {
+  /** Record id. */
+  id: number
+  /** Business date `YYYY-MM-DD`. */
+  workDate: string
+  /** Clock-in time `YYYY-MM-DD HH:MM:SS`, absent before the first punch. */
+  clockInAt: string | null
+  /** Clock-out time, absent before the second punch. */
+  clockOutAt: string | null
+  /** `normal` or `late` once the day is judged. */
+  clockInStatus: string | null
+  /** `normal` or `early` once the day is judged. */
+  clockOutStatus: string | null
+  /** Day status. */
+  dayStatus: OaAttendanceDayStatus
+  /** Record source: `app`, `makeup`, or `system`. */
+  source: string
+  /** Administrator remark. */
+  remark: string | null
+  /** When this day's required work completes, derived from the clock-in and the lunch plan. */
+  requiredCheckoutAt: string | null
+  /** Minutes still owed today. */
+  remainingMinutes: number | null
+}
+
+/** Today's attendance as one read returns it. */
+export interface OaAttendanceToday {
+  /** Business date. */
+  date: string
+  /** Current shift name, empty when none is configured. */
+  shiftName: string
+  /** Shift start `HH:MM`. */
+  workStart: string
+  /** Shift end `HH:MM`. */
+  workEnd: string
+  /** Whether the clock-in punch exists. */
+  checkedIn: boolean
+  /** Whether the clock-out punch exists. */
+  checkedOut: boolean
+  /** Whether today needs no punch at all. */
+  noClockRequired: boolean
+  /** Why no punch is needed, as the backend words it. */
+  noClockText: string
+  /** Today's record, absent before the first punch. */
+  record: OaAttendanceRecord | null
+  /** When today's required work completes. */
+  requiredCheckoutAt: string | null
+  /** Minutes still owed today. */
+  remainingMinutes: number | null
+  /** The punch window the backend allows, as one sentence. */
+  checkinWindowText: string
+}
+
+/** One month's attendance summary. */
+export interface OaAttendanceSummary {
+  /** Period `YYYY-MM`. */
+  period: string
+  /** Working days that required attendance. */
+  workDays: number
+  /** Working days with a record. */
+  actualDays: number
+  /** Late arrivals. */
+  lateCount: number
+  /** Early departures. */
+  earlyCount: number
+  /** Absent working days. */
+  absentCount: number
+  /** Leave days. */
+  leaveCount: number
+  /** Whether the full-attendance bonus was earned. */
+  fullAttendance: boolean
+  /** Total penalty the backend computed, as text. */
+  penaltyTotal: string
+  /** Comp-leave days accrued this month. */
+  compLeaveDays: number
+}
