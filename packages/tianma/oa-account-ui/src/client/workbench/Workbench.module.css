@@ -361,6 +361,7 @@
   height: 6px;
   flex: none;
   border-radius: 50%;
+  corner-shape: round;
   background: transparent;
 }
 
