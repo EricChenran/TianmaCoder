@@ -86,7 +86,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'A fixed team mode for engineering work. Keeps Standard mode capabilities and adds the department standard for backend, frontend, and server operations, including its delivery checks.',
   presetBusinessName: 'Business mode',
   presetBusinessDescription:
-    'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, and case retrieval, with its own document scripts.',
+    'A fixed team mode for commercial work. Keeps Standard mode capabilities and adds the department standard for requirement documents, quotations, case retrieval, and change work orders, with its own document scripts.',
   presetBidName: 'Bid specialist mode',
   presetBidDescription:
     'A fixed mode for tender work. Keeps Standard mode capabilities and adds the bidding standard: read the tender, extract the technical requirements, and produce an implementation plan through the bundled document skill.',
@@ -108,7 +108,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetMinimalSummary: 'One terminal only, the plainest agent',
   presetCordisSummary: 'Lets the agent write plugins and extend DSH',
   presetTechSummary: 'Backend, frontend and ops discipline',
-  presetBusinessSummary: 'Requirement documents, quotations, case retrieval',
+  presetBusinessSummary: 'Requirement documents, quotations, case retrieval, change work orders',
   presetBidSummary: 'Tender reading, requirement extraction, implementation plans',
   presetTesterSummary: 'Verdict-first integration, end-to-end and security checks, function and defects only',
 
@@ -155,7 +155,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetTechName: '技术部',
   presetTechDescription: '固定技术团队模式。保留标准模式的能力，并加入技术部规范：后端、前端、运维三类工程纪律与交付自检。',
   presetBusinessName: '商务部',
-  presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索，自带文档生成脚本。',
+  presetBusinessDescription: '固定商务团队模式。保留标准模式的能力，并加入商务部规范：需求文档、报价单、案例检索、改动任务工单，自带文档生成脚本。',
   presetBidName: '招投标专员',
   presetBidDescription: '固定投标团队模式。保留标准模式的能力，并加入招投标规范：读招标文件、提炼技术需求，固定用方案书技能产出实施方案。',
   presetTesterName: '测试员',
@@ -172,7 +172,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalSummary: '只给一个终端，能力最简',
   presetCordisSummary: '让 Agent 编写插件，扩展 DSH',
   presetTechSummary: '后端／前端／运维的工程纪律与交付自检',
-  presetBusinessSummary: '需求文档、报价单、案例检索',
+  presetBusinessSummary: '需求文档、报价单、案例检索、改动任务工单',
   presetBidSummary: '读标、提炼需求、出实施方案',
   presetTesterSummary: '结论先行的联调、端到端与安全审计，只判功能与缺陷',
 

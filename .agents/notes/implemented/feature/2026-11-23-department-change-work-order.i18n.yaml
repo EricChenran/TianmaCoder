@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-23-department-change-work-order.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-23-department-change-work-order.md
+/agent-note-change-work-order-workbook:
+  en: 01b8e50747b6ef34
+  zh: 5e411ed735049818
+/agent-note-change-work-order-workbook/problem:
+  en: a2cb9f6b7e24011c
+  zh: fe427eb4ad55c8d2
+/agent-note-change-work-order-workbook/decision:
+  en: b6815f4e73d93891
+  zh: 8c25c353cfe4aa7e
+/agent-note-change-work-order-workbook/testing:
+  en: 3894b87d032a0f99
+  zh: eaed9f8605baefff
+/agent-note-change-work-order-workbook/alternatives-considered:
+  en: 80d5d61c6b26bf42
+  zh: 270ab08f1b3bd7b7
+/agent-note-change-work-order-workbook/consequences:
+  en: fae830a14770f8f2
+  zh: bb32a5187fa6408b

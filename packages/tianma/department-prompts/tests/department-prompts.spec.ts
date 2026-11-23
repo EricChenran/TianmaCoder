@@ -97,6 +97,32 @@ describe('@tianma/dsh-department-prompts', () => {
     expect(text).toContain('报价单不出 Markdown')
   })
 
+  it('turns customer requests into a 改动任务工单 workbook with the six fixed columns', () => {
+    const text = plugin.departmentPrompt('business')
+    // The template's columns, in the order the business asked for.
+    expect(text).toContain('**时间｜任务明细｜当前现象｜期望改动后｜证明截图｜状态**')
+    // The generator runs from the toolbox variable, never a filesystem path.
+    expect(text).toContain('gen_workorder.py content.json')
+    expect(text).toContain('改动任务工单-<客户名>.xlsx')
+    // Screenshots are embedded from files on disk; a missing file fails the build.
+    expect(text).toContain('脚本只能嵌入磁盘上的图片文件')
+    expect(text).toContain('文件不存在脚本直接报错退出')
+    // The status vocabulary is closed and nothing is declared done for the customer.
+    expect(text).toContain('待处理、处理中、已完成、已验收、已驳回、已取消')
+    expect(text).toContain('不宣布"已完成"')
+    // The work order leaves Excel only; the toolbox PDF path stays Word-only.
+    expect(text).toContain('工单只出 Excel 一种格式')
+  })
+
+  it('ships the work-order generator with the same six-column header', () => {
+    const script = readFileSync(join(ASSET_ROOT, 'gen_workorder.py'), 'utf8')
+    const headers = ['("时间"', '("任务明细"', '("当前现象"', '("期望改动后"', '("证明截图"', '("状态"']
+    for (const header of headers) expect(script).toContain(header)
+    // Every validation failure is reported together instead of stopping at the first.
+    expect(script).toContain('content.json 校验未通过')
+    expect(script).toContain('python -m pip install openpyxl Pillow')
+  })
+
   it('publishes every packaged script without naming where the model reads it', () => {
     const toolsDir = join(temporaryDirectory(), 'tools')
     expect(plugin.materializeBusinessTools({ assetRoot: ASSET_ROOT, toolsDir })).toBe(toolsDir)
@@ -118,7 +144,7 @@ describe('@tianma/dsh-department-prompts', () => {
     const toolsDir = join(temporaryDirectory(), 'tools')
     plugin.materializeBusinessTools({ toolsDir })
     expect(readdirSync(toolsDir).sort())
-      .toEqual(['add_watermark.py', 'gen_doc.py', 'gen_quote.py', 'open_folder.py', 'to_pdf.py'])
+      .toEqual(['add_watermark.py', 'gen_doc.py', 'gen_quote.py', 'gen_workorder.py', 'open_folder.py', 'to_pdf.py'])
   })
 
   it('publishes under the harness home when no directory is configured', () => {

@@ -9,8 +9,8 @@
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: 832f07a0ac6e9536
-  zh: 9fd30a42bac4ce13
+  en: 209781d89e93fdc2
+  zh: a0afa630d9a033b0
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
@@ -21,8 +21,8 @@
   en: d6d677a1a0bd15fa
   zh: 4ff2a051de6da5b9
 /tianma-dsh-department-prompts/understand-the-implementation/source-map:
-  en: d5a2049d30df78e2
-  zh: 4a8eccc11a5d2bb1
+  en: 05b38b740797fbfe
+  zh: 967da957ab72976e
 /tianma-dsh-department-prompts/further-exploration:
   en: 4a1dc47d905730ba
   zh: d699dd1976957fa6
@@ -33,11 +33,11 @@
   en: 1a7d4baa0d0fa7a8
   zh: 5fb4780141f14781
 /tianma-dsh-department-prompts/model-experience/department-rules/what-the-model-sees:
-  en: 2028dee361109faf
-  zh: b2e3c2b5ccd71a45
+  en: 065c91cebaf22777
+  zh: 14fd83d4d1aedc5b
 /tianma-dsh-department-prompts/model-experience/department-rules/token-effect:
-  en: eac462a1b6c58e65
-  zh: bdd4fc1a35d7df75
+  en: 63246fd93b1b9863
+  zh: e1b17d30a4e1d7af
 /tianma-dsh-department-prompts/model-experience/department-rules/kv-cache-effect:
   en: 1b8f499f8f868701
   zh: c865ca57d5ebf3f0
@@ -102,8 +102,8 @@
   en: f4aaf1b1c37e15e1
   zh: 82b20050d1d6279b
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work:
-  en: de2e97abeafa4362
-  zh: 5493bab4ebd5d351
+  en: 2c0e2ea98c038497
+  zh: c783312b07a259d8
 /tianma-dsh-department-prompts/known-limitations-and-deferred-work/dev-note:
   en: e7c71582e21713ba
   zh: 137bc885e3a13951

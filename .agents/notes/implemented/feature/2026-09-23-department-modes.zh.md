@@ -34,7 +34,7 @@ Status: implemented
 
 ## Consequences
 
-- 选择技术部会增加约 6,400 token 的系统提示词，商务部约 2,700，每请求一次；未被选择的模式不产生开销。
+- 选择技术部会增加约 6,400 token 的系统提示词，商务部约 4,200，每请求一次；未被选择的模式不产生开销。
 - 两条节都位于稳定的系统提示词前缀内，对 KV 复用的影响与其他静态节相同。
 - `apps/cli/tests/web-agent-presets.e2e.ts` 启动随发行版的组合，钉住六个预设的名录、每个部门的节标题，以及工具箱变量与它下面发布的文件。
 - 工具箱面向 Windows：`to_pdf.py` 通过 COM 驱动 Word，`open_folder.py` 调起桌面外壳。

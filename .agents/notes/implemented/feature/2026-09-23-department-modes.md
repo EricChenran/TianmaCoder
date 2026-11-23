@@ -34,7 +34,7 @@ The rule text is committed to this repository in plaintext, and the owner accept
 
 ## Consequences
 
-- Selecting 技术部 adds roughly 6,400 tokens of system prompt and 商务部 roughly 2,700, once per request; an unselected mode costs nothing.
+- Selecting 技术部 adds roughly 6,400 tokens of system prompt and 商务部 roughly 4,200, once per request; an unselected mode costs nothing.
 - Both sections sit in the stable system-prompt prefix, so they affect KV reuse the same way any static section does.
 - `apps/cli/tests/web-agent-presets.e2e.ts` boots the shipped composition and pins the six-preset roster, each department's section heading, and the toolbox variable together with the files published under it.
 - The toolbox is Windows-oriented: `to_pdf.py` drives Word through COM and `open_folder.py` opens the desktop shell.

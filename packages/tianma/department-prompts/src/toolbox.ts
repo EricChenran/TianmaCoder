@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-shell-env'
 export const BUSINESS_TOOL_FILES: readonly string[] = [
   'gen_doc.py',
   'gen_quote.py',
+  'gen_workorder.py',
   'add_watermark.py',
   'to_pdf.py',
   'open_folder.py',

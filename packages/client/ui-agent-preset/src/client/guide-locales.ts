@@ -89,7 +89,7 @@ export const guideEn = {
   guideBusinessIntro: 'Choose Business mode when starting a new task. Provide the requirement text, the total amount, and the schedule, or let the agent ask for whichever is missing.',
   guideBusinessExplanation: [
     '### What it adds',
-    'Everything Standard mode provides, plus one system-prompt section carrying the department standard: requirement documents, quotations, and case retrieval, together with the shared commercial rules — customer-facing wording, no technical terms in delivered documents, and no invented prices, schedules, or links.',
+    'Everything Standard mode provides, plus one system-prompt section carrying the department standard: requirement documents, quotations, case retrieval, and change work orders, together with the shared commercial rules — customer-facing wording, no technical terms in delivered documents, and no invented prices, schedules, or links.',
     '### Document scripts',
     'The document generators ship with the mode and stay off the workspace. Documents keep the fixed layout, the watermark, and the quotation total check, so the agent fills one input file and runs the scripts.',
   ].join('\n\n'),
@@ -100,6 +100,9 @@ export const guideEn = {
     '### Quote a project',
     '> Quote this requirement at 86,000 yuan over 60 working days. Split the modules by phase and keep the totals exact.',
     'Expected output: a quotation whose module amounts add up to the total, plus the PDF copy.',
+    '### Turn client requests into a work order',
+    '> The client sent a pile of change requests and screenshots on WeChat. Turn them into a change work-order workbook with time, task, current behavior, expected behavior, proof screenshots, and status. The screenshots are in the images folder.',
+    'Expected output: an xlsx with those six fixed columns, the screenshots embedded in the proof column, and missing screenshots called out in the sheet.',
   ].join('\n\n'),
   guideBidIntro: 'Choose Bid specialist mode when starting a new task. Provide the tender document and the project material; the agent reads the tender, then runs the implementation-plan workflow.',
   guideBidExplanation: [
@@ -227,7 +230,7 @@ export const guideZh: Record<PresetGuideKey, string> = {
   guideBusinessIntro: '新建任务时选择「商务部」，提供需求文字、总金额与工期；缺哪一项就让 Agent 先问。',
   guideBusinessExplanation: [
     '### 多了什么',
-    '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：需求文档、报价单、案例检索，以及共通商务红线——面向客户的语言、对外文件不出现技术栈词汇、不编造价格、工期与链接。',
+    '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：需求文档、报价单、案例检索、改动任务工单，以及共通商务红线——面向客户的语言、对外文件不出现技术栈词汇、不编造价格、工期与链接。',
     '### 文档脚本',
     '文档生成脚本随模式交付，不落在工作区里。文档沿用固定版式、水印与报价合计校验，因此 Agent 只需填一份输入再跑脚本。',
   ].join('\n\n'),
@@ -238,6 +241,9 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '### 出一份报价单',
     '> 按 86000 元、60 个工作日给这份需求报价，按阶段拆分模块，合计要精确。',
     '预期产出：模块金额合计等于总金额的报价单，以及同目录的 PDF。',
+    '### 把客户需求整理成工单',
+    '> 客户在微信上发了一堆改动要求和截图，帮我整理成《改动任务工单》Excel：时间、任务明细、当前现象、期望改动后、证明截图、状态。截图我放在 images 目录里了。',
+    '预期产出：六列固定的改动任务工单 xlsx，截图嵌在「证明截图」列，缺图的项在表内注明。',
   ].join('\n\n'),
   guideBidIntro: '新建任务时选择「招投标专员」，提供招标文件与项目材料；Agent 读标后按实施方案流程出稿。',
   guideBidExplanation: [
