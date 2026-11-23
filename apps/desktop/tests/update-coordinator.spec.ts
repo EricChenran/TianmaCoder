@@ -62,14 +62,18 @@ function fixture() {
   const quitAndInstall = vi.fn()
   const beforeRestart = vi.fn(async () => true)
   const downloadResult = vi.fn()
+  const recordInstallStart = vi.fn<(version: string) => void>()
   const states: DesktopUpdateState[] = []
   const updater = Object.assign(events, { checkForUpdates, downloadUpdate, quitAndInstall }) as unknown as AppUpdater
   const coordinator = new DesktopUpdateCoordinator(
     (state) => { states.push(state); return state },
-    beforeRestart, updater, () => true, () => '1.1.0-alpha.1', downloadResult,
+    beforeRestart, updater, () => true, () => '1.1.0-alpha.1', downloadResult, recordInstallStart,
   )
   coordinators.push(coordinator)
-  return { coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart, downloadResult }
+  return {
+    coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart,
+    downloadResult, recordInstallStart,
+  }
 }
 
 describe('desktop update coordinator', () => {
@@ -241,4 +245,27 @@ it.each([new DesktopUpdatePreparationError('stop-failed', 'private diagnostic'),
   await f.coordinator.download('1.1.0-rc.2')
   expect(f.downloadResult).toHaveBeenCalledExactlyOnceWith(false, error instanceof DesktopUpdatePreparationError ? 'stop-failed' : 'download_failed')
   expect(JSON.stringify(f.downloadResult.mock.calls)).not.toContain('private')
+})
+
+it('flushes the install handoff before asking the updater to quit', async () => {
+  const f = fixture()
+  await f.coordinator.check()
+  await f.coordinator.download('1.1.0-rc.2')
+  const order: string[] = []
+  f.beforeRestart.mockImplementationOnce(async () => { order.push('before-restart'); return true })
+  f.recordInstallStart.mockImplementationOnce((version: string) => { order.push(`handoff:${version}`) })
+  f.quitAndInstall.mockImplementationOnce(() => { order.push('quit') })
+  await f.coordinator.install('1.1.0-rc.2')
+  expect(order).toEqual(['before-restart', 'handoff:1.1.0-rc.2', 'quit'])
+  expect(f.recordInstallStart).toHaveBeenCalledWith('1.1.0-rc.2')
+})
+
+it('keeps the update installable when the handoff cannot be recorded', async () => {
+  const f = fixture()
+  await f.coordinator.check()
+  await f.coordinator.download('1.1.0-rc.2')
+  f.recordInstallStart.mockImplementationOnce(() => { throw new Error('evidence directory is read-only') })
+  const state = await f.coordinator.install('1.1.0-rc.2')
+  expect(f.quitAndInstall).not.toHaveBeenCalled()
+  expect(state).toMatchObject({ phase: 'error', version: '1.1.0-rc.2', failedOperation: 'install' })
 })

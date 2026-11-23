@@ -44,7 +44,8 @@ import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashRep
 import { openWelcomeWindow } from './welcome-window.ts'
 import { WELCOME_IPC, needsWelcome, type WelcomeNotice } from './welcome-api.ts'
 import { connectDesktopWelcome, type DesktopWelcomeBackend } from './welcome-backend.ts'
-import { DesktopUpdateJournal } from './update-journal.ts'
+import { DesktopUpdateJournal, readUpdateJournalRecords } from './update-journal.ts'
+import { resolveStartupUpdateRecovery, STARTUP_UPDATE_RETRY_LIMIT } from './update-recovery.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 import { DesktopUpdateSchedule, resolveDesktopUpdateScheduleConfig } from './update-schedule.ts'
 import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presentation.ts'
@@ -324,7 +325,15 @@ async function main(): Promise<void> {
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
+  // Read evidence from previous launches before this launch appends its own records.
+  const startupUpdateRecovery = journalDirectory === undefined
+    ? { kind: 'none' as const }
+    : resolveStartupUpdateRecovery(readUpdateJournalRecords(journalDirectory), app.getVersion())
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
+  if (startupUpdateRecovery.kind === 'completed') {
+    console.info(`desktop update: ${startupUpdateRecovery.version} is installed after the last restart`)
+    updateJournal?.action('restart-consumed')
+  }
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = !app.isPackaged
@@ -769,8 +778,22 @@ async function main(): Promise<void> {
     },
     undefined, undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
-
+    version => updateJournal?.installStarted(version),
   )
+
+  if (startupUpdateRecovery.kind === 'failed') {
+    console.warn(`desktop update: install of ${startupUpdateRecovery.version} did not complete; the update stays retryable`)
+    publishUpdate({
+      phase: 'error', version: startupUpdateRecovery.version, failedOperation: 'install',
+      message: locale.messages.updateInstallFailed,
+    })
+  } else if (startupUpdateRecovery.kind === 'manual') {
+    console.warn(`desktop update: install of ${startupUpdateRecovery.version} failed ${STARTUP_UPDATE_RETRY_LIMIT} times; offering a manual download`)
+    publishUpdate({
+      phase: 'error', version: startupUpdateRecovery.version, failedOperation: 'install',
+      message: locale.messages.updateInstallRepeatedFailure,
+    })
+  }
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
 

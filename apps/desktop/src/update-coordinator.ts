@@ -46,6 +46,7 @@ export class DesktopUpdateCoordinator {
    * @param enabled - Whether this process has a packaged update source.
    * @param currentVersion - Actual installed application version.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param recordInstallStart - Flushes the install handoff to durable evidence before this process exits.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -54,6 +55,7 @@ export class DesktopUpdateCoordinator {
     private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
+    private readonly recordInstallStart?: (version: string) => void | Promise<void>,
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -133,6 +135,10 @@ export class DesktopUpdateCoordinator {
       this.setState({ phase: 'installing', version })
       try {
         if (!await this.beforeRestart()) return this.setState({ phase: 'ready', version })
+        this.assertLive()
+        // The handoff must be durable before this process exits: the next launch reads it to tell
+        // a completed install from an interrupted one.
+        await this.recordInstallStart?.(version)
         this.assertLive()
         this.updater.quitAndInstall(true, true)
         return this.current
