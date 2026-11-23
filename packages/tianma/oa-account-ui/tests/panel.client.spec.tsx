@@ -3,6 +3,7 @@
  * The workbench panel itself: seven module tabs, a message opened beside its
  * list, and the read call that opening one makes.
  */
+import { createElement } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { OaMessage } from '@tianma/dsh-oa-account/types'
@@ -54,7 +55,9 @@ describe('the workbench panel', () => {
       loadAttendanceSummary: () => Promise.reject(new Error('not opened here')),
     }
 
-    render(<OaWorkbenchPanel {...(props as never)} />)
+    // The panel's prop type composes framework seats this spec does not
+    // exercise; only the members it reads are supplied.
+    render(createElement(OaWorkbenchPanel, props as never))
 
     // One tab per module, named by the dictionary.
     for (const label of [
