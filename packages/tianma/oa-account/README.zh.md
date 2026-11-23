@@ -11,6 +11,8 @@ kind: "package-reference"
 
 让产品用户通过天码 OA 后端登录，并判定一条对话是否可以开始。一个 Host 服务负责验证码挑战、双 Token、已存账户投影，以及设置页要渲染的资料、工作台与资料写入操作。同一个插件还挂载 `ctx.promptAdmission`，因此浏览器提示词路径在账户已登录且状态为 `active` 之前一律拒绝开始对话。Token 存在凭据 seam 的记录里，浏览器永远拿不到它。
 
+该服务同时提供侧栏面板渲染的工作台读取：站内消息及其已读状态、通知开关、个人待办，以及审批的列表、详情、动作、类目与提交。
+
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -29,7 +31,7 @@ kind: "package-reference"
 
 配置：`baseUrl`（必填，OA API 根地址并含版本段）、`requestTimeoutMs`（默认 30 000）、`requireSignIn`（默认 `true`；关闭后仍挂载界面但不拦截产品）。
 
-远端命名空间 `oaAccount` 暴露 `session`、`captcha`、`signIn`、`signOut`、`profile`、`stats`、`updateProfile`、`gate` 与 `watch` 流。浏览器半边 [@tianma/dsh-oa-account-ui](../oa-account-ui/README.zh.md) 消费它。
+远端命名空间 `oaAccount` 暴露 `session`、`captcha`、`signIn`、`signOut`、`profile`、`stats`、`updateProfile`、`gate` 与 `watch` 流，以及工作台读取 `messages`、`readMessage`、`readAllMessages`、`notificationPreference`、`setNotificationPreference`、`todos`、`createTodo`、`toggleTodo`、`removeTodo`、`approvals`、`approval`、`approvalAction`、`approvalTypes`、`submitApproval` 与 `saveApprovalDraft`。浏览器半边 [@tianma/dsh-oa-account-ui](../oa-account-ui/README.zh.md) 消费它。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -53,6 +55,14 @@ kind: "package-reference"
 | `image` | `img` | 两个键都接受 |
 | refresh 返回 `token`、`refresh_token`、`user` | 只返回 `token` | 保留已存 refresh token，并改为重新读取资料 |
 | `avatar` 等可选资料列为文本 | 本人从未填写时，`phone`、`department`、`position`、`level`、`avatar` 为 `null` | 按"文本或 null"读取，并把 `null` 投影为空串——界面本来就是这么读"没人设过"的值的 |
+
+### 工作台读取
+
+工作台方法与资料读取共用 `authorized()`：access token 过期时静默续签一次，续签被拒则上抛后端自身的原因。三点线上事实决定了它们的形态：
+
+- `approval(id)` 是带写副作用的 GET：后端在抄送人首次读取时写下 `read_at`，因此浏览器按需拉详情，而不是为了给列表补字段而拉。
+- 没有任何列表接口接受分页参数；每次读取返回该账户的全部数据，这决定了这些列表在需要本地分页之前能长到多大。
+- `submitApproval` 与 `saveApprovalDraft` 的差别不止路径：草稿不解析审批人、不生成层级、跳过日期与额度校验，因此草稿请求不得携带审批人。
 
 ### 源码导览
 
@@ -107,6 +117,8 @@ kind: "package-reference"
 - **不做定时续签。** access token 在下一次 `401` 时续签，而不是在其两小时有效期前主动续签。
 - **验证码答案发送两种字段名。** 这层容错源于规范与实际后端不一致；待后端定稿后可收敛为一种。
 - **资料写入覆盖账户所有者可改的字段**（`name`、`phone`、`avatar`）；改密码是后端另一条流程，未实现。
+- **工作台读取覆盖消息、通知开关、待办与审批。** 日程、任务、考勤、工资条与文件云传尚未暴露。
+- **消息列表是全量读取。** 后端没有分页，客户端拿到全部消息后自行决定渲染多少。
 
 <a id="dev-note"></a>
 ### 开发备注

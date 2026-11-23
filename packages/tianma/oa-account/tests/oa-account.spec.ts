@@ -367,3 +367,200 @@ describe('OaPromptAdmission', () => {
     expect(await ctx.get('promptAdmission')?.admitPrompt()).toBeUndefined()
   })
 })
+
+/* ────────────────────────── 工作台 ────────────────────────── */
+
+/** One wire approval, as the employee side spells it. */
+const WIRE_APPROVAL = {
+  id: 18,
+  title: '请假申请',
+  type: '请假申请',
+  department: '技术部',
+  project_name: null,
+  project_no: null,
+  created_at: '2026年11月23日 09:30',
+  applicant_name: '张三',
+  applicant_avatar: null,
+  arrivalTime: '2小时前到达',
+  status: 'pending',
+  content: { start_date: '2026-11-24', reason: '事假', days: 2, special_comp_leave: false, attachments: ['/uploads/a.png'] },
+  current_level: 1,
+  total_levels: 2,
+  nodes: [{ id: 30, level: 1, status: 'pending', comment: null, approver_name: '陈祖豪', approver_avatar: null, approved_at: null }],
+  cc_users: [{ id: 5, user_id: 9, user_name: '王五', user_avatar: null, department: '技术部', read_at: null, created_at: '2026年11月23日 09:30' }],
+}
+
+/** One recorded request with the body the service sent, so a spec can assert the wire contract. */
+interface RecordedRequest {
+  /** HTTP method. */
+  method: string
+  /** Absolute request URL. */
+  url: string
+  /** Parsed JSON body, when the request carried one. */
+  body: unknown
+}
+
+/**
+ * Stub `fetch` with one handler for every request, recording the URL and body.
+ * @param respond - builds the response for one request.
+ * @returns the recorded requests.
+ */
+function recordFetch(respond: () => Response): RecordedRequest[] {
+  const seen: RecordedRequest[] = []
+  vi.stubGlobal('fetch', vi.fn((input: string | URL, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' ? input : input.href)
+    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+    seen.push({ method: init?.method ?? 'GET', url: url.href, body })
+    return Promise.resolve(respond())
+  }))
+  return seen
+}
+
+describe('workbench: messages and notification preferences', () => {
+  it('reads one tab and projects the closed kind plus the jump fields', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const seen = recordFetch(() => ok({
+      messages: [
+        {
+          id: 31, system: '审批待办', summary: '张三 提交了《请假申请》审批，请处理', time: '09:30', unread: true,
+          payload: { type: 'approval_request', approval_id: 18, approval_title: '请假申请', applicant_name: '张三' },
+        },
+        { id: 32, system: '工资条', summary: '2026-10 工资条已发放', time: '昨天 10:00', unread: false, payload: { salary_slip_id: 4, period: '2026-10', net_pay: 12480.5 } },
+        { id: 33, system: '本构建没见过的类型', summary: '系统通知', time: '11-01', unread: false, payload: {} },
+      ],
+    }))
+    const messages = await service.messages('unread')
+    expect(seen[0]?.url).toContain('/messages?tab=unread')
+    expect(seen[0]?.method).toBe('GET')
+    expect(messages.map(message => message.kind)).toEqual(['approval-request', 'salary-slip', 'other'])
+    expect(messages[0]?.payload).toEqual({ approvalId: 18, approvalTitle: '请假申请', applicantName: '张三' })
+    // A numeric net pay is carried as text, which is how the surfaces print it.
+    expect(messages[1]?.payload.netPay).toBe('12480.5')
+    expect(messages[2]?.payload).toEqual({})
+  })
+
+  it('marks one message, then every message, read', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const seen = recordFetch(() => ok(null))
+    await service.readMessage(31)
+    await service.readAllMessages()
+    expect(seen.map(request => `${request.method} ${new URL(request.url).pathname.replace('/api/v1/', '')}`))
+      .toEqual(['PUT messages/31/read', 'PUT messages/read-all'])
+  })
+
+  it('reads and writes the switches by their two documented keys', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const pref = { external_message_enabled: true, approval_request_enabled: false, wx_bound: true, template_configured: true }
+    const seen = recordFetch(() => ok(pref))
+    expect(await service.notificationPreference()).toEqual({
+      externalMessageEnabled: true, approvalRequestEnabled: false, wxBound: true, templateConfigured: true,
+    })
+    await service.setNotificationPreference({ approvalRequestEnabled: true })
+    expect(seen[1]?.method).toBe('POST')
+    // Only the switch the caller named is sent, so an untouched switch keeps its stored value.
+    expect(seen[1]?.body).toEqual({ approval_request_enabled: true })
+  })
+})
+
+describe('workbench: to-dos', () => {
+  it('lists, creates, toggles, and removes items on their documented routes', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const todo = { id: 7, text: '提交周报', done: false, time: '今天 09:12' }
+    const seen = recordFetch(() => ok(todo))
+    await service.createTodo('提交周报')
+    expect(seen[0]?.method).toBe('POST')
+    expect(seen[0]?.body).toEqual({ content: '提交周报' })
+
+    await service.toggleTodo(7)
+    expect(seen[1]?.method).toBe('PUT')
+    expect(seen[1]?.url).toContain('/todos/7/toggle')
+
+    recordFetch(() => ok({ todos: [todo] }))
+    expect(await service.todos()).toEqual([todo])
+
+    const removal = recordFetch(() => ok(null))
+    await service.removeTodo(7)
+    expect(removal[0]?.method).toBe('DELETE')
+    expect(removal[0]?.url).toContain('/todos/7')
+  })
+})
+
+describe('workbench: approvals', () => {
+  it('reads one list, projecting status, nodes, copies, and category content', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    const seen = recordFetch(() => ok({ approvals: [WIRE_APPROVAL] }))
+    const approvals = await service.approvals('pending')
+    expect(seen[0]?.url).toContain('/approvals?tab=pending')
+    expect(approvals).toHaveLength(1)
+    const [approval] = approvals
+    expect(approval?.status).toBe('pending')
+    expect(approval?.nodes[0]?.state).toBe('pending')
+    expect(approval?.ccUsers[0]?.userName).toBe('王五')
+    // Category content round-trips unchanged: the draft write needs the same object back.
+    expect(approval?.content).toEqual(WIRE_APPROVAL.content)
+    expect(approval?.totalLevels).toBe(2)
+  })
+
+  it('reads a detail with its decision flags, then posts one decision', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({
+      ...WIRE_APPROVAL, can_approve: true, is_cc: false, can_cancel: true, cancel_disabled_reason: null,
+    }))
+    const detail = await service.approval(18)
+    expect(detail.canApprove).toBe(true)
+    expect(detail.canCancel).toBe(true)
+    expect(detail.cancelDisabledReason).toBeNull()
+
+    const seen = recordFetch(() => ok(null))
+    await service.approvalAction({ id: 18, action: 'reject', comment: '缺验收单' })
+    expect(seen[0]?.method).toBe('POST')
+    expect(new URL(seen[0]?.url ?? '').pathname).toBe('/api/v1/approvals/18/action')
+    expect(seen[0]?.body).toEqual({ action: 'reject', comment: '缺验收单' })
+  })
+
+  it('surfaces a refused decision as the backend phrased it', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => fail(400, '无审批权限或已审批'))
+    await expect(service.approvalAction({ id: 18, action: 'approve', comment: '' }))
+      .rejects.toThrow('无审批权限或已审批')
+  })
+
+  it('maps categories and sends approvers only for a real submission', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({
+      types: [{
+        id: 1, name: '请假申请', group: 'attendance',
+        requires_project: false, requires_amount: false, requires_attachment: false,
+        requires_date_range: true, default_approver_ids: [7, 8],
+      }],
+    }))
+    expect(await service.approvalTypes()).toEqual([{
+      id: 1, name: '请假申请', group: 'attendance',
+      requiresProject: false, requiresAmount: false, requiresAttachment: false,
+      requiresDateRange: true, requiresFlexibleTime: false, defaultApproverIds: [7, 8],
+    }])
+
+    const submit = recordFetch(() => ok(WIRE_APPROVAL, 201))
+    const request = {
+      type: '请假申请', title: '请假申请', content: { start_date: '2026-11-24' },
+      approverIds: [7, 8], ccUserIds: [9],
+    }
+    await service.submitApproval(request)
+    expect(new URL(submit[0]?.url ?? '').pathname).toBe('/api/v1/approvals')
+    expect(submit[0]?.body).toMatchObject({ approver_ids: [7, 8], cc_user_ids: [9] })
+
+    const draft = recordFetch(() => ok(WIRE_APPROVAL))
+    await service.saveApprovalDraft(request)
+    expect(new URL(draft[0]?.url ?? '').pathname).toBe('/api/v1/approvals/draft')
+    // A draft resolves no approvers, so the request must not carry them.
+    expect(draft[0]?.body).not.toHaveProperty('approver_ids')
+  })
+})

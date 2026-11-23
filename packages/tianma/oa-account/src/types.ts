@@ -153,3 +153,262 @@ export type OaGateDenial =
 export type OaGateDecision =
   | { allowed: true }
   | { allowed: false; reason: OaGateDenial }
+
+/* ────────────────────────── 工作台：消息 ────────────────────────── */
+
+/**
+ * What a station message announces. The shipped backend names the kind in
+ * `system`; a value this build has never seen reads as `other` rather than
+ * failing the whole list.
+ */
+export type OaMessageKind =
+  | 'salary-slip'
+  | 'approval-request'
+  | 'approval-approved'
+  | 'approval-rejected'
+  | 'approval-copy'
+  | 'schedule-share'
+  | 'schedule-reply'
+  | 'task-assigned'
+  | 'cloud-file'
+  | 'other'
+
+/**
+ * Business data a message carries for the client to jump with. Every field is
+ * optional because the backend sends `{}` for kinds that have no target.
+ */
+export interface OaMessagePayload {
+  /** Approval this message points at. */
+  approvalId?: number
+  /** Title of that approval. */
+  approvalTitle?: string
+  /** Name of the applicant the message is about. */
+  applicantName?: string
+  /** Salary slip this message announces. */
+  salarySlipId?: number
+  /** Pay period of that slip, `YYYY-MM`. */
+  period?: string
+  /** Net pay of that slip, as the backend formats it. */
+  netPay?: string
+  /** Name of a pushed file. */
+  fileName?: string
+  /** Stored path of that file. */
+  filePath?: string
+  /** Kind of that file. */
+  fileType?: string
+  /** Size of that file in bytes. */
+  fileSize?: number
+  /** Download path of that file, relative to the OA origin. */
+  downloadUrl?: string
+}
+
+/** One station message. */
+export interface OaMessage {
+  /** Message id. */
+  id: number
+  /** What the message announces. */
+  kind: OaMessageKind
+  /** One-line summary as the backend wrote it. */
+  summary: string
+  /** Human time: `HH:MM` today, `MM-DD` within a week, `YYYY-MM-DD` before. */
+  time: string
+  /** Whether the message is still unread. */
+  unread: boolean
+  /** Business data to jump with. */
+  payload: OaMessagePayload
+}
+
+/** Which messages to read. */
+export type OaMessageTab = 'all' | 'unread'
+
+/** The notification switches this deployment exposes. */
+export interface OaNotificationPreference {
+  /** Whether WeChat subscription messages are enabled. */
+  externalMessageEnabled: boolean
+  /** Whether a pending approval notifies its approver. */
+  approvalRequestEnabled: boolean
+  /** Whether the account has a bound WeChat identity. */
+  wxBound: boolean
+  /** Whether the backend has a subscription template configured. */
+  templateConfigured: boolean
+}
+
+/** The switches a client may change; an absent field is left as it is. */
+export interface OaNotificationPreferencePatch {
+  /** New value for the WeChat subscription switch. */
+  externalMessageEnabled?: boolean
+  /** New value for the approval-notification switch. */
+  approvalRequestEnabled?: boolean
+}
+
+/* ────────────────────────── 工作台：待办 ────────────────────────── */
+
+/** One personal to-do item. */
+export interface OaTodo {
+  /** To-do id. */
+  id: number
+  /** Item text. */
+  text: string
+  /** Whether the item is done. */
+  done: boolean
+  /** Human time the backend formats for the list. */
+  time: string
+}
+
+/* ────────────────────────── 工作台：审批 ────────────────────────── */
+
+/** Which approval list to read. */
+export type OaApprovalTab = 'pending' | 'approved' | 'cc' | 'submitted'
+
+/** Approval state as the backend reports it; an unlisted value reads as `unknown`. */
+export type OaApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'draft' | 'unknown'
+
+/** One approval node's state; `transferred` exists in reads but has no write path. */
+export type OaApprovalNodeState = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'transferred' | 'unknown'
+
+/** One scalar, or one list of scalars, in an approval's category-defined content. */
+export type OaApprovalContentValue = string | number | boolean | null | readonly string[]
+
+/**
+ * Category-defined fields of one approval. Keys are the backend's own
+ * snake-case names (`start_date`, `reason`, …) because the client renders them
+ * per category and must round-trip them unchanged on a draft write.
+ */
+export type OaApprovalContent = Readonly<Record<string, OaApprovalContentValue>>
+
+/** One approval level. */
+export interface OaApprovalNode {
+  /** Node id. */
+  id: number
+  /** Level this node belongs to, starting at 1. */
+  level: number
+  /** Node state. */
+  state: OaApprovalNodeState
+  /** Approver's comment, absent until the node is handled. */
+  comment: string | null
+  /** Approver's display name. */
+  approverName: string
+  /** Approver's avatar path. */
+  approverAvatar: string
+  /** Chinese-format time the node was handled. */
+  approvedAt: string | null
+}
+
+/** One user copied on an approval. */
+export interface OaApprovalCopy {
+  /** Copy row id. */
+  id: number
+  /** Copied user's display name. */
+  userName: string
+  /** Copied user's department. */
+  department: string
+  /** When that user first opened the approval, absent until then. */
+  readAt: string | null
+  /** When the copy was created. */
+  createdAt: string
+}
+
+/** One approval as the employee side lists and reads it. */
+export interface OaApproval {
+  /** Approval id. */
+  id: number
+  /** Title the applicant gave it. */
+  title: string
+  /** Category name, which is also the submit key. */
+  type: string
+  /** Applicant's department. */
+  department: string
+  /** Project name, when the category asks for one. */
+  projectName: string | null
+  /** Project number, when the category asks for one. */
+  projectNo: string | null
+  /** Chinese-format submission time. */
+  createdAt: string
+  /** Applicant's display name. */
+  applicantName: string
+  /** Applicant's avatar path. */
+  applicantAvatar: string
+  /** Human arrival sentence the backend formats. */
+  arrivalTime: string
+  /** Approval state. */
+  status: OaApprovalStatus
+  /** Category-defined content. */
+  content: OaApprovalContent
+  /** Level currently awaiting an approver. */
+  currentLevel: number
+  /** Number of levels this approval has. */
+  totalLevels: number
+  /** Levels in ascending order. */
+  nodes: readonly OaApprovalNode[]
+  /** Users copied on this approval. */
+  ccUsers: readonly OaApprovalCopy[]
+}
+
+/**
+ * One approval plus what the reader may do with it. Reading a detail writes the
+ * copier's `read_at` on the backend, so the client reads it on demand rather
+ * than to decorate a list.
+ */
+export interface OaApprovalDetail extends OaApproval {
+  /** Whether the reader is the current level's pending approver. */
+  canApprove: boolean
+  /** Whether the reader is a copier on this approval. */
+  isCc: boolean
+  /** Whether the reader may cancel it now. */
+  canCancel: boolean
+  /** Why cancelling is blocked, when it is. */
+  cancelDisabledReason: string | null
+}
+
+/** The three approval decisions the employee side accepts. */
+export type OaApprovalAction = 'approve' | 'reject' | 'cancel'
+
+/** One decision applied to one approval. */
+export interface OaApprovalActionRequest {
+  /** Approval id. */
+  id: number
+  /** The decision to apply. */
+  action: OaApprovalAction
+  /** Decision comment; the backend records `申请人撤销` for an empty cancel reason. */
+  comment: string
+}
+
+/** One approval category the submit form renders. */
+export interface OaApprovalType {
+  /** Category id. */
+  id: number
+  /** Category name, echoed as the submit's `type`. */
+  name: string
+  /** Group: `attendance`, `finance`, or `admin`. */
+  group: string
+  /** Whether the form needs a project number. */
+  requiresProject: boolean
+  /** Whether the form needs an amount. */
+  requiresAmount: boolean
+  /** Whether the form needs an attachment. */
+  requiresAttachment: boolean
+  /** Whether the form needs a start and end date. */
+  requiresDateRange: boolean
+  /** Whether the form needs a flexible-work window. */
+  requiresFlexibleTime: boolean
+  /** Default approvers the category pre-fills. */
+  defaultApproverIds: readonly number[]
+}
+
+/** One approval to submit, or to keep as a draft. */
+export interface OaApprovalSubmitRequest {
+  /** Category name. */
+  type: string
+  /** Title; drafts default to `未命名草稿` on the backend. */
+  title: string
+  /** Applicant department the form pre-fills. */
+  department?: string
+  /** Project number, when the category requires one. */
+  projectNo?: string
+  /** Category-defined content, sent as-is. */
+  content: OaApprovalContent
+  /** Approvers by user id; absent falls back to the category default, then to the department. */
+  approverIds?: readonly number[]
+  /** Copiers by user id. */
+  ccUserIds?: readonly number[]
+}

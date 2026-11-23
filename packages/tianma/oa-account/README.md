@@ -11,6 +11,8 @@ English | [中文](README.zh.md)
 
 Sign the product's user in against the Tianma OA backend and decide whether a conversation may start. One Host service owns the captcha challenge, the token pair, the stored account projection, and the profile, workbench, and profile-write operations the Settings page renders. The same plugin mounts `ctx.promptAdmission`, so the browser prompt path refuses a conversation until a signed-in account is `active`. Tokens live in the credential seam's records; the browser never receives one.
 
+The service also answers the workbench reads a sidebar panel renders: station messages and their read state, the notification switches, the personal to-do list, and the approval lists, details, decisions, categories, and submissions.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -29,7 +31,7 @@ Mount the plugin in a bundle that carries an interactive user. Only the Web appl
 
 Config: `baseUrl` (required; the OA API root including its version segment), `requestTimeoutMs` (default 30 000), `requireSignIn` (default `true`; turning it off mounts the surfaces without gating the product).
 
-The Remote namespace `oaAccount` exposes `session`, `captcha`, `signIn`, `signOut`, `profile`, `stats`, `updateProfile`, `gate`, and the `watch` stream. The browser half of [@tianma/dsh-oa-account-ui](../oa-account-ui/README.md) consumes it.
+The Remote namespace `oaAccount` exposes `session`, `captcha`, `signIn`, `signOut`, `profile`, `stats`, `updateProfile`, `gate`, and the `watch` stream, plus the workbench reads `messages`, `readMessage`, `readAllMessages`, `notificationPreference`, `setNotificationPreference`, `todos`, `createTodo`, `toggleTodo`, `removeTodo`, `approvals`, `approval`, `approvalAction`, `approvalTypes`, `submitApproval`, and `saveApprovalDraft`. The browser half of [@tianma/dsh-oa-account-ui](../oa-account-ui/README.md) consumes it.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -53,6 +55,14 @@ The shipped backend differs from the specification in four places the wire layer
 | `image` | `img` | accepts either key |
 | `refresh` returns `token`, `refresh_token`, and `user` | returns `token` alone | keeps the stored refresh token and re-reads the profile instead |
 | `avatar` and the other optional profile columns carry text | `phone`, `department`, `position`, `level`, and `avatar` are `null` for a holder who never filled them in | reads text-or-null and projects `null` to an empty string, which is how the surfaces already read a value nobody set |
+
+### Workbench reads
+
+The workbench methods share `authorized()` with the profile reads, so an expired access token is re-signed once and a refused re-sign reports the backend's reason. Three wire facts shape them:
+
+- `approval(id)` is a GET with a write side effect: the backend stamps a copier's `read_at` on the first read, so the browser fetches a detail on demand rather than to decorate a list.
+- No list endpoint takes pagination parameters; each read returns everything the account owns, which bounds how large these lists can grow before a caller needs local paging.
+- `submitApproval` and `saveApprovalDraft` differ by more than the path: a draft resolves no approvers, generates no levels, and skips date and quota validation, so the draft request must not carry approvers.
 
 ### Source map
 
@@ -107,6 +117,8 @@ These limits define the current boundary.
 - **No scheduled renewal.** The access token is refreshed on the next `401` rather than ahead of its two-hour expiry.
 - **Two spellings are sent for the captcha answer.** The tolerance exists because the specification and the shipped backend disagree; it can be reduced to one spelling once the backend settles.
 - **The profile write covers the fields the account owner may change** (`name`, `phone`, `avatar`); password changes are a separate backend flow and are not implemented.
+- **The workbench reads cover messages, notification switches, to-dos, and approvals.** Schedules, tasks, attendance, salary slips, and file transfer are not exposed yet.
+- **A message list is read in full.** The backend has no pagination, so the client receives every message and decides what to render.
 
 <a id="dev-note"></a>
 ### Dev Note

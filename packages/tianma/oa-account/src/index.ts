@@ -24,22 +24,47 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import {
   OaAccountError,
+  deleteTodo,
+  fetchApprovalDetail,
+  fetchApprovalTypes,
+  fetchApprovals,
   fetchCaptcha,
+  fetchMessages,
+  fetchNotificationPreference,
   fetchProfile,
   fetchStats,
+  fetchTodos,
   oaBaseUrl,
+  postApproval,
+  postApprovalAction,
+  postNotificationPreference,
   postRefresh,
   postSignIn,
   postSignOut,
+  postTodo,
+  putMessageRead,
+  putMessagesReadAll,
   putProfile,
+  putTodoToggle,
 } from './protocol.ts'
 import type {
+  OaApproval,
+  OaApprovalActionRequest,
+  OaApprovalDetail,
+  OaApprovalSubmitRequest,
+  OaApprovalTab,
+  OaApprovalType,
   OaCaptcha,
   OaGateDecision,
+  OaMessage,
+  OaMessageTab,
+  OaNotificationPreference,
+  OaNotificationPreferencePatch,
   OaProfilePatch,
   OaSessionView,
   OaSignInRequest,
   OaStats,
+  OaTodo,
   OaUser,
 } from './types.ts'
 
@@ -261,6 +286,174 @@ export class OaAccountService extends TypertRemoteService {
     if (session !== undefined) await this.write({ ...session, user })
     this.notify()
     return user
+  }
+
+  /* ────────────────────────── 工作台 · 消息 ────────────────────────── */
+
+  /**
+   * Read the station messages of one tab.
+   * @param tab - `all` for every message, `unread` for the unread ones.
+   * @returns the messages, newest first.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  messages(tab: OaMessageTab): Promise<OaMessage[]> {
+    return this.authorized(token => fetchMessages(this.base, token, tab, this.requestTimeoutMs))
+  }
+
+  /**
+   * Mark one message read.
+   * @param id - the message id.
+   * @throws {OaAccountError} code `rejected` when the message is not this account's.
+   */
+  @Remote
+  readMessage(id: number): Promise<void> {
+    return this.authorized(token => putMessageRead(this.base, token, id, this.requestTimeoutMs))
+  }
+
+  /**
+   * Mark every unread message of this account read.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  readAllMessages(): Promise<void> {
+    return this.authorized(token => putMessagesReadAll(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Read the notification switches.
+   * @returns the switches plus the backend's WeChat capability flags.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  notificationPreference(): Promise<OaNotificationPreference> {
+    return this.authorized(token => fetchNotificationPreference(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Write the notification switches.
+   * @param patch - the switches to change; an absent switch is left as it is.
+   * @returns the switches after the write.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  setNotificationPreference(patch: OaNotificationPreferencePatch): Promise<OaNotificationPreference> {
+    return this.authorized(token => postNotificationPreference(this.base, token, patch, this.requestTimeoutMs))
+  }
+
+  /* ────────────────────────── 工作台 · 待办 ────────────────────────── */
+
+  /**
+   * Read this account's to-do list.
+   * @returns the items, unfinished first.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  todos(): Promise<OaTodo[]> {
+    return this.authorized(token => fetchTodos(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Create one to-do item.
+   * @param content - the item text; the backend trims it and refuses an empty one.
+   * @returns the created item.
+   * @throws {OaAccountError} code `rejected` with the backend's reason.
+   */
+  @Remote
+  createTodo(content: string): Promise<OaTodo> {
+    return this.authorized(token => postTodo(this.base, token, content, this.requestTimeoutMs))
+  }
+
+  /**
+   * Flip one item's done flag.
+   * @param id - the item id.
+   * @returns the item after the flip.
+   * @throws {OaAccountError} code `rejected` when the item is not this account's.
+   */
+  @Remote
+  toggleTodo(id: number): Promise<OaTodo> {
+    return this.authorized(token => putTodoToggle(this.base, token, id, this.requestTimeoutMs))
+  }
+
+  /**
+   * Delete one item.
+   * @param id - the item id.
+   * @throws {OaAccountError} code `rejected` when the item is not this account's.
+   */
+  @Remote
+  removeTodo(id: number): Promise<void> {
+    return this.authorized(token => deleteTodo(this.base, token, id, this.requestTimeoutMs))
+  }
+
+  /* ────────────────────────── 工作台 · 审批 ────────────────────────── */
+
+  /**
+   * Read one approval list.
+   * @param tab - pending, handled, copied, or submitted.
+   * @returns the approvals, newest first.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  approvals(tab: OaApprovalTab): Promise<OaApproval[]> {
+    return this.authorized(token => fetchApprovals(this.base, token, tab, this.requestTimeoutMs))
+  }
+
+  /**
+   * Read one approval with what this account may do with it. A copier's first
+   * read stamps their `read_at` on the backend, so callers fetch this on demand
+   * rather than to decorate a list.
+   * @param id - the approval id.
+   * @returns the approval detail.
+   * @throws {OaAccountError} code `rejected` when this account may not see it.
+   */
+  @Remote
+  approval(id: number): Promise<OaApprovalDetail> {
+    return this.authorized(token => fetchApprovalDetail(this.base, token, id, this.requestTimeoutMs))
+  }
+
+  /**
+   * Apply one approval decision.
+   * @param request - the approval, the decision, and its comment.
+   * @throws {OaAccountError} code `rejected` with the backend's own reason, such as `无审批权限或已审批`.
+   */
+  @Remote
+  approvalAction(request: OaApprovalActionRequest): Promise<void> {
+    return this.authorized(token =>
+      postApprovalAction(this.base, token, request.id, request.action, request.comment, this.requestTimeoutMs))
+  }
+
+  /**
+   * Read the approval categories the submit form offers.
+   * @returns the active categories in the backend's sort order.
+   * @throws {OaAccountError} code `unauthenticated` when no usable session remains.
+   */
+  @Remote
+  approvalTypes(): Promise<OaApprovalType[]> {
+    return this.authorized(token => fetchApprovalTypes(this.base, token, this.requestTimeoutMs))
+  }
+
+  /**
+   * Submit one approval. The backend resolves approvers, validates dates and
+   * quotas, creates the levels, and notifies the first approver.
+   * @param request - the approval to submit.
+   * @returns the created approval.
+   * @throws {OaAccountError} code `rejected` with the backend's validation reason.
+   */
+  @Remote
+  submitApproval(request: OaApprovalSubmitRequest): Promise<OaApproval> {
+    return this.authorized(token => postApproval(this.base, token, request, false, this.requestTimeoutMs))
+  }
+
+  /**
+   * Keep one approval as a draft. Drafts create no levels, resolve no approvers,
+   * and skip date and quota validation.
+   * @param request - the approval to keep.
+   * @returns the draft approval.
+   * @throws {OaAccountError} code `rejected` when the backend refuses the draft.
+   */
+  @Remote
+  saveApprovalDraft(request: OaApprovalSubmitRequest): Promise<OaApproval> {
+    return this.authorized(token => postApproval(this.base, token, request, true, this.requestTimeoutMs))
   }
 
   /**
