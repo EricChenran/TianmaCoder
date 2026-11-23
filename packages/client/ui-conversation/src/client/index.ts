@@ -23,9 +23,9 @@ export type {
   ConversationViewBuilder, ConversationViewDefinition, ConversationViewNode,
   ConversationViewSnapshotMap, ConversationViewSnapshotStore, StepLocation, TurnLocation,
 } from './contract/conversation.ts'
-export { EMPTY_CONVERSATION_SNAPSHOT, conversationPhase } from './contract/snapshot.ts'
+export { EMPTY_CONVERSATION_SNAPSHOT, conversationPanelPhase, conversationPhase } from './contract/snapshot.ts'
 export type {
-  ConversationPhase, ConversationSnapshot,
+  ConversationPanelPhase, ConversationPanelPhaseInput, ConversationPhase, ConversationSnapshot,
 } from './contract/snapshot.ts'
 export type {
   AssistantBlock, AssistantMessageNode, AssistantProviderMetadataView, AssistantRequestConfig,

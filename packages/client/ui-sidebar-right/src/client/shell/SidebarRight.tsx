@@ -27,8 +27,8 @@
  * signal, actions — is read through the slot-owned useTabInfo hook. The Tab
  * domain follows each session's store commits, including sessions off screen.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import type { CSSProperties, ReactNode, RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, DragEvent, ReactNode, RefObject } from 'react'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { IconPanelLeftOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -37,6 +37,7 @@ import type {
 import type {} from '../contract/slots.ts'
 import type { DockIntents, DockMode, FloatRect, TabId, TabRecord, TabRenderer } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { canSplit, dockPaneIds, DockLayout, findPaneContentTab } from '@deepseek-ai/dsh-client-ui-dockkit'
+import { previewSessionId } from '../preview-drop.ts'
 import type { HalvesFit, LayoutState, PaneId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { GUIDE_KIND, pageAddress } from '../contract/seed.ts'
@@ -97,6 +98,10 @@ export interface SidebarRightInjected {
    * the guide opened by kind, through the same path as every other open.
    */
   readonly openTab: (kind: string, options?: SidebarRightOpenTabOptions) => void
+  /** Whether a dragged payload names a Session this client knows. */
+  readonly isKnownSession: (candidate: string) => boolean
+  /** Open a preview tab showing another Session inside this seat's Session. */
+  readonly openPreview: (previewed: SessionId) => void
   /** Close through the resource owner's cleanup handler. */
   readonly closeTab: (tabId: TabId) => void
   /** Split through the same controller as keyboard commands. */
@@ -130,6 +135,8 @@ interface PanelProps {
   readonly t: RightbarSeatProps['t']
   readonly renderSlot: Children['renderSlot']
   readonly openTab: SidebarRightInjected['openTab']
+  readonly isKnownSession: SidebarRightInjected['isKnownSession']
+  readonly openPreview: SidebarRightInjected['openPreview']
   readonly closeTab: SidebarRightInjected['closeTab']
   readonly splitPane: SidebarRightInjected['splitPane']
   readonly toggleFullscreen: SidebarRightInjected['toggleFullscreen']
@@ -300,7 +307,24 @@ function PanelChrome({ sessionId, fullscreen, actions, t, shortcuts, toggleFulls
  * anchored to the frame's right edge and slid off it while collapsed.
  */
 function SidebarPanel(panel: PanelProps & { width: number; panelRef: RefObject<HTMLDivElement> }): ReactNode {
-  const { sessionId, surface, actions, t, renderSlot, openTab, width, reportRoom, fullscreen, panelRef } = panel
+  const {
+    sessionId, surface, actions, t, renderSlot, openTab, isKnownSession, openPreview, width, reportRoom, fullscreen, panelRef,
+  } = panel
+  const [previewDrop, setPreviewDrop] = useState(false)
+  // A Session row dragged from the left list opens a preview of that Session here.
+  const previewDragOver = (event: DragEvent<HTMLDivElement>): void => {
+    if (previewSessionId(event.dataTransfer, isKnownSession) === undefined) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setPreviewDrop(true)
+  }
+  const previewDropHandler = (event: DragEvent<HTMLDivElement>): void => {
+    const previewed = previewSessionId(event.dataTransfer, isKnownSession)
+    setPreviewDrop(false)
+    if (previewed === undefined || previewed === sessionId) return
+    event.preventDefault()
+    openPreview(previewed)
+  }
   const { expanded } = surface.layout
   const types = panel.useTabTypes(value => value)
   return (
@@ -312,6 +336,10 @@ function SidebarPanel(panel: PanelProps & { width: number; panelRef: RefObject<H
       data-sidebar-right-session={sessionId}
       data-sidebar-right-panel={fullscreen ? 'fullscreen' : 'push'}
       data-sidebar-right-open={expanded || undefined}
+      data-session-preview-drop={previewDrop || undefined}
+      onDragOver={previewDragOver}
+      onDragLeave={() => { setPreviewDrop(false) }}
+      onDrop={previewDropHandler}
       // Dockkit hides individual docked hosts; floating descendants remain accessible.
       aria-hidden={(!expanded && surface.layout.floats.length === 0) || undefined}
     >
@@ -351,7 +379,8 @@ function SidebarPanel(panel: PanelProps & { width: number; panelRef: RefObject<H
  */
 export function RightbarSeat({
   sessionId, width, viewportWidth, canShow, useStore, actions, t, renderSlot, syncPresentation, measureRoom, reportAutoFullscreen,
-  openTab, closeTab, useTabTypes, useTabNavigation, occurrence, retainTab, active, useShortcuts, splitPane, toggleFullscreen,
+  openTab, isKnownSession, openPreview, closeTab, useTabTypes, useTabNavigation, occurrence,
+  retainTab, active, useShortcuts, splitPane, toggleFullscreen,
 }: RightbarSeatProps): ReactNode {
   // One store instance per session, so this map holds this session's surface.
   const shortcuts = useShortcuts(entries => entries)
@@ -416,7 +445,8 @@ export function RightbarSeat({
 
   if (surface === undefined) return null
   const panel: PanelProps = {
-    sessionId, actions, t, renderSlot, surface, openTab, closeTab, useTabTypes, useTabNavigation, useStore, occurrence,
+    sessionId, actions, t, renderSlot, surface, openTab, isKnownSession, openPreview, closeTab,
+    useTabTypes, useTabNavigation, useStore, occurrence,
     fullscreen, autoFullscreen, reportRoom, active, retainTab, shortcuts, splitPane, toggleFullscreen,
   }
   return <SidebarPanel {...panel} width={width} panelRef={panelRef} />

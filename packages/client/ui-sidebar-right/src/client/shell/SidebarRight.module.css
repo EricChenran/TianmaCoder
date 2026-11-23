@@ -167,3 +167,8 @@
   min-width: 0;
   overflow: hidden;
 }
+
+.panel[data-session-preview-drop] {
+  outline: 2px dashed var(--dsw-static-blue-500);
+  outline-offset: -2px;
+}

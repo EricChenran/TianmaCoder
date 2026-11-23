@@ -23,6 +23,7 @@
 import type {} from '@deepseek-ai/dsh-client-shortcuts/client'
 import { observeSidebarFocus } from './focus.ts'
 import { registerSidebarShortcuts } from './shortcuts.ts'
+import { registerSessionPreview, sessionPreviewAddress } from './session-preview.tsx'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-resources/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -185,7 +186,7 @@ export function apply(ctx: ClientContext): void {
         } }
       },
     }
-    const injected: Omit<SidebarRightInjected, 'keyedHooks' | 'occurrence' | 'closeTab' | 'measureRoom'> = {
+    const injected: Omit<SidebarRightInjected, 'keyedHooks' | 'occurrence' | 'closeTab' | 'measureRoom' | 'openPreview'> = {
       syncPresentation({ shown, track, fullscreen }) {
         if (shown) layout.openRightbar(track, fullscreen)
         else layout.closeRightbar()
@@ -194,6 +195,7 @@ export function apply(ctx: ClientContext): void {
       splitPane: (paneId) => { controller.split(paneId) },
       toggleFullscreen: () => { const target = controller.commandTarget(); if (target !== undefined) controller.toggleFullscreen(target) },
       openTab: (kind, options) => { controller.openTab(kind, options) },
+      isKnownSession: candidate => Object.hasOwn(ctx.sessions.list.getSnapshot().byId, candidate),
       hooks: {
         shortcuts: ctx.shortcuts.catalog,
         tabTypes: { subscribe: listener => tabs.subscribe(listener), getSnapshot: () => tabs.entries() },
@@ -201,6 +203,7 @@ export function apply(ctx: ClientContext): void {
     }
 
     const disposeTypes = [tabs.register(guideDefinition(t))]
+    registerSessionPreview(ctx, t, (candidate) => { views.pin(candidate) }, (candidate) => { views.unpin(candidate) })
     const disposeSeat = ctx.slots.inject('rightbar', function* () {
       yield ctx.slots.register({
         name: 'rightbar',
@@ -222,6 +225,10 @@ export function apply(ctx: ClientContext): void {
         inject: (sessionId): SidebarRightInjected => ({
           ...injected,
           measureRoom: (canSplitPane) => { measure(sessionId, canSplitPane) },
+          openPreview: (previewed) => {
+            views.pin(previewed)
+            controller.openResourceIn(sessionId, sessionPreviewAddress(previewed))
+          },
           closeTab: (tabId) => {
             try { controller.closeIn(sessionId, tabId) }
             catch (error) { console.error('Sidebar tab close failed:', error) }

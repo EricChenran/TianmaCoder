@@ -74,7 +74,7 @@ async function mountSeat(viewportWidth = 1440, canShow = true, entryCount = 0, o
   const frame = { openRightbar: vi.fn(), closeRightbar: vi.fn(), panelInfo: runtime.panelInfo }
   const pin = vi.fn<(address: string, signal: AbortSignal) => void>()
   runtime.ctx.provide('layout', frame as never)
-  runtime.ctx.provide('resources', { pin } as never)
+  runtime.ctx.provide('resources', { pin, register: () => () => {} } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   const catalog = createSnapshotStore<readonly ShortcutCatalogEntry[]>([])

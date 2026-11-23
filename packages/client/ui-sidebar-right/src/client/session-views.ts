@@ -19,10 +19,41 @@ export class SidebarSessionViews {
   readonly source = createSnapshotStore<readonly SidebarSessionViewSnapshot[]>([])
   private readonly views = new Map<SessionId, SidebarSessionView>()
   private readonly viewsByReference = new Map<SessionReference, SidebarSessionView>()
+  /** Sessions kept mounted for a preview tab even while another Conversation is selected. */
+  private readonly pinned = new Set<SessionId>()
   private selected: SessionId | undefined
   private closed = false
 
   constructor(private readonly sessions: ISessions) {}
+
+  /**
+   * Keep a background Session's Sidebar mounted so a preview tab inside the
+   * selected Conversation can render it.
+   * @param sessionId - Session the preview tab shows.
+   */
+  pin(sessionId: SessionId): void {
+    if (this.closed) return
+    this.pinned.add(sessionId)
+    if (!this.views.has(sessionId)) {
+      const view = new SidebarSessionView(sessionId, this.sessions, (disposed) => {
+        this.viewsByReference.delete(disposed.reference)
+      }, (released) => { this.prune(released) })
+      this.views.set(sessionId, view)
+      this.viewsByReference.set(view.reference, view)
+    }
+    this.publish()
+  }
+
+  /**
+   * Release a preview hold; the view retires once nothing else retains it.
+   * @param sessionId - Session whose preview closed.
+   */
+  unpin(sessionId: SessionId): void {
+    if (!this.pinned.delete(sessionId)) return
+    const view = this.views.get(sessionId)
+    if (view !== undefined) this.prune(view)
+    this.publish()
+  }
 
   /**
    * Change the foreground Session while preserving retained background Views.
@@ -65,7 +96,10 @@ export class SidebarSessionViews {
   }
 
   private prune(view: SidebarSessionView): void {
-    if (view.sessionId === this.selected || view.hasRetainedTabs || this.views.get(view.sessionId) !== view) return
+    if (view.sessionId === this.selected
+      || this.pinned.has(view.sessionId)
+      || view.hasRetainedTabs
+      || this.views.get(view.sessionId) !== view) return
     this.views.delete(view.sessionId)
     // Render targets must be withdrawn before an unmounted view can release its reference.
     this.publish()

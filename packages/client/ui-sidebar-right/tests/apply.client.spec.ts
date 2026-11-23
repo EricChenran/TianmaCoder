@@ -25,6 +25,7 @@ import { RightbarSeat } from '../src/client/shell/SidebarRight.tsx'
 import { RightbarRoot } from '../src/client/shell/RightbarRoot.tsx'
 import { ExpandButton } from '../src/client/shell/ExpandButton.tsx'
 import { GuideBody } from '../src/client/tabs/guide/GuideBody.tsx'
+import { SESSION_PREVIEW_ID, SessionPreviewConversation, SessionPreviewTab } from '../src/client/session-preview.tsx'
 import { GuideTitle } from '../src/client/tabs/guide/GuideTitle.tsx'
 import { GUIDE_ID } from '../src/client/tabs/guide/definition.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -68,7 +69,10 @@ async function boot(shortcuts: Partial<Shortcuts> = {}) {
     panelInfo: createSnapshotStore<{ activePanelId: string | null }>({ activePanelId: null }),
   }
   const current = createSnapshotStore<{ key: SessionId | undefined }>({ key: undefined })
-  const resources = { pin: vi.fn<(address: string, signal: AbortSignal) => void>() }
+  const resources = {
+    pin: vi.fn<(address: string, signal: AbortSignal) => void>(),
+    register: vi.fn(() => () => {}),
+  }
   ctx.provide('slots', slots as never)
   ctx.provide('locale', locale as never)
   ctx.provide('shortcuts', { runtime: 'web', register: () => () => {},
@@ -79,8 +83,8 @@ async function boot(shortcuts: Partial<Shortcuts> = {}) {
   ctx.provide('uiSession', { adapter: { current } } as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
-  const seat = (name: string): Recorded => {
-    const entry = registered.find(candidate => candidate.name === name)
+  const seat = (name: string, key?: string): Recorded => {
+    const entry = registered.find(candidate => candidate.name === name && (key === undefined || candidate.key === key))
     if (entry === undefined) throw new Error(`expected a registration into ${name}`)
     return entry
   }
@@ -130,18 +134,24 @@ describe('ui-sidebar-right apply', () => {
     // Five registrations: the root and panel seats, the header's corner seat,
     // and the guide body and chip title under the guide implementation's id.
     // The guide draws no product copy of its own, so neither guide seat binds the dictionary.
-    expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
+    // Seven registrations: the root and panel seats, the header's corner seat,
+    // the guide body and chip title under the guide implementation's id, and the
+    // preview type's own body and Conversation host.
+    // The guide draws no product copy of its own, so neither guide seat binds the dictionary.
+    expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual(expect.arrayContaining([
       ['rightbar', undefined, undefined, RightbarRoot],
       ['rightbar.session', undefined, 'sidebarRight', RightbarSeat],
       ['conversation.session.header.corner', undefined, 'sidebarRight', ExpandButton],
       ['sidebar.right.pane.tab', GUIDE_ID, undefined, GuideBody],
       ['sidebar.right.pane.tab.title', GUIDE_ID, undefined, GuideTitle],
-    ])
-    // The panel declares the extension seats; the guide declares its chain child.
+      ['sidebar.right.pane.tab', SESSION_PREVIEW_ID, undefined, SessionPreviewTab],
+      ['sidebar.session-preview.conversation', undefined, undefined, SessionPreviewConversation],
+    ]))
+    expect(registered).toHaveLength(7)
     expect(Object.keys(seat('rightbar.session').children as object)).toEqual([
       'sidebar.right.pane.tab', 'sidebar.right.pane.tab.title', 'sidebar.right.tab.menu.item',
     ])
-    expect(seat('sidebar.right.pane.tab').children).toMatchObject({ 'sidebar.right.tab.guide': { kind: 'chain', scope: 'session' } })
+    expect(seat('sidebar.right.pane.tab', GUIDE_ID).children).toMatchObject({ 'sidebar.right.tab.guide': { kind: 'chain', scope: 'session' } })
     // Both seats read one store: the button only needs to know whether the panel is expanded.
     expect(seat('rightbar.session').store).toBeDefined()
     expect(seat('conversation.session.header.corner').store).toBe(seat('rightbar.session').store)
@@ -287,7 +297,7 @@ describe('ui-sidebar-right apply', () => {
 
   it('hands the guide body the registry\'s entry boxes, observable', async () => {
     const { ctx, seat, injectedOf } = await boot()
-    const { hooks: { guideEntries } } = injectedOf(seat('sidebar.right.pane.tab')) as GuideInjected
+    const { hooks: { guideEntries } } = injectedOf(seat('sidebar.right.pane.tab', GUIDE_ID)) as GuideInjected
     expect(guideEntries.getSnapshot()).toEqual([])
     const seen = vi.fn()
     guideEntries.subscribe(seen)
@@ -324,6 +334,6 @@ describe('ui-sidebar-right apply', () => {
     expect(dictionaries.size).toBe(0)
     await ctx.plugin({ inject: [...inject], apply }).await()
     expect(ctx.sidebarRightTabs.get('guide')?.id).toBe(GUIDE_ID)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(7)
   })
 })
