@@ -28,6 +28,7 @@ import type {
 // Type-only service merge for ctx.slots.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { renderSessionArea } from './session-provider.tsx'
+import { isUnread, loadLastSeen, saveLastSeen } from './unread.ts'
 
 /** Selector hook over the Session Controller list and current selection. */
 export type UseSessions = SnapshotSelectorHook<SessionListState>
@@ -63,6 +64,11 @@ export interface SessionStatus {
   readonly pendingInteraction: SessionPendingInteraction | undefined
   /** Whether an observed stop outside the main view still needs acknowledgement. */
   readonly completionUnread: boolean
+  /**
+   * Whether the Session changed after this client last showed it. Absent until a
+   * list row supplies its activity time; never part of the Session log.
+   */
+  readonly unread?: boolean
 }
 
 /** Current UI status indexed by Session identity. */
@@ -283,6 +289,7 @@ export class UiSession extends Service {
   private pendingSnapshot: ReadonlyMap<SessionId, SessionPendingInteractionBase> = new Map()
   private readonly running = new Map<SessionId, boolean>()
   private readonly completionUnread = new Set<SessionId>()
+  private readonly lastSeen = loadLastSeen()
   private statusSnapshot: SessionStatusSnapshot = new Map()
   private readonly statusListeners = new Set<() => void>()
   private mainRetainId: SessionId | undefined
@@ -490,6 +497,35 @@ export class UiSession extends Service {
     this.publishStatus()
   }
 
+  /**
+   * Record that this client has now shown one Session, so later activity is the
+   * only source of its unread flag.
+   * @param sessionId - Session the user just looked at.
+   */
+  markRead(sessionId: SessionId): void {
+    if (!this.markSeen(sessionId, Date.now())) return
+    saveLastSeen(this.lastSeen)
+    this.publishStatus()
+  }
+
+  /** Record that every listed Session has now been shown. */
+  markAllRead(): void {
+    const now = Date.now()
+    let changed = false
+    for (const id of this.sessions.list.getSnapshot().ids) {
+      if (this.markSeen(id, now)) changed = true
+    }
+    if (!changed) return
+    saveLastSeen(this.lastSeen)
+    this.publishStatus()
+  }
+
+  private markSeen(sessionId: SessionId, at: number): boolean {
+    if ((this.lastSeen.get(sessionId) ?? 0) >= at) return false
+    this.lastSeen.set(sessionId, at)
+    return true
+  }
+
   private reconcileStatus(): void {
     const list = this.sessions.list.getSnapshot()
     const present = new Set(Object.keys(list.byId) as SessionId[])
@@ -500,6 +536,19 @@ export class UiSession extends Service {
       if (previous === undefined) this.running.set(id, row.running)
       else if (previous !== row.running) this.observeRunning(id, row.running)
     }
+    // A newly observed row starts at its own activity time, so an existing
+    // history does not open as unread; the Session in the main view stays read.
+    let marksChanged = false
+    for (const id of list.ids) {
+      const row = list.byId[id] as SessionSummary
+      if (this.lastSeen.has(id)) continue
+      this.lastSeen.set(id, row.updatedAt)
+      marksChanged = true
+    }
+    for (const id of present) {
+      if (this.isMain(id) && this.markSeen(id, Date.now())) marksChanged = true
+    }
+    if (marksChanged) saveLastSeen(this.lastSeen)
     for (const id of present) {
       if (this.isMain(id)) this.completionUnread.delete(id)
     }
@@ -525,11 +574,13 @@ export class UiSession extends Service {
       ...this.completionUnread,
     ])
     const next = new Map<SessionId, SessionStatus>()
+    const byId = this.sessions.list.getSnapshot().byId
     for (const id of ids) {
       next.set(id, {
         running: this.running.get(id),
         pendingInteraction: this.pendingSnapshot.get(id),
         completionUnread: this.completionUnread.has(id),
+        unread: isUnread(byId[id]?.updatedAt, this.lastSeen.get(id)),
       })
     }
     if (sameSessionStatus(this.statusSnapshot, next)) return
@@ -688,7 +739,8 @@ function sameSessionStatus(left: SessionStatusSnapshot, right: SessionStatusSnap
     if (candidate === undefined
       || candidate.running !== status.running
       || candidate.pendingInteraction !== status.pendingInteraction
-      || candidate.completionUnread !== status.completionUnread) return false
+      || candidate.completionUnread !== status.completionUnread
+      || candidate.unread !== status.unread) return false
   }
   return true
 }

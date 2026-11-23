@@ -34,7 +34,7 @@ async function bench(declare = true) {
   await ctx.plugin(SlotRegistry).await()
   const layout = { toggleSidebar: vi.fn(), selectPanel: vi.fn() }
   const uiWorkspace = { startSession: vi.fn() }
-  ctx.provide('shortcuts', { catalog: createSnapshotStore([]) } as never)
+  ctx.provide('shortcuts', { catalog: createSnapshotStore([]), register: () => () => {} } as never)
   ctx.provide('layout', layout)
   ctx.provide('uiWorkspace', uiWorkspace as never)
   ctx.provide('locale', new LocaleRuntime(ctx))

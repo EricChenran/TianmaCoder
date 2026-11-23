@@ -1,6 +1,7 @@
 /** Registers the sidebar shell and global panel navigation. */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -45,6 +46,7 @@ export const inject = ['slots', 'layout', 'uiWorkspace', 'locale', 'shortcuts']
 export function apply(ctx: ClientContext): void {
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-sidebar: dictionaries')
+  const t = ctx.locale.bind(NS)
   const panels = createSnapshotStore<readonly SidebarPanelMetadata[]>([])
   const syncPanels = (): void => {
     const next = ctx.slots.entriesOfSlot('sidebar.panellist').map(({ options }) => {
@@ -96,5 +98,14 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injectProps,
   }, HeaderLeadingControls))
+  ctx.effect(() => ctx.shortcuts.register({
+    id: 'session.markAllRead' as ShortcutCommandId,
+    label: () => t('session.markAllRead'),
+    aliases: ['mark all read', 'read all sessions'],
+    defaults: {},
+    regions: ['page'],
+    modals: [],
+    resolve: () => ({ status: 'handled', run: () => { ctx.uiSession.markAllRead() } }),
+  }), 'ui-sidebar: mark-all-read command')
   syncPanels()
 }

@@ -555,6 +555,7 @@ describe('UiSession status', () => {
       running: false,
       pendingInteraction: undefined,
       completionUnread: false,
+      unread: false,
     })
     bench.list.update((draft) => { draft.byId[id]!.running = true })
     expect(service.sessionStatus.getSnapshot().get(id)?.running).toBe(true)
@@ -598,6 +599,7 @@ describe('UiSession status', () => {
       running: false,
       pendingInteraction: undefined,
       completionUnread: true,
+      unread: false,
     })
     bench.list.update((draft) => { draft.phase = 'ready' })
     expect(service.sessionStatus.getSnapshot().has(id)).toBe(false)

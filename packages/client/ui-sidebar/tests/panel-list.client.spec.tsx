@@ -48,7 +48,7 @@ async function bench(collapsed = false) {
   await runtime.mount({
     inject: ['slots'],
     apply(ctx: Context) {
-      ctx.provide('shortcuts', { catalog: createSnapshotStore([]) } as never)
+      ctx.provide('shortcuts', { catalog: createSnapshotStore([]), register: () => () => {} } as never)
       ctx.provide('layout', layout)
       ctx.provide('uiWorkspace', { startSession: vi.fn() } as never)
       ctx.provide('locale', locale)
