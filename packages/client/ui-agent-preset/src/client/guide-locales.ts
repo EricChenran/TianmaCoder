@@ -92,6 +92,8 @@ export const guideEn = {
     'Everything Standard mode provides, plus one system-prompt section carrying the department standard: requirement documents, quotations, case retrieval, and change work orders, together with the shared commercial rules — customer-facing wording, no technical terms in delivered documents, and no invented prices, schedules, or links.',
     '### Document scripts',
     'The document generators ship with the mode and stay off the workspace. Documents keep the fixed layout, the watermark, and the quotation total check, so the agent fills one input file and runs the scripts.',
+    '### Change work-order workbook',
+    'A client request that arrives as scattered text and screenshots becomes one Excel workbook with six fixed columns: time, task, current behavior, expected behavior, proof screenshots, and status. The agent splits the material into one row per independently verifiable change and keeps the sheet honest — a screenshot is embedded only once it exists as a file (the agent asks where it is), missing evidence is written into the cell instead of left blank, and a freshly reported request stays 待处理 rather than being marked done on the client’s behalf.',
   ].join('\n\n'),
   guideBusinessUsage: [
     '### Draft a requirement document',
@@ -233,6 +235,8 @@ export const guideZh: Record<PresetGuideKey, string> = {
     '标准模式的能力全部保留，另加一条承载部门规范的系统提示词：需求文档、报价单、案例检索、改动任务工单，以及共通商务红线——面向客户的语言、对外文件不出现技术栈词汇、不编造价格、工期与链接。',
     '### 文档脚本',
     '文档生成脚本随模式交付，不落在工作区里。文档沿用固定版式、水印与报价合计校验，因此 Agent 只需填一份输入再跑脚本。',
+    '### 改动任务工单',
+    '客户零散发来的文字与截图会落成一张 Excel，六列固定：时间、任务明细、当前现象、期望改动后、证明截图、状态。Agent 把材料拆成「一行一件事」，并守住这张表的底线——截图必须先成为磁盘上的文件才会被嵌进表（没有就问用户要），缺证据就写进单元格而不是留空，客户刚提的改动记为待处理，不代客户标成已完成。',
   ].join('\n\n'),
   guideBusinessUsage: [
     '### 整理需求文档',
