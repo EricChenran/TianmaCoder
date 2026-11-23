@@ -31,6 +31,13 @@ interface WebSearchRequest {
    * regardless.
    */
   readonly maxResults?: number
+  /**
+   * Provider id of the model route that requested this search, when the
+   * consumer knows it. The seam prefers the search backend belonging to that
+   * route (a DeepSeek model searches through DeepSeek); an explicit
+   * `searchProvider` or `$DSH_WEB_SEARCH_PROVIDER` still wins.
+   */
+  readonly llmProvider?: string
 }
 ```
 
