@@ -213,3 +213,43 @@ describe('WebError', () => {
     expect(error.name).toBe('WebError')
   })
 })
+
+describe('WebRuntime model-route search selection', () => {
+  /** Register the two backends the shipped base mounts. */
+  async function mountBoth(config: ConstructorParameters<typeof WebRuntime>[1] = {}): Promise<WebRuntime> {
+    const { web } = await mountWeb(config)
+    web.registerSearchProvider(makeSearchProvider('serp', available, () => Promise.resolve(searchResult('serp'))))
+    web.registerSearchProvider(makeSearchProvider('deepseek-official', available, () => Promise.resolve(searchResult('official'))))
+    return web
+  }
+
+  it('routes a DeepSeek model route to the DeepSeek search backend', async () => {
+    const web = await mountBoth()
+    await expect(web.search({ query: 'q', llmProvider: 'deepseek-official' })).resolves.toMatchObject({ content: 'official' })
+    await expect(web.search({ query: 'q', llmProvider: 'deepseek-account' })).resolves.toMatchObject({ content: 'official' })
+  })
+
+  it('routes every other model route to the engine-scraping backend', async () => {
+    const web = await mountBoth()
+    await expect(web.search({ query: 'q', llmProvider: 'anthropic' })).resolves.toMatchObject({ content: 'serp' })
+    await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'serp' })
+  })
+
+  it('keeps an explicit searchProvider above the route preference', async () => {
+    const web = await mountBoth({ searchProvider: 'serp' })
+    await expect(web.search({ query: 'q', llmProvider: 'deepseek-account' })).resolves.toMatchObject({ content: 'serp' })
+  })
+
+  it('falls back to auto-selection when the route backend is not registered', async () => {
+    const { web } = await mountWeb()
+    web.registerSearchProvider(makeSearchProvider('serp', available, () => Promise.resolve(searchResult('serp'))))
+    await expect(web.search({ query: 'q', llmProvider: 'deepseek-official' })).resolves.toMatchObject({ content: 'serp' })
+  })
+
+  it('falls back when the route backend is registered but unavailable', async () => {
+    const { web } = await mountWeb()
+    web.registerSearchProvider(makeSearchProvider('serp', available, () => Promise.resolve(searchResult('serp'))))
+    web.registerSearchProvider(makeSearchProvider('deepseek-official', unavailable, () => Promise.resolve(searchResult('official'))))
+    await expect(web.search({ query: 'q', llmProvider: 'deepseek-official' })).resolves.toMatchObject({ content: 'serp' })
+  })
+})

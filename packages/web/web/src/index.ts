@@ -38,6 +38,31 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/**
+ * Model routes served by the DeepSeek account plane. A search requested by one
+ * of them goes through the DeepSeek search backend, which reuses the same
+ * credential the model route used, so search is billed as model tokens rather
+ * than per call.
+ */
+const DEEPSEEK_MODEL_ROUTES: ReadonlySet<string> = new Set(['deepseek-official', 'deepseek-account'])
+
+/** Search backend preferred for a DeepSeek model route. */
+export const DEEPSEEK_SEARCH_PROVIDER = 'deepseek-official'
+
+/** Search backend preferred for every other model route. */
+export const FALLBACK_SEARCH_PROVIDER = 'serp'
+
+/**
+ * Route-derived search preference, before any explicit configuration.
+ * @param llmProvider - provider id of the model route that requested the search.
+ * @returns the backend id preferred for that route.
+ */
+function preferredSearchProvider(llmProvider: string | undefined): string {
+  return llmProvider !== undefined && DEEPSEEK_MODEL_ROUTES.has(llmProvider)
+    ? DEEPSEEK_SEARCH_PROVIDER
+    : FALLBACK_SEARCH_PROVIDER
+}
+
 /** Selection inputs for execution-time provider resolution. */
 interface Selection<P> {
   /** The configured provider id for this capability, if any. */
@@ -67,6 +92,9 @@ export interface WebRuntimeConfig {
  * - A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.
  * - A configured id registered but unavailable →
  *   `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.
+ * - Search only, no id configured: the backend preferred by the requesting
+ *   model route when it is registered and usable (DeepSeek routes →
+ *   `deepseek-official`, every other route → `serp`); otherwise auto-select.
  * - No id configured, exactly one registered usable provider → that provider.
  * - No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.
  * - No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.
@@ -138,12 +166,29 @@ export class WebRuntime extends Service {
    * @returns the provider's results, capped to `request.maxResults`.
    */
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
-    const provider = resolveProvider({
-      providers: this.searchProviders,
-      ...this.searchProviderId !== undefined ? { configuredId: this.searchProviderId } : {},
-    })
+    const provider = this.resolveSearchProvider(request.llmProvider)
     const result = await provider.search(request, signal)
     return capSources(result, request.maxResults)
+  }
+
+  /**
+   * Resolve the search backend for one request. An explicit
+   * `searchProvider`/`$DSH_WEB_SEARCH_PROVIDER` keeps its strict semantics;
+   * otherwise the requesting model route's preferred backend wins when usable,
+   * and auto-selection (exactly one usable provider) remains the fallback.
+   * @param llmProvider - provider id of the model route that requested the search.
+   * @returns the provider that serves this search.
+   */
+  private resolveSearchProvider(llmProvider: string | undefined): WebSearchProvider {
+    if (this.searchProviderId !== undefined) {
+      return resolveProvider({
+        providers: this.searchProviders,
+        configuredId: this.searchProviderId,
+      })
+    }
+    const preferred = this.searchProviders.get(preferredSearchProvider(llmProvider))
+    if (preferred !== undefined && preferred.available()) return preferred
+    return resolveProvider({ providers: this.searchProviders })
   }
 
   /**

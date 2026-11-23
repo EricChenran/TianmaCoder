@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ToolResult, WebSearchResultView, WebSource } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import type { WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
+import type { WebSearchRequest, WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
 import { EXTERNAL_WEB_CONTENT_NOTICE } from './trust.ts'
 
 /**
@@ -226,6 +226,8 @@ export function presentSearchResult(args: WebSearchArgs, result: ToolResult): We
  * @param queries - validated non-empty queries.
  * @param maxResults - the deployment's source cap for the combined result.
  * @param signal - cancellation signal forwarded to every search.
+ * @param llmProvider - provider id of the model route that called the tool, so
+ *   the seam can prefer that route's search backend.
  * @returns the combined search result.
  */
 async function runSearchQueries(
@@ -233,9 +235,15 @@ async function runSearchQueries(
   queries: string[],
   maxResults: number,
   signal: AbortSignal,
+  llmProvider?: string,
 ): Promise<WebSearchResult> {
+  const request = (query: string): WebSearchRequest => ({
+    query,
+    maxResults,
+    ...llmProvider === undefined ? {} : { llmProvider },
+  })
   if (queries.length === 1) {
-    return ctx.web.search({ query: queries[0] as string, maxResults }, signal)
+    return ctx.web.search(request(queries[0] as string), signal)
   }
   const controller = new AbortController()
   const batchSignal = AbortSignal.any([signal, controller.signal])
@@ -243,7 +251,7 @@ async function runSearchQueries(
   const results: WebSearchResult[] = []
   const searches = queries.map(async (query, index) => {
     try {
-      results[index] = await ctx.web.search({ query, maxResults }, batchSignal)
+      results[index] = await ctx.web.search(request(query), batchSignal)
     } catch (error) {
       if (firstFailure === undefined) firstFailure = { error }
       controller.abort(error)
@@ -364,7 +372,10 @@ export function applyWebSearchTool(
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const queries = parseSearchArgs(args, maxQueries)
-      const result = await runSearchQueries(ctx, queries, maxResults, exec.signal)
+      // The route that served the calling model request decides which search
+      // backend is billed for this call.
+      const llmProvider = exec.agent?.session.requestContext()?.provider
+      const result = await runSearchQueries(ctx, queries, maxResults, exec.signal, llmProvider)
       return {
         ...result.content !== undefined ? { content: result.content } : {},
         sources: result.sources.map(projectSource),

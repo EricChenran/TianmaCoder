@@ -479,15 +479,14 @@
 
     # The shared base enables the stable model-facing web_search and web_fetch
     # tools. The Web app disables this host row and composes both tools per agent
-    # preset; products with a stricter network policy override tool-web. Search is
-    # engine-scraping: it reads Baidu, Bing, and 360 result pages over plain HTTP, so
-    # the shipped search path needs no vendor search API, no credential, and no
-    # auxiliary model request. `web-search-serp` owns that mechanism; a deployer
-    # selects engines, endpoints, and politeness there. The DeepSeek auxiliary-search
-    # route stays mounted as the opt-in alternative: set `web.searchProvider` back to
-    # `deepseek-official` and search resolves the same DEEPSEEK_API_KEY credential the
-    # Models page manages for chat, at each search, against its own Messages endpoint
-    # (independent of the model route, so it takes its own base-URL override).
+    # preset; products with a stricter network policy override tool-web. Search
+    # routes by model: DeepSeek routes search through their own backend
+    # (`deepseek-official`, billed as model tokens instead of per call), while
+    # every other route uses engine scraping (`web-search-serp`), which reads
+    # Baidu, Bing, and 360 result pages over plain HTTP and needs no vendor search
+    # API, no credential, and no auxiliary model request. A deployer selects
+    # engines, endpoints, and politeness in `web-search-serp`. Pinning
+    # `web.searchProvider` still forces one backend for every route.
     # Anonymous fetch accepts only public HTTP(S) destinations, resolves and validates
     # every destination, and pins every actual connection. Scraping three engines
     # concurrently can outlast a single fast request, so this shipped route gets 60s
@@ -495,7 +494,6 @@
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
-        searchProvider: serp
         fetchProvider: http
 
     - id: web-search-serp
