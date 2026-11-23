@@ -75,14 +75,16 @@ describe('bootstrap failure rendering', () => {
     const container = document.createElement('div')
     document.body.append(container)
     const target = installFacade()
+    // A required row: its failure must still reach the failure page rather than only warn.
+    const failing = '@deepseek-ai/dsh-client-ui-chat'
     win.__DSH_BOOT__ = {
       rev: 'graph',
-      entries: [{ id: 'broken', url: '/broken.js', rev: '1' }],
-      batches: [{ phase: 'application', url: '/application.js', rev: '1', entries: ['broken'] }],
+      entries: [{ id: failing, url: '/broken.js', rev: '1' }],
+      batches: [{ phase: 'application', url: '/application.js', rev: '1', entries: [failing] }],
     }
     const entry = new AppWebEntry(container, {
       loadBundle: async () => {
-        target.load({ id: 'broken', factory: () => ({ apply() { throw new Error('plugin activation failed') } }) })
+        target.load({ id: failing, factory: () => ({ apply() { throw new Error('plugin activation failed') } }) })
       },
     })
     const report = vi.fn<(reason: unknown) => void>()
@@ -90,13 +92,13 @@ describe('bootstrap failure rendering', () => {
       await entry.run(carrier ? report : undefined)
       if (carrier) {
         expect(report).toHaveBeenCalledOnce()
-        expect(String(report.mock.calls[0]![0])).toContain('broken')
+        expect(String(report.mock.calls[0]![0])).toContain(failing)
         expect(container.querySelector('[data-dsh-boot-spinner]')).not.toBeNull()
         expect(container.textContent).not.toContain('Failed to load plugins')
       } else {
         expect(report).not.toHaveBeenCalled()
         expect(container.textContent).toContain('Failed to load plugins')
-        expect(container.textContent).toContain('broken')
+        expect(container.textContent).toContain(failing)
       }
     } finally {
       await entry.dispose()

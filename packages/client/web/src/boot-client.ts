@@ -6,6 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
+import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { BootManifest, ClientModuleLoader } from '@deepseek-ai/dsh-client-modules/client'
 import { STATE_LABELS } from './loader-status.ts'
 
@@ -57,33 +58,71 @@ export async function bootClient(options: ClientBootOptions): Promise<void> {
 }
 
 /**
+ * Client entries the page cannot work without: the shell, the session
+ * transport, and the surfaces every session renders through. A row outside this
+ * set may fail without taking the page down, so a third-party or optional
+ * plugin cannot blank the whole client.
+ */
+export const requiredClientEntryNames: ReadonlySet<string> = new Set([
+  '@deepseek-ai/dsh-client-modules',
+  '@deepseek-ai/dsh-api-session-controller',
+  '@deepseek-ai/dsh-client-ui-renderer',
+  '@deepseek-ai/dsh-client-ui-layout',
+  '@deepseek-ai/dsh-client-ui-session',
+  '@deepseek-ai/dsh-client-ui-chat',
+  '@deepseek-ai/dsh-client-ui-sidebar',
+  '@deepseek-ai/dsh-client-ui-workspace',
+])
+
+/**
+ * Name why one Loader entry is not active, or `undefined` when it is.
+ * @param ctx - root Context carrying the Loader.
+ * @param name - entry name (the manifest row id, which is the package name).
+ * @param fiber - the entry fiber, absent when its module never imported.
+ * @param modules - the module system whose recorded import failures name why an entry has no fiber.
+ * @returns the diagnostic text, or `undefined` for an active entry.
+ */
+function inactiveReason(
+  ctx: Context,
+  name: string,
+  fiber: Entry['fiber'],
+  modules: Pick<ClientModuleLoader, 'importError'>,
+): string | undefined {
+  if (fiber === undefined) {
+    const importError = modules.importError(name)
+    return importError === undefined
+      ? 'import failed (see console for the import error)'
+      : `import failed: ${importError.message}`
+  }
+  const state = STATE_LABELS[fiber.state]
+  if (state === 'active') return undefined
+  if (state !== 'pending') return state
+  const missing = Object.keys(fiber.inject).filter(service => ctx.get(service) === undefined)
+  return `pending (waiting for service${missing.length === 1 ? '' : 's'}: ${missing.join(', ') || 'unknown'})`
+}
+
+/**
  * Reject entries that failed import/apply or still wait on missing services.
+ * Required rows ({@link requiredClientEntryNames}) reject startup with their
+ * reason; every other row is reported through `console.warn` and boot continues.
  * @param ctx - root Context carrying the Loader.
  * @param modules - the module system whose recorded import failures name why an entry
  *   has no fiber; a row with no record points at the console.
- * @throws {Error} listing every non-active entry with its reason.
+ * @throws {Error} listing every inactive required entry with its reason.
  */
 export function assertEntriesActive(ctx: Context, modules: Pick<ClientModuleLoader, 'importError'>): void {
   const failures: string[] = []
+  const skipped: string[] = []
   for (const entry of ctx.loader.entries()) {
     const name = entry.options.name
-    if (entry.fiber === undefined) {
-      const importError = modules.importError(name)
-      failures.push(importError === undefined
-        ? `${name}: import failed (see console for the import error)`
-        : `${name}: import failed: ${importError.message}`)
-      continue
-    }
-    const state = STATE_LABELS[entry.fiber.state]
-    if (state === 'active') continue
-    if (state === 'pending') {
-      const missing = Object.keys(entry.fiber.inject).filter(service => ctx.get(service) === undefined)
-      failures.push(`${name}: pending (waiting for service${missing.length === 1 ? '' : 's'}: ${missing.join(', ') || 'unknown'})`)
-    } else {
-      failures.push(`${name}: ${state}`)
-    }
+    const reason = inactiveReason(ctx, name, entry.fiber, modules)
+    if (reason === undefined) continue
+    if (requiredClientEntryNames.has(name)) failures.push(`${name} (required): ${reason}`)
+    else skipped.push(`${name}: ${reason}`)
   }
+  for (const line of skipped) console.warn(`web boot: optional entry did not activate: ${line}`)
   if (failures.length > 0) {
-    throw new Error(`web boot: ${String(failures.length)} entr${failures.length === 1 ? 'y' : 'ies'} did not activate\n${failures.join('\n')}`)
+    const skippedNote = skipped.length === 0 ? '' : `\n(${String(skipped.length)} optional entr${skipped.length === 1 ? 'y' : 'ies'} skipped)`
+    throw new Error(`web boot: ${String(failures.length)} required entr${failures.length === 1 ? 'y' : 'ies'} did not activate\n${failures.join('\n')}${skippedNote}`)
   }
 }
