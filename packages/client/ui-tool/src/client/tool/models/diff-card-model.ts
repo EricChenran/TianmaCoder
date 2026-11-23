@@ -1,4 +1,5 @@
 /** Pure diff-card derivation from raw file-mutation calls and result metadata. @module */
+import { languageForPath } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { DiffBlockProps, DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from './tool-call-model.ts'
 import { parsedToolCall } from './raw-tool-call.ts'
@@ -18,7 +19,18 @@ export interface DiffCardModel {
    * spreads exactly the primitive's own surface and can never leak a
    * neighbouring field into it.
    */
-  card: Pick<DiffBlockProps, 'diffs'>
+  card: Pick<DiffBlockProps, 'diffs' | 'language'>
+}
+
+/**
+ * The grammar every hunk path agrees on, so a multi-file card never paints one
+ * file with another's grammar.
+ * @param diffs - the hunks the card will draw.
+ * @returns the shared language, or undefined when the paths disagree.
+ */
+function diffLanguage(diffs: DiffHunk[]): string | undefined {
+  const first = diffs[0] === undefined ? undefined : languageForPath(diffs[0].path)
+  return diffs.every(diff => languageForPath(diff.path) === first) ? first : undefined
 }
 
 /**
@@ -101,13 +113,14 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   if (block.parentCallId !== undefined) return null
   const intended = intendedDiff(block)
   if (intended === null) return null
-  if (!('kind' in block)) return { card: { diffs: [intended.diff] } }
+  if (!('kind' in block)) return { card: { diffs: [intended.diff], language: diffLanguage([intended.diff]) } }
   if (intended.tool === 'str_replace_editor') return null
   if (block.isError) return null
   const applied = appliedDiffs(block.meta)
   if (applied === null || applied === 'empty') {
-    return intended.tool === 'write' ? { card: { diffs: [intended.diff] } } : null
+    return intended.tool === 'write' ? { card: { diffs: [intended.diff], language: diffLanguage([intended.diff]) } } : null
   }
   const path = recordedAbsolutePath(block.meta, 'path')
-  return { card: { diffs: applied.map(diff => diff.path === path ? { ...diff, path: intended.diff.path } : diff) } }
+  const diffs = applied.map(diff => diff.path === path ? { ...diff, path: intended.diff.path } : diff)
+  return { card: { diffs, language: diffLanguage(diffs) } }
 }

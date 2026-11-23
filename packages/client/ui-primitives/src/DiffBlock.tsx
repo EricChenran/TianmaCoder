@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { structuredPatch } from 'diff'
 import { FoldToggle } from './FoldToggle.tsx'
 import { writeClipboard } from './clipboard.ts'
 import { CodeToolbar, type CodeToolbarLabels } from './CodeToolbar.tsx'
-import { languageForPath } from './code-highlighting.ts'
+import { languageForPath, useCodeHighlighter } from './code-highlighting.ts'
+import type { HighlightSpan } from './code-highlighting.ts'
 import cardCss from './CodeCard.module.css'
 import css from './DiffBlock.module.css'
 
@@ -29,6 +31,11 @@ export interface DiffBlockProps {
   diffs: DiffHunk[]
   /** Localized chrome supplied by the owning render site. */
   labels: DiffBlockLabels
+  /**
+   * Grammar hint for token colouring. Omitted or unknown falls back to the
+   * language the hunk paths agree on, then to plain text.
+   */
+  language?: string | undefined
   /** Height cap in body lines before the middle collapses (default {@link DEFAULT_DIFF_MAX_LINES}). */
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper (callers position; this component draws). */
@@ -161,17 +168,30 @@ function copyText(rows: DiffRow[]): string {
 }
 
 /**
+ * Draw one row's text from its token spans.
+ * @param text - the row's text without its `+ `/`- ` prefix.
+ * @param spans - the highlighted tokens, or undefined for plain-text fallback.
+ * @returns the plain text, or one span per highlighted token.
+ */
+function rowText(text: string, spans: readonly HighlightSpan[] | undefined): ReactNode {
+  if (spans === undefined) return text
+  return <>{spans.map((span, index) => <span key={index} style={span.style}>{span.text}</span>)}</>
+}
+
+/**
  * Render a file mutation as an inline diff surface.
  * @param props - see {@link DiffBlockProps}.
  * @returns the diff block element.
  */
-export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
+export function DiffBlock({ diffs, labels, language: languageOverride, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
   const rows = useMemo(() => buildRows(diffs), [diffs])
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const [wrapped, setWrapped] = useState(false)
   const firstLanguage = diffs[0] === undefined ? undefined : languageForPath(diffs[0].path)
-  const language = diffs.every(diff => languageForPath(diff.path) === firstLanguage) ? firstLanguage : undefined
+  const pathLanguage = diffs.every(diff => languageForPath(diff.path) === firstLanguage) ? firstLanguage : undefined
+  const language = languageOverride ?? pathLanguage
+  const highlighter = useCodeHighlighter(language)
 
   const onCopy = useCallback(() => {
     if (copied) return
@@ -200,9 +220,10 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
       <CodeToolbar lang={language} labels={labels} copyLabel={labels.copy} copiedLabel={labels.copied}
         copied={copied} wrapped={wrapped} onCopy={onCopy} onWrap={() => { setWrapped(value => !value) }} />
       <div className={css.body}>
-        {head.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
-        ))}
+        {head.map((row, index) => {
+          const spans = highlighter(row.text)?.[0]
+          return <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])} data-diff-code={spans === undefined ? undefined : ''}>{rowText(row.text, spans)}</div>
+        })}
         {hidden > 0 && (
           <FoldToggle
             className={css.expand}
@@ -212,9 +233,10 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
             onToggle={onToggle}
           />
         )}
-        {tail.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
-        ))}
+        {tail.map((row, index) => {
+          const spans = highlighter(row.text)?.[0]
+          return <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])} data-diff-code={spans === undefined ? undefined : ''}>{rowText(row.text, spans)}</div>
+        })}
       </div>
     </div>
   )

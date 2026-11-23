@@ -10,6 +10,7 @@ import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/c
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import { languageForPath } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CHAT_DIFF_MAX_LINES, diffCardModel } from '../src/client/tool/models/diff-card-model.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { FileMutationRow, fileMutationToolview } from '../src/client/tool/toolviews/file-mutation-row.tsx'
@@ -358,5 +359,18 @@ describe('fileMutationToolview registration', () => {
     // Disposal removes each contribution (packages/AGENTS.md registry contract).
     disposeInjection()
     expect(registered.every(r => r.disposed)).toBe(true)
+  })
+})
+
+describe('diff card grammar', () => {
+  it('carries the language every hunk path agrees on', () => {
+    const argsRaw = '{"file_path":"src/demo.ts","old_string":"a","new_string":"b"}'
+    const card = diffCardModel(running({ argsRaw }))
+    expect(card?.card.language).toBe(languageForPath('src/demo.ts'))
+  })
+
+  it('leaves the language undefined so the primitive falls back to plain text', () => {
+    const argsRaw = '{"file_path":"notes/demo.zzz","old_string":"a","new_string":"b"}'
+    expect(diffCardModel(running({ argsRaw }))?.card.language).toBeUndefined()
   })
 })

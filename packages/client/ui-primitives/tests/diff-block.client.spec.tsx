@@ -229,3 +229,18 @@ describe('DiffBlock copy', () => {
     expect(writeText).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('DiffBlock highlighting', () => {
+  it('keeps plain text and no token markers when the grammar is unknown', () => {
+    const diffs: DiffHunk[] = [{ path: 'notes/demo.zzz', oldText: 'before', newText: 'after' }]
+    const { container } = render(<DiffBlock diffs={diffs} language="definitely-not-a-grammar" />)
+    expect(changeRows(container)).toEqual(['before', 'after'])
+    expect(container.querySelector('[data-diff-code]')).toBeNull()
+  })
+
+  it('accepts an explicit language without changing the drawn text', () => {
+    const diffs: DiffHunk[] = [{ path: 'notes/demo.zzz', oldText: 'before', newText: 'after' }]
+    const { container } = render(<DiffBlock diffs={diffs} language="typescript" />)
+    expect(changeRows(container)).toEqual(['before', 'after'])
+  })
+})
