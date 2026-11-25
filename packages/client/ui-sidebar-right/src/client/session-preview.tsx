@@ -1,10 +1,14 @@
 /** Right-Sidebar preview of another Session's Conversation, opened by dropping a session row. */
 import type { Context } from '@deepseek-ai/cordis'
-import type { ISessions, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISessions, SessionReference, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ResourceProvider } from '@deepseek-ai/dsh-client-resources/client'
-import type { ConversationViewsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { conversationPanelPhase, conversationPhase } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { PropsRenderFactories, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  ConversationPanelPhase, ConversationPanelPhaseInput, ConversationPhase, ConversationSnapshot,
+  ConversationViewsProps,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  InjectFace, PropsRenderFactories, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SidebarRightKey } from './locales.ts'
 import type { SidebarRightTabDefinition } from './tab-registry.ts'
@@ -136,9 +140,26 @@ export function SessionPreviewTab({ useTabInfo, useResource, renderSlot, Session
 }
 
 /** Props supplied to the previewed Session's Conversation host. */
+/** Phase resolution handed to the preview by the Conversation service. */
+export interface SessionPreviewInjected {
+  /**
+   * @param session - the previewed Session's lifecycle fields.
+   * @param conversation - its Conversation activity.
+   * @returns the shell phase the embedded Conversation renders with.
+   */
+  shellPhase: (session: SessionSnapshot, conversation: ConversationSnapshot) => ConversationPhase
+  /**
+   * @param input - selection, shell phase, and the two pending conditions.
+   * @returns the phase and whether the composer is a hero.
+   */
+  panelPhase: (input: ConversationPanelPhaseInput) => ConversationPanelPhase
+}
+
+/** Props supplied to the previewed Session's Conversation host. */
 export type SessionPreviewConversationProps =
   & PropsRuntime<'sidebar.session-preview.conversation'>
   & PropsRenderFactories
+  & InjectFace<SessionPreviewInjected>
 
 /**
  * Render the previewed Session with the same phase the main panel would use.
@@ -146,14 +167,14 @@ export type SessionPreviewConversationProps =
  * @returns the embedded Conversation content.
  */
 export function SessionPreviewConversation({
-  sessionId, useSession, useConversation, useSessions, renderFactorySlot,
+  sessionId, useSession, useConversation, useSessions, renderFactorySlot, shellPhase, panelPhase,
 }: SessionPreviewConversationProps) {
   const session = useSession(value => value)
   const conversation = useConversation(value => value)
   const summaryBlank = useSessions(state => state.byId[sessionId]?.blank)
-  const { phase, hero } = conversationPanelPhase({
+  const { phase, hero } = panelPhase({
     hasSession: true,
-    shellPhase: conversationPhase(session, conversation),
+    shellPhase: shellPhase(session, conversation),
     openState: session.openState,
     summaryBlank,
     parentAvailabilityPending: session.subagent?.address.mode === 'continuable'
@@ -200,5 +221,9 @@ export function registerSessionPreview(
   }, SessionPreviewTab)), 'ui-sidebar-right: session preview body')
   ctx.effect(() => ctx.slots.inject('sidebar.session-preview.conversation', () => ctx.slots.register({
     name: 'sidebar.session-preview.conversation',
+    inject: () => ({
+      shellPhase: (session, conversation) => ctx.conversation.shellPhase(session, conversation),
+      panelPhase: input => ctx.conversation.panelPhase(input),
+    }),
   }, SessionPreviewConversation)), 'ui-sidebar-right: session preview conversation')
 }

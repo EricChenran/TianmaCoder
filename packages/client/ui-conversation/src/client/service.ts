@@ -27,6 +27,12 @@ import type {
 import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { ComposerBlocks } from './contract/composer-blocks.ts'
+import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
+import {
+  conversationPanelPhase, conversationPhase,
+  type ConversationPanelPhase, type ConversationPanelPhaseInput, type ConversationPhase,
+  type ConversationSnapshot,
+} from './contract/snapshot.ts'
 import type {
   DraftAttachmentId, DraftAttachmentSerializationResult, SessionInputResolver, SubmitAttachment, SubmitOutcome,
 } from './contract/input.ts'
@@ -68,6 +74,23 @@ export interface IConversation {
    * @returns completion of the page pull.
    */
   loadOlder(): Promise<void>
+  /**
+   * Resolve the shell phase for a Session and its Conversation activity.
+   *
+   * An embedding surface (for example a preview of another Session) asks the
+   * owning service instead of importing the contract helper's runtime value,
+   * which the client bundle purity rule forbids across feature plugins.
+   * @param session - the Session's lifecycle fields.
+   * @param conversation - its Conversation activity.
+   * @returns the phase the panel layouts use.
+   */
+  shellPhase(session: SessionSnapshot, conversation: ConversationSnapshot): ConversationPhase
+  /**
+   * Resolve one Conversation presence's phase and hero placement.
+   * @param input - selection, shell phase, and the two pending conditions.
+   * @returns the phase and whether the composer is a hero.
+   */
+  panelPhase(input: ConversationPanelPhaseInput): ConversationPanelPhase
 }
 
 /** Create one browser-only image draft descriptor; only its id enters input state. */
@@ -169,6 +192,23 @@ export class ConversationController extends Service implements IConversation {
   }> = []
   private activeFileUploads = 0
   private readonly maxConcurrentFileUploads: number
+
+  /**
+   * @param session - the Session's lifecycle fields.
+   * @param conversation - its Conversation activity.
+   * @returns the phase the panel layouts use.
+   */
+  shellPhase(session: SessionSnapshot, conversation: ConversationSnapshot): ConversationPhase {
+    return conversationPhase(session, conversation)
+  }
+
+  /**
+   * @param input - selection, shell phase, and the two pending conditions.
+   * @returns the phase and whether the composer is a hero.
+   */
+  panelPhase(input: ConversationPanelPhaseInput): ConversationPanelPhase {
+    return conversationPanelPhase(input)
+  }
 
   /**
    * @param ctx - owning root context (the plugin apply context; the service

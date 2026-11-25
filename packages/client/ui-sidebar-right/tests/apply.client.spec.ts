@@ -81,6 +81,10 @@ async function boot(shortcuts: Partial<Shortcuts> = {}) {
   ctx.provide('resources', resources as never)
   ctx.provide('sessions', { retain: vi.fn(() => ({ ready: Promise.resolve(), release: vi.fn() })) } as never)
   ctx.provide('uiSession', { adapter: { current } } as never)
+  ctx.provide('conversation', {
+    shellPhase: () => 'blank',
+    panelPhase: () => ({ phase: 'hero', hero: true }),
+  } as never)
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   const seat = (name: string, key?: string): Recorded => {

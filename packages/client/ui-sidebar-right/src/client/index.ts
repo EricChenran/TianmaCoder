@@ -80,8 +80,8 @@ export type { SidebarRightOpenTab } from './tab-inventory.ts'
 /** This package's copy namespace. */
 const NS = 'sidebarRight'
 
-/** Required browser services: the slot registry, the frame's panel actions, copy, and the resource model. */
-export const inject = ['slots', 'layout', 'locale', 'resources', 'sessions', 'uiSession', 'shortcuts']
+/** Required browser services: the slot registry, the frame's panel actions, copy, the resource model, and Conversation phase resolution. */
+export const inject = ['slots', 'layout', 'locale', 'resources', 'sessions', 'conversation', 'uiSession', 'shortcuts']
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
