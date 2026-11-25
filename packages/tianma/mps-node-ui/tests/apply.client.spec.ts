@@ -153,9 +153,11 @@ describe('the node apply owns the Settings section', () => {
     await expect(load()).rejects.toThrow(/catalog\/failed: no session controller/u)
   })
 
-  it('fills the observed snapshot from the first read', async () => {
+  it('fills the observed snapshot when the section refreshes', async () => {
     const { operations } = await surface()
-    const hooks = operations() as unknown as { hooks: { mpsNode: { getSnapshot: () => unknown } } }
+    const ops = operations() as unknown as { refresh: () => Promise<void>; hooks: { mpsNode: { getSnapshot: () => unknown } } }
+    await ops.refresh()
+    const hooks = ops
 
     await vi.waitFor(() => {
       expect(hooks.hooks.mpsNode.getSnapshot())
@@ -204,7 +206,12 @@ describe('the node apply owns the Settings section', () => {
 
   it('says the node state is unreadable when the Host refuses the read', async () => {
     const { operations } = await surface({ status: () => Promise.resolve({ ok: false, error: {} }) })
-    const hooks = operations() as unknown as { hooks: { mpsNode: { getSnapshot: () => Record<string, unknown> } } }
+    const ops = operations() as unknown as {
+      refresh: () => Promise<void>
+      hooks: { mpsNode: { getSnapshot: () => Record<string, unknown> } }
+    }
+    await ops.refresh()
+    const hooks = ops
 
     await vi.waitFor(() => {
       expect(hooks.hooks.mpsNode.getSnapshot()).toMatchObject({ unreadable: true, error: '' })

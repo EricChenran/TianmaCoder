@@ -169,5 +169,4 @@ export function apply(ctx: Context): void {
     name: 'settings.section', id: 'mps-node', order: -5, label: () => t('nav'),
     locale: 'settings.mpsNode', inject: () => operations,
   }, MpsNodeSection))
-  void refresh()
 }
