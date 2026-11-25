@@ -129,6 +129,12 @@
   min-width: 0;
 }
 
+/* Every module stays mounted behind `hidden`, so this class's `display` must not
+   outrank the attribute: otherwise all seven modules render at once. */
+.body[hidden] {
+  display: none;
+}
+
 .card {
   padding: 16px;
   border: 0.5px solid var(--dsw-alias-border-l1);
