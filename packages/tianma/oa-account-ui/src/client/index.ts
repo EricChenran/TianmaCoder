@@ -244,6 +244,21 @@ export function apply(ctx: Context): void {
       const result = await ctx.remote.oaAccount.approvalAction(request)
       if (!result.ok) throw new Error(result.error.message)
     },
+    async loadApprovalTypes() {
+      const result = await ctx.remote.oaAccount.approvalTypes()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async submitApproval(request) {
+      const result = await ctx.remote.oaAccount.submitApproval(request)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
+    async saveApprovalDraft(request) {
+      const result = await ctx.remote.oaAccount.saveApprovalDraft(request)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.value
+    },
     async loadSchedules() {
       const result = await ctx.remote.oaAccount.todaySchedules()
       if (!result.ok) throw new Error(result.error.message)

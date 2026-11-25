@@ -269,6 +269,51 @@
   background: var(--dsw-alias-label-primary);
 }
 
+/* The submit entry sits at the far end of the same strip as the module's views. */
+.composeOpen {
+  margin-left: auto;
+  padding: 0 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Submit form: one labelled control per row, the date pair side by side. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.control {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
 .docTab {
   display: inline-flex;
   align-items: center;

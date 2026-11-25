@@ -6,9 +6,10 @@
  * comment survives a look at the list or at another request.
  */
 import { Fragment, useEffect, useState } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  OaApproval, OaApprovalAction, OaApprovalContent, OaApprovalDetail, OaApprovalTab,
+  OaApproval, OaApprovalAction, OaApprovalContent, OaApprovalContentValue, OaApprovalDetail,
+  OaApprovalSubmitRequest, OaApprovalTab, OaApprovalType,
 } from '@tianma/dsh-oa-account/types'
 import type { OaWorkbenchInjected } from '../contract.ts'
 import type { OaWorkbenchKey } from './locales.ts'
@@ -24,6 +25,12 @@ export interface OaApprovalsProps {
   loadApproval: OaWorkbenchInjected['loadApproval']
   /** Apply one decision. */
   actOnApproval: OaWorkbenchInjected['actOnApproval']
+  /** Read the categories the submit form offers. */
+  loadApprovalTypes: OaWorkbenchInjected['loadApprovalTypes']
+  /** Submit one approval. */
+  submitApproval: OaWorkbenchInjected['submitApproval']
+  /** Keep one approval as a draft. */
+  saveApprovalDraft: OaWorkbenchInjected['saveApprovalDraft']
 }
 
 /** Chip copy per list. */
@@ -62,7 +69,9 @@ type ApprovalView = 'list' | number
  * @param props - localized copy and the three approval reads.
  * @returns the approvals module.
  */
-export function OaApprovalsModule({ t, loadApprovals, loadApproval, actOnApproval }: OaApprovalsProps) {
+export function OaApprovalsModule({
+  t, loadApprovals, loadApproval, actOnApproval, loadApprovalTypes, submitApproval, saveApprovalDraft,
+}: OaApprovalsProps) {
   const [tab, setTab] = useState<OaApprovalTab>('pending')
   const [list, setList] = useState<readonly OaApproval[] | undefined>(undefined)
   const [listError, setListError] = useState<string | undefined>(undefined)
@@ -72,6 +81,20 @@ export function OaApprovalsModule({ t, loadApprovals, loadApproval, actOnApprova
   const [comments, setComments] = useState<Readonly<Record<number, string>>>({})
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | undefined>(undefined)
+  const [composing, setComposing] = useState(false)
+  const [types, setTypes] = useState<readonly OaApprovalType[] | undefined>(undefined)
+  const [typesError, setTypesError] = useState<string | undefined>(undefined)
+  const [category, setCategory] = useState('')
+  const [title, setTitle] = useState('')
+  const [reason, setReason] = useState('')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [amount, setAmount] = useState('')
+  const [projectNo, setProjectNo] = useState('')
+  const [attachment, setAttachment] = useState('')
+  const [sending, setSending] = useState(false)
+  const [formError, setFormError] = useState<string | undefined>(undefined)
+  const [formNote, setFormNote] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     let live = true
@@ -136,6 +159,71 @@ export function OaApprovalsModule({ t, loadApprovals, loadApproval, actOnApprova
       return [label === undefined ? key : t(label), text] as const
     })
 
+  const chosen = (types ?? []).find(item => item.name === category)
+
+  const openCompose = (): void => {
+    setComposing(true)
+    setView('list')
+    setFormError(undefined)
+    setFormNote(undefined)
+    if (types !== undefined) return
+    void loadApprovalTypes().then((list) => {
+      setTypes(list)
+      const [first] = list
+      if (first !== undefined) setCategory(name => name === '' ? first.name : name)
+    }).catch((error: unknown) => {
+      setTypesError(error instanceof Error ? error.message : '')
+    })
+  }
+
+  const composeRequest = (): OaApprovalSubmitRequest => {
+    const content: Record<string, OaApprovalContentValue> = {}
+    if (reason.trim() !== '') content.reason = reason.trim()
+    if (chosen?.requiresDateRange === true) {
+      if (start !== '') content.start_date = start
+      if (end !== '') content.end_date = end
+    }
+    if (chosen?.requiresAmount === true && amount.trim() !== '') {
+      const parsed = Number(amount)
+      content.amount = Number.isFinite(parsed) ? parsed : amount.trim()
+    }
+    if (chosen?.requiresAttachment === true && attachment.trim() !== '') content.attachments = [attachment.trim()]
+    return {
+      type: category,
+      title: title.trim(),
+      content,
+      ...chosen?.requiresProject === true && projectNo.trim() !== '' ? { projectNo: projectNo.trim() } : {},
+    }
+  }
+
+  const send = async (asDraft: boolean): Promise<void> => {
+    if (category === '' || title.trim() === '') {
+      setFormError(t('titleRequired'))
+      return
+    }
+    setSending(true)
+    setFormError(undefined)
+    setFormNote(undefined)
+    try {
+      const body = composeRequest()
+      if (asDraft) {
+        await saveApprovalDraft(body)
+        setFormNote(t('draftSavedOk'))
+      } else {
+        await submitApproval(body)
+        setFormNote(t('submittedOk'))
+        setComposing(false)
+        // The submitted list is where the new request lands, so switching to it
+        // reloads the list through this module's own tab effect.
+        setTab('submitted')
+      }
+    } catch (error: unknown) {
+      setFormError(error instanceof Error && error.message !== '' ? error.message : t('composeRefused'))
+    } finally {
+      setSending(false)
+    }
+  }
+
   const active = typeof view === 'number' ? details[view] : undefined
 
   return <div className={css.body}>
@@ -152,9 +240,68 @@ export function OaApprovalsModule({ t, loadApprovals, loadApproval, actOnApprova
           <button type="button" className={css.close} aria-label={t('close')} onClick={() => { close(id) }}>×</button>
         </span>
       })}
+      <button type="button" className={css.composeOpen} onClick={openCompose}>{t('composeOpen')}</button>
     </div>
 
-    <div hidden={view !== 'list'}>
+    {composing ? <div className={css.doc}>
+      <h2 className={css.detailTitle}>{t('composeHeading')}</h2>
+      {typesError === undefined ? null : <p className={css.error}>{t('categoriesFailed')} {typesError}</p>}
+      {types !== undefined && types.length === 0 ? <p className={css.muted}>{t('noCategories')}</p> : null}
+
+      <label className={css.field}>
+        <span className={css.fieldLabel}>{t('categoryLabel')}</span>
+        <select className={css.control} value={category} onChange={(event) => { setCategory(event.target.value) }}>
+          {(types ?? []).map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+        </select>
+      </label>
+
+      <label className={css.field}>
+        <span className={css.fieldLabel}>{t('requestTitle')}</span>
+        <Input value={title} placeholder={t('requestTitleHint')} onChange={(event) => { setTitle(event.target.value) }} />
+      </label>
+
+      {chosen?.requiresProject === true ? <label className={css.field}>
+        <span className={css.fieldLabel}>{t('fieldProject')}</span>
+        <Input value={projectNo} onChange={(event) => { setProjectNo(event.target.value) }} />
+      </label> : null}
+
+      {chosen?.requiresDateRange === true ? <div className={css.fieldRow}>
+        <label className={css.field}>
+          <span className={css.fieldLabel}>{t('fieldStart')}</span>
+          <input className={css.control} type="date" value={start} onChange={(event) => { setStart(event.target.value) }} />
+        </label>
+        <label className={css.field}>
+          <span className={css.fieldLabel}>{t('fieldEnd')}</span>
+          <input className={css.control} type="date" value={end} onChange={(event) => { setEnd(event.target.value) }} />
+        </label>
+      </div> : null}
+
+      {chosen?.requiresAmount === true ? <label className={css.field}>
+        <span className={css.fieldLabel}>{t('fieldAmount')}</span>
+        <Input value={amount} onChange={(event) => { setAmount(event.target.value) }} />
+      </label> : null}
+
+      {chosen?.requiresAttachment === true ? <label className={css.field}>
+        <span className={css.fieldLabel}>{t('fieldAttachment')}</span>
+        <Input value={attachment} onChange={(event) => { setAttachment(event.target.value) }} />
+      </label> : null}
+
+      <label className={css.field}>
+        <span className={css.fieldLabel}>{t('fieldReason')}</span>
+        <textarea className={css.comment} value={reason} onChange={(event) => { setReason(event.target.value) }} />
+      </label>
+
+      {formError === undefined ? null : <p className={css.error}>{formError}</p>}
+      {formNote === undefined ? null : <p className={css.muted}>{formNote}</p>}
+
+      <div className={css.actions}>
+        <Button variant="primary" disabled={sending} onClick={() => { void send(false) }}>{t('submitRequest')}</Button>
+        <Button variant="ghost" disabled={sending} onClick={() => { void send(true) }}>{t('saveDraft')}</Button>
+        <Button variant="ghost" onClick={() => { setComposing(false) }}>{t('cancelCompose')}</Button>
+      </div>
+    </div> : null}
+
+    <div hidden={view !== 'list' || composing}>
       <div className={css.chips} style={{ marginBottom: 14 }}>
         {TABS.map(id => <button
           key={id}

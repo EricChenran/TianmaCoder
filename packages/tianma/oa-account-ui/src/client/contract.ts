@@ -10,7 +10,9 @@ import type {
   OaApproval,
   OaApprovalActionRequest,
   OaApprovalDetail,
+  OaApprovalSubmitRequest,
   OaApprovalTab,
+  OaApprovalType,
   OaAttendanceSummary,
   OaAttendanceToday,
   OaCaptcha,
@@ -181,6 +183,26 @@ export interface OaWorkbenchInjected {
    * @throws when the backend refuses the decision.
    */
   actOnApproval: (request: OaApprovalActionRequest) => Promise<void>
+  /**
+   * Read the approval categories the submit form offers.
+   * @returns the active categories in the backend's sort order.
+   * @throws when the backend refuses the read.
+   */
+  loadApprovalTypes: () => Promise<readonly OaApprovalType[]>
+  /**
+   * Submit one approval; the backend resolves approvers and creates the levels.
+   * @param request - the approval to submit.
+   * @returns the created approval.
+   * @throws when the backend refuses the submission.
+   */
+  submitApproval: (request: OaApprovalSubmitRequest) => Promise<OaApproval>
+  /**
+   * Keep one approval as a draft, which creates no levels.
+   * @param request - the approval to keep.
+   * @returns the draft approval.
+   * @throws when the backend refuses the draft.
+   */
+  saveApprovalDraft: (request: OaApprovalSubmitRequest) => Promise<OaApproval>
   /**
    * Read today's schedule.
    * @returns today's entries, leave lines included.

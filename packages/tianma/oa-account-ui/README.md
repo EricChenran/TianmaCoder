@@ -102,6 +102,7 @@ These limits define the current boundary.
 - **The client gate is pushed, not read.** The composer's block registry is the only channel the one-way dependency allows, so the plugin writes it directly and clears it when it unloads; a deployment that mounts the account UI without the conversation service keeps the Host-side refusal and loses only the disabled composer.
 - **The workbench covers overview, messages, approvals, to-do, schedule, tasks, and attendance.** Salary slips and file transfer stay out because they have no Host read yet.
 - **An approval decision is one request.** There is no batch action and no transfer, because the employee side exposes neither; a rejection needs a comment before the module will send it.
+- **The approvals module submits new requests from its own form.** Category, title, the columns that category requires, and a reason leave as one request, and a draft is kept without levels. The form picks no approvers or copiers, so the backend's category default applies, and a flexible-work window has no field yet.
 - **Open message tabs live in component state.** A reload loses the open tabs; the module and its filters return to their defaults.
 
 <a id="dev-note"></a>

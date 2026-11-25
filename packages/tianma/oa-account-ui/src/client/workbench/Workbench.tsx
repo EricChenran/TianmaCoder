@@ -63,6 +63,7 @@ function moduleLabel(t: (key: OaWorkbenchKey) => string, id: OaWorkbenchModule):
 export function OaWorkbenchPanel({
   useOaWorkbench, refresh, readMessage, readAllMessages, createTodo, toggleTodo,
   checkIn, checkOut, setPreference, loadApprovals, loadApproval, actOnApproval,
+  loadApprovalTypes, submitApproval, saveApprovalDraft,
   loadSchedules, loadTaskBoard, completeTask, loadAttendanceSummary, openLogin, t,
 }: OaWorkbenchProps) {
   const snapshot = useOaWorkbench(state => state)
@@ -274,6 +275,9 @@ export function OaWorkbenchPanel({
         loadApprovals={loadApprovals}
         loadApproval={loadApproval}
         actOnApproval={actOnApproval}
+        loadApprovalTypes={loadApprovalTypes}
+        submitApproval={submitApproval}
+        saveApprovalDraft={saveApprovalDraft}
       />
     </section>
 
