@@ -13,15 +13,15 @@ export type MpsNodeSectionProps =
 
 /** The local fields the edit form holds beside the join string. */
 const FIELDS = [
-  { key: 'workspaceRoot', label: 'fieldWorkspaceRoot' },
-  { key: 'networkProxy', label: 'fieldNetworkProxy' },
+  { key: 'workspaceRoot', localeKey: 'fieldWorkspaceRoot' },
+  { key: 'networkProxy', localeKey: 'fieldNetworkProxy' },
 ] as const
 
 /** The join string as the paste box previews it: what it states, or why it cannot be read. */
 type JoinPreview =
   | { kind: 'empty' }
   | { kind: 'ok'; url: string; nodeId: string }
-  | { kind: 'invalid'; message: string }
+  | { kind: 'invalid'; messageKey: MpsNodeKey }
 
 /**
  * Read one join string the way the Host's own parser will, so the preview under the
@@ -35,22 +35,22 @@ function previewJoin(value: string): JoinPreview {
   if (text === '') return { kind: 'empty' }
   const hash = text.indexOf('#')
   if (hash < 0) {
-    return { kind: 'invalid', message: 'it carries no "#" fragment: expected node=<id>&secret=<secret> after the platform address' }
+    return { kind: 'invalid', messageKey: 'joinErrorNoFragment' }
   }
   let parsed: URL
   try {
     parsed = new URL(text.slice(0, hash))
   } catch {
-    return { kind: 'invalid', message: 'its platform address is not a usable absolute URL' }
+    return { kind: 'invalid', messageKey: 'joinErrorBadAddress' }
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { kind: 'invalid', message: 'its platform address must be http or https' }
+    return { kind: 'invalid', messageKey: 'joinErrorBadProtocol' }
   }
   const fragment = new URLSearchParams(text.slice(hash + 1))
   const nodeId = (fragment.get('node') ?? '').trim()
-  if (nodeId === '') return { kind: 'invalid', message: 'it carries no node id: expected node=<id> after "#"' }
+  if (nodeId === '') return { kind: 'invalid', messageKey: 'joinErrorNoNodeId' }
   if ((fragment.get('secret') ?? '').trim() === '') {
-    return { kind: 'invalid', message: 'it carries no secret: expected secret=<secret> after "#"' }
+    return { kind: 'invalid', messageKey: 'joinErrorNoSecret' }
   }
   return {
     kind: 'ok',
@@ -193,9 +193,9 @@ export function MpsNodeSection(
               <span>✓ {t('joinParsedSecret')}</span>
             </div>}
             {joinPreview.kind === 'invalid'
-              && <span className={css.error} role='alert'>{t('joinInvalid', { message: joinPreview.message })}</span>}
+              && <span className={css.error} role='alert'>{t('joinInvalid', { message: t(joinPreview.messageKey) })}</span>}
             {FIELDS.map(field => <label key={field.key} className={css.field}>
-              <span className={css.fieldLabel}>{t(field.label)}</span>
+              <span className={css.fieldLabel}>{t(field.localeKey)}</span>
               <div className={css.fieldRow}>
                 <Input
                   value={form[field.key] ?? ''}
