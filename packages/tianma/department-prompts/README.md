@@ -1,5 +1,5 @@
 ---
-description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and the bundled 公文, 模板源码抓取, demo-video, UI-confirmation, and 实施方案 skills, all published out of the runtime archive."
+description: "Department operating rules for the TianmaCoder desktop modes as one literal system-prompt section per mode, plus the 商务部 document toolbox and its bundled skills, published from the runtime archive."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and bootstrapmb 模板源码抓取 skills for every department mode, the demo-video and UI-confirmation skills for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and for 商务部 the six packaged document scripts plus two work-order disposition scripts for 技术部, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only the department presets carry, the 技术部-only skills reaching it alone.
+`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and template-fetch skills for every mode, the demo-video and UI-confirmation skills for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and the packaged document and work-order disposition scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only the department presets carry, the 技术部-only skills reaching it alone.
 
 ## Table of Contents
 

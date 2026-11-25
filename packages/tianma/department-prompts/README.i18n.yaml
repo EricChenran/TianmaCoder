@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/tianma/department-prompts/README.md
 /:
-  en: 7bcf542b28221ad8
-  zh: 11c6ad1e6c2c820a
+  en: 31e5c5651a944baa
+  zh: c8697125b69c87e1
 /tianma-dsh-department-prompts:
   en: 994c2699629b0295
   zh: bc75ee520c5f8f98
 /tianma-dsh-department-prompts/summary:
-  en: bc819d8ac7c0dcf5
-  zh: 25f41bf30393af47
+  en: 01ed8e483512ccef
+  zh: 46ca1ae477abe678
 /tianma-dsh-department-prompts/table-of-contents:
   en: d152484eb41ac6b4
   zh: fdb6e058f7d240b2
