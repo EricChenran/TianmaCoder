@@ -506,6 +506,50 @@ describe('workbench: approvals', () => {
     expect(approval?.totalLevels).toBe(2)
   })
 
+  it('reads a row that omits its empty columns and spells the arrival column the documented way', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({
+      approvals: [{
+        id: 19,
+        title: '报销申请',
+        type: '报销申请',
+        created_at: '2026年11月23日 10:00',
+        applicant_name: '李四',
+        status: 'pending',
+        arrival_time: '刚刚到达',
+      }],
+    }))
+    const [approval] = await service.approvals('pending')
+    expect(approval?.arrivalTime).toBe('刚刚到达')
+    expect(approval?.department).toBe('')
+    expect(approval?.projectName).toBeNull()
+    expect(approval?.applicantAvatar).toBe('')
+    expect(approval?.nodes).toEqual([])
+    expect(approval?.ccUsers).toEqual([])
+    expect(approval?.content).toEqual({})
+    expect(approval?.currentLevel).toBe(0)
+    expect(approval?.totalLevels).toBe(0)
+  })
+
+  it('names the field when a row cannot be read at all', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({ approvals: [{ ...WIRE_APPROVAL, id: 'not-a-number' }] }))
+    await expect(service.approvals('pending')).rejects.toThrow(/not understood \(approvals\.0\.id/)
+  })
+
+  it('reads a detail whose decision flags the backend left out', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok(WIRE_APPROVAL))
+    const detail = await service.approval(18)
+    expect(detail.canApprove).toBe(false)
+    expect(detail.isCc).toBe(false)
+    expect(detail.canCancel).toBe(false)
+    expect(detail.cancelDisabledReason).toBeNull()
+  })
+
   it('reads a detail with its decision flags, then posts one decision', async () => {
     const { service } = await mounted()
     await signIn(service)

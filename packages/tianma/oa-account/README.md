@@ -118,6 +118,7 @@ These limits define the current boundary.
 - **Two spellings are sent for the captcha answer.** The tolerance exists because the specification and the shipped backend disagree; it can be reduced to one spelling once the backend settles.
 - **The profile write covers the fields the account owner may change** (`name`, `phone`, `avatar`); password changes are a separate backend flow and are not implemented.
 - **The workbench reads cover messages, notification switches, to-dos, approvals, today's schedule, the task board, and attendance.** Salary slips and file transfer are not exposed yet.
+- **An approval row reads with the display columns the backend left out.** Only the identity and lifecycle keys are required, `arrival_time` and `arrivalTime` are both accepted, and a payload that still cannot be read names the field it failed on.
 - **Attendance records are not read.** `GET /attendance/records` rewrites historical days that only carry a clock-in as early leave, so this service exposes today's state and the monthly summary instead of a record list.
 - **A message list is read in full.** The backend has no pagination, so the client receives every message and decides what to render.
 

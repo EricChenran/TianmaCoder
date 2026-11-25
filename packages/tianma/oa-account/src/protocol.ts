@@ -276,6 +276,19 @@ function unwrap(response: OaResponse): unknown {
 }
 
 /**
+ * Name the field a payload failed on, so a read that cannot be understood says
+ * which key disagreed instead of only that something did.
+ * @param error - the validation failure.
+ * @returns the first issue's path and message, or an empty string when it carries none.
+ */
+function issueSuffix(error: zod.ZodError): string {
+  const [issue] = error.issues
+  if (issue === undefined) return ''
+  const path = issue.path.join('.')
+  return ` (${path === '' ? 'value' : path}: ${issue.message})`
+}
+
+/**
  * Read the current captcha challenge.
  * @param base - normalized API base URL.
  * @param timeoutMs - per-request deadline.
@@ -286,7 +299,7 @@ function unwrap(response: OaResponse): unknown {
 export async function fetchCaptcha(base: URL, timeoutMs: number, signal?: AbortSignal): Promise<OaCaptcha> {
   const response = await send({ url: new URL('auth/captcha', base).href, method: 'GET', timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireCaptcha.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account captcha payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account captcha payload was not understood${issueSuffix(parsed.error)}`)
   // The shipped backend names the image `img`; the specification names it
   // `image`. Either spelling is accepted so a backend that adopts the
   // documented name keeps working.
@@ -327,7 +340,7 @@ export async function postSignIn(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireSignIn.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account sign-in payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account sign-in payload was not understood${issueSuffix(parsed.error)}`)
   return {
     token: parsed.data.token,
     refreshToken: parsed.data.refresh_token,
@@ -361,7 +374,7 @@ export async function postRefresh(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireRefresh.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account refresh payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account refresh payload was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.token
 }
 
@@ -391,7 +404,7 @@ export async function postSignOut(base: URL, token: string, timeoutMs: number, s
 export async function fetchProfile(base: URL, token: string, timeoutMs: number, signal?: AbortSignal): Promise<OaUser> {
   const response = await send({ url: new URL('users/profile', base).href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireUser.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account profile payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account profile payload was not understood${issueSuffix(parsed.error)}`)
   return toUser(parsed.data)
 }
 
@@ -414,7 +427,7 @@ export async function putProfile(
 ): Promise<OaUser> {
   const response = await send({ url: new URL('users/profile', base).href, method: 'PUT', token, body: patch, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireUser.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account profile payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account profile payload was not understood${issueSuffix(parsed.error)}`)
   return toUser(parsed.data)
 }
 
@@ -430,7 +443,7 @@ export async function putProfile(
 export async function fetchStats(base: URL, token: string, timeoutMs: number, signal?: AbortSignal): Promise<OaStats> {
   const response = await send({ url: new URL('users/stats', base).href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireStats.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account stats payload was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account stats payload was not understood${issueSuffix(parsed.error)}`)
   return {
     approval: {
       pending: parsed.data.approval.pending,
@@ -522,7 +535,7 @@ export async function fetchMessages(
   url.searchParams.set('tab', tab)
   const response = await send({ url: url.href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireMessages.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account message list was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account message list was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.messages.map(toMessage)
 }
 
@@ -580,7 +593,7 @@ export async function fetchNotificationPreference(
     method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wirePreference.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account notification preference was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account notification preference was not understood${issueSuffix(parsed.error)}`)
   return {
     externalMessageEnabled: parsed.data.external_message_enabled,
     approvalRequestEnabled: parsed.data.approval_request_enabled,
@@ -610,7 +623,7 @@ export async function postNotificationPreference(
     method: 'POST', token, body, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wirePreference.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account notification preference was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account notification preference was not understood${issueSuffix(parsed.error)}`)
   return {
     externalMessageEnabled: parsed.data.external_message_enabled,
     approvalRequestEnabled: parsed.data.approval_request_enabled,
@@ -644,7 +657,7 @@ const wireTodos = zod.object({ todos: zod.array(wireTodo) })
 export async function fetchTodos(base: URL, token: string, timeoutMs: number, signal?: AbortSignal): Promise<OaTodo[]> {
   const response = await send({ url: new URL('todos', base).href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireTodos.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account todo list was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account todo list was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.todos.map(todo => ({ id: todo.id, text: todo.text, done: todo.done, time: todo.time }))
 }
 
@@ -666,7 +679,7 @@ export async function postTodo(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireTodo.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account created todo was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account created todo was not understood${issueSuffix(parsed.error)}`)
   return { id: parsed.data.id, text: parsed.data.text, done: parsed.data.done, time: parsed.data.time }
 }
 
@@ -688,7 +701,7 @@ export async function putTodoToggle(
     method: 'PUT', token, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wireTodo.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account toggled todo was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account toggled todo was not understood${issueSuffix(parsed.error)}`)
   return { id: parsed.data.id, text: parsed.data.text, done: parsed.data.done, time: parsed.data.time }
 }
 
@@ -729,49 +742,60 @@ const wireApprovalNode = zod.object({
   id: zod.number(),
   level: zod.number(),
   status: zod.string(),
-  comment: zod.string().nullable(),
   approver_name: zod.string(),
-  approver_avatar: zod.string().nullable(),
-  approved_at: zod.string().nullable(),
+  comment: zod.string().nullable().optional(),
+  approver_avatar: zod.string().nullable().optional(),
+  approved_at: zod.string().nullable().optional(),
 })
 
-/** Wire shape of one copied user. */
+/**
+ * Wire shape of one copied user. The department and avatar columns ride along
+ * only when the copier has them, so their absence reads as empty.
+ */
 const wireApprovalCopy = zod.object({
   id: zod.number(),
   user_id: zod.number(),
   user_name: zod.string(),
-  user_avatar: zod.string().nullable(),
-  department: zod.string().nullable(),
-  read_at: zod.string().nullable(),
+  user_avatar: zod.string().nullable().optional(),
+  department: zod.string().nullable().optional(),
+  read_at: zod.string().nullable().optional(),
   created_at: zod.string(),
 })
 
-/** Wire shape of one approval. */
+/**
+ * Wire shape of one approval.
+ *
+ * Only the identity and lifecycle keys are required: the backend leaves the
+ * display-only columns out of rows it never populated, and one such row must not
+ * cost the whole list. `arrivalTime` is the shipped backend's spelling while
+ * `arrival_time` is the documented one, so a row may carry either.
+ */
 const wireApproval = zod.object({
   id: zod.number(),
   title: zod.string(),
   type: zod.string(),
-  department: zod.string().nullable(),
-  project_name: zod.string().nullable(),
-  project_no: zod.string().nullable(),
   created_at: zod.string(),
   applicant_name: zod.string(),
-  applicant_avatar: zod.string().nullable(),
-  arrivalTime: zod.string(),
   status: zod.string(),
-  content: zod.record(zod.string(), wireContentValue),
-  current_level: zod.number(),
-  total_levels: zod.number(),
-  nodes: zod.array(wireApprovalNode),
-  cc_users: zod.array(wireApprovalCopy),
+  department: zod.string().nullable().optional(),
+  project_name: zod.string().nullable().optional(),
+  project_no: zod.string().nullable().optional(),
+  applicant_avatar: zod.string().nullable().optional(),
+  arrivalTime: zod.string().optional(),
+  arrival_time: zod.string().optional(),
+  content: zod.record(zod.string(), wireContentValue).optional(),
+  current_level: zod.number().optional(),
+  total_levels: zod.number().optional(),
+  nodes: zod.array(wireApprovalNode).optional(),
+  cc_users: zod.array(wireApprovalCopy).optional(),
 })
 
 /** Wire shape of one approval detail: the approval plus what the reader may do. */
 const wireApprovalDetail = wireApproval.extend({
-  can_approve: zod.boolean(),
-  is_cc: zod.boolean(),
-  can_cancel: zod.boolean(),
-  cancel_disabled_reason: zod.string().nullable(),
+  can_approve: zod.boolean().optional(),
+  is_cc: zod.boolean().optional(),
+  can_cancel: zod.boolean().optional(),
+  cancel_disabled_reason: zod.string().nullable().optional(),
 })
 
 /** Wire shape of the approval list payload. */
@@ -812,7 +836,7 @@ export async function fetchApprovals(
   url.searchParams.set('tab', tab)
   const response = await send({ url: url.href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireApprovals.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account approval list was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account approval list was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.approvals.map(toApproval)
 }
 
@@ -835,13 +859,13 @@ export async function fetchApprovalDetail(
     method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wireApprovalDetail.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account approval detail was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account approval detail was not understood${issueSuffix(parsed.error)}`)
   return {
     ...toApproval(parsed.data),
-    canApprove: parsed.data.can_approve,
-    isCc: parsed.data.is_cc,
-    canCancel: parsed.data.can_cancel,
-    cancelDisabledReason: parsed.data.cancel_disabled_reason,
+    canApprove: parsed.data.can_approve ?? false,
+    isCc: parsed.data.is_cc ?? false,
+    canCancel: parsed.data.can_cancel ?? false,
+    cancelDisabledReason: parsed.data.cancel_disabled_reason ?? null,
   }
 }
 
@@ -885,7 +909,7 @@ export async function fetchApprovalTypes(
     method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wireApprovalTypes.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account approval category list was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account approval category list was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.types.map(type => ({
     id: type.id,
     name: type.name,
@@ -930,7 +954,7 @@ export async function postApproval(
     method: 'POST', token, body, timeoutMs, ...signal === undefined ? {} : { signal },
   })
   const parsed = wireApproval.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account submitted approval was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account submitted approval was not understood${issueSuffix(parsed.error)}`)
   return toApproval(parsed.data)
 }
 
@@ -969,7 +993,7 @@ export async function fetchTodaySchedules(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireSchedules.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account schedule list was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account schedule list was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.schedules.map(schedule => ({
     id: String(schedule.id),
     kind: schedule.kind === 'approval' ? 'leave' : 'event',
@@ -1038,7 +1062,7 @@ export async function fetchTaskBoard(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireTaskBoard.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account task board was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account task board was not understood${issueSuffix(parsed.error)}`)
   return parsed.data.groups.map(group => ({
     name: group.name,
     count: group.count,
@@ -1064,7 +1088,7 @@ export async function putTaskComplete(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireTask.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account completed task was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account completed task was not understood${issueSuffix(parsed.error)}`)
   return toTask(parsed.data)
 }
 
@@ -1150,7 +1174,7 @@ export async function fetchAttendanceToday(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireAttendanceToday.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account attendance day was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account attendance day was not understood${issueSuffix(parsed.error)}`)
   const plan = parsed.data.record?.work_plan ?? parsed.data.work_plan
   return {
     date: parsed.data.date,
@@ -1188,7 +1212,7 @@ export async function postCheckIn(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireAttendanceRecord.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account check-in record was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account check-in record was not understood${issueSuffix(parsed.error)}`)
   return toAttendanceRecord(parsed.data)
 }
 
@@ -1209,7 +1233,7 @@ export async function postCheckOut(
     ...signal === undefined ? {} : { signal },
   })
   const parsed = wireAttendanceRecord.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account check-out record was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account check-out record was not understood${issueSuffix(parsed.error)}`)
   return toAttendanceRecord(parsed.data)
 }
 
@@ -1230,7 +1254,7 @@ export async function fetchAttendanceSummary(
   if (period !== undefined) url.searchParams.set('period', period)
   const response = await send({ url: url.href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireAttendanceSummary.safeParse(unwrap(response))
-  if (!parsed.success) throw new OaAccountError('protocol', 'oa account attendance summary was not understood')
+  if (!parsed.success) throw new OaAccountError('protocol', `oa account attendance summary was not understood${issueSuffix(parsed.error)}`)
   return {
     period: parsed.data.period,
     workDays: parsed.data.work_days,
@@ -1288,10 +1312,10 @@ function toApprovalNode(raw: zod.infer<typeof wireApprovalNode>): OaApproval['no
     id: raw.id,
     level: raw.level,
     state: APPROVAL_NODE_STATES.has(raw.status) ? raw.status as OaApprovalNodeState : 'unknown',
-    comment: raw.comment,
+    comment: raw.comment ?? null,
     approverName: raw.approver_name,
     approverAvatar: raw.approver_avatar ?? '',
-    approvedAt: raw.approved_at,
+    approvedAt: raw.approved_at ?? null,
   }
 }
 
@@ -1306,22 +1330,23 @@ function toApproval(raw: zod.infer<typeof wireApproval>): OaApproval {
     title: raw.title,
     type: raw.type,
     department: raw.department ?? '',
-    projectName: raw.project_name,
-    projectNo: raw.project_no,
+    projectName: raw.project_name ?? null,
+    projectNo: raw.project_no ?? null,
     createdAt: raw.created_at,
     applicantName: raw.applicant_name,
     applicantAvatar: raw.applicant_avatar ?? '',
-    arrivalTime: raw.arrivalTime,
+    // Either spelling the backend used, empty when it populated neither.
+    arrivalTime: raw.arrivalTime ?? raw.arrival_time ?? '',
     status: APPROVAL_STATUSES.has(raw.status) ? raw.status as OaApprovalStatus : 'unknown',
-    content: raw.content,
-    currentLevel: raw.current_level,
-    totalLevels: raw.total_levels,
-    nodes: raw.nodes.map(toApprovalNode),
-    ccUsers: raw.cc_users.map(copy => ({
+    content: raw.content ?? {},
+    currentLevel: raw.current_level ?? 0,
+    totalLevels: raw.total_levels ?? 0,
+    nodes: (raw.nodes ?? []).map(toApprovalNode),
+    ccUsers: (raw.cc_users ?? []).map(copy => ({
       id: copy.id,
       userName: copy.user_name,
       department: copy.department ?? '',
-      readAt: copy.read_at,
+      readAt: copy.read_at ?? null,
       createdAt: copy.created_at,
     })),
   }
