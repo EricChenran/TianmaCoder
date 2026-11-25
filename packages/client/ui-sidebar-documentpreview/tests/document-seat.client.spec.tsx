@@ -64,6 +64,10 @@ async function boot() {
       if (!signal.aborted) yield { ok: true as const, value: { absolutePath: '/host/notes', version: 'v1', bytes: 18 } }
     },
   }))
+  rt.ctx.provide('conversation', {
+    shellPhase: () => 'blank',
+    panelPhase: () => ({ phase: 'hero', hero: true }),
+  } as never)
   await rt.mount({ inject: [...sidebarInject], apply: sidebarApply })
   await rt.mount({ inject: [...inject], apply })
   const view = rt.renderSlot('rightbar', { width: 600, viewportWidth: 1440, canShow: true })
