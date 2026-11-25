@@ -14377,6 +14377,15 @@ importers:
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:*
         version: link:../../bundle/web-app
+      '@tianma/dsh-lsp-packs-ui':
+        specifier: workspace:*
+        version: link:../../tianma/lsp-packs-ui
+      '@tianma/dsh-mps-node-ui':
+        specifier: workspace:*
+        version: link:../../tianma/mps-node-ui
+      '@tianma/dsh-oa-account-ui':
+        specifier: workspace:*
+        version: link:../../tianma/oa-account-ui
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9

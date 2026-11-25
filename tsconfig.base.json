@@ -368,6 +368,8 @@
       "@tianma/dsh-mps-node-control/types": ["./packages/tianma/mps-node-control/src/types.ts"],
       "@tianma/dsh-mps-node-ui": ["./packages/tianma/mps-node-ui/src/index.ts"],
       "@tianma/dsh-mps-node-ui/client": ["./packages/tianma/mps-node-ui/src/client/index.ts"],
+      "@tianma/dsh-lsp-packs-ui": ["./packages/tianma/lsp-packs-ui/src/index.ts"],
+      "@tianma/dsh-lsp-packs-ui/client": ["./packages/tianma/lsp-packs-ui/src/client/index.ts"],
       "@deepseek-ai/dsh-api-account-controller": ["./packages/api/account-controller/src/index.ts"],
       "@deepseek-ai/dsh-api-account-controller/types": ["./packages/api/account-controller/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform": ["./packages/credentials/deepseek-account-platform/src/index.ts"],
