@@ -10,6 +10,8 @@ import type {
   OaAccountErrorCode,
   OaApproval,
   OaApprovalAction,
+  OaApprovalContent,
+  OaApprovalContentValue,
   OaApprovalDetail,
   OaApprovalNodeState,
   OaApprovalStatus,
@@ -732,10 +734,15 @@ const APPROVAL_STATUSES = new Set<string>(['pending', 'approved', 'rejected', 'c
 /** Documented node states; `transferred` exists on reads only. */
 const APPROVAL_NODE_STATES = new Set<string>(['pending', 'approved', 'rejected', 'cancelled', 'transferred'])
 
-/** One scalar or scalar list in a category-defined content object. */
-const wireContentValue = zod.union([
-  zod.string(), zod.number(), zod.boolean(), zod.null(), zod.array(zod.string()),
-])
+/**
+ * One category-defined content value, read as whatever the backend sent.
+ *
+ * Categories define their own fields, so a configured file list arrives as
+ * objects the client never writes. Narrowing this union to scalars made one
+ * such field fail the whole approval list, so the raw value is accepted here
+ * and reduced to display text by `toContentView`.
+ */
+const wireContentValue = zod.unknown()
 
 /** Wire shape of one approval level. */
 const wireApprovalNode = zod.object({
@@ -1320,6 +1327,54 @@ function toApprovalNode(raw: zod.infer<typeof wireApprovalNode>): OaApproval['no
 }
 
 /**
+ * Reduce one arbitrary content value to the text the client renders.
+ *
+ * A file list carries objects (`{ name, url, size }`) rather than strings; the
+ * label the user recognises is the name, and the URL is only a fallback.
+ * @param value - any value the backend placed in a category field.
+ * @returns display text, empty when nothing readable exists.
+ */
+function contentText(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of ['name', 'file_name', 'filename', 'title', 'url', 'path']) {
+      const candidate = record[key]
+      if (typeof candidate === 'string' && candidate.trim() !== '') return candidate
+    }
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return ''
+    }
+  }
+  return typeof value === 'bigint' || typeof value === 'symbol' ? value.toString() : ''
+}
+
+/**
+ * Project one category-defined content object onto the service vocabulary.
+ * @param raw - the validated wire content, or undefined when absent.
+ * @returns scalar fields unchanged and every other value as display text.
+ */
+function toContent(raw: Record<string, unknown> | undefined): OaApprovalContent {
+  const content: Record<string, OaApprovalContentValue> = {}
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      content[key] = value
+      continue
+    }
+    if (Array.isArray(value)) {
+      content[key] = value.map(item => contentText(item)).filter(text => text !== '')
+      continue
+    }
+    content[key] = contentText(value)
+  }
+  return content
+}
+
+/**
  * Project one approval onto the service vocabulary.
  * @param raw - the validated wire approval.
  * @returns the approval with its status closed to the documented set.
@@ -1338,7 +1393,7 @@ function toApproval(raw: zod.infer<typeof wireApproval>): OaApproval {
     // Either spelling the backend used, empty when it populated neither.
     arrivalTime: raw.arrivalTime ?? raw.arrival_time ?? '',
     status: APPROVAL_STATUSES.has(raw.status) ? raw.status as OaApprovalStatus : 'unknown',
-    content: raw.content ?? {},
+    content: toContent(raw.content),
     currentLevel: raw.current_level ?? 0,
     totalLevels: raw.total_levels ?? 0,
     nodes: (raw.nodes ?? []).map(toApprovalNode),

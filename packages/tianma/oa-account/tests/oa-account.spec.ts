@@ -506,6 +506,29 @@ describe('workbench: approvals', () => {
     expect(approval?.totalLevels).toBe(2)
   })
 
+  it('keeps a row whose category sent a file list the client never writes', async () => {
+    const { service } = await mounted()
+    await signIn(service)
+    recordFetch(() => ok({
+      approvals: [{
+        ...WIRE_APPROVAL,
+        content: {
+          reason: '报销打车费',
+          amount: 86,
+          files: [
+            { name: '发票.pdf', path: '/uploads/invoice.pdf', size: 20480 },
+            { name: '行程单.png', path: '/uploads/trip.png' },
+          ],
+        },
+      }],
+    }))
+    const [approval] = await service.approvals('pending')
+    // The list survives, and each file object reads as the name the user knows.
+    expect(approval?.content.reason).toBe('报销打车费')
+    expect(approval?.content.amount).toBe(86)
+    expect(approval?.content.files).toEqual(['发票.pdf', '行程单.png'])
+  })
+
   it('reads a row that omits its empty columns and spells the arrival column the documented way', async () => {
     const { service } = await mounted()
     await signIn(service)
