@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and template-fetch skills for every mode, the demo-video and UI-confirmation skills for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and the packaged document and work-order disposition scripts, advertised as `DSH_DEPARTMENT_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only the department presets carry, the 技术部-only skills reaching it alone.
+`dsh-department-prompts` turns one preset row into a department mode. `apply` registers the selected department's rules as one literal system-prompt section, `tianma:department`, after the behavioral guidelines. It publishes the bundled 公文 and template-fetch skills for every mode, the demo-video and UI-confirmation skills for 技术部, the 实施方案 skill for 商务部 and 招投标专员, and the packaged document and work-order disposition scripts, advertised as `DSH_DEPARTMENT_<DEPARTMENT>_TOOLS`. Rules never load through the skill system or resolve to a readable file; they reach the model as compiled text, while the skills are separate contributions only the department presets carry, the 技术部-only skills reaching it alone.
 
 ## Table of Contents
 
@@ -52,7 +52,7 @@ All four modes register and publish the 公文 and 模板源码抓取 skills, an
 
 `apply` injects `systemPrompt` and registers one section with `interpolate: false`, so brace pairs inside the JSON examples the rules quote stay literal instead of being read as prompt variables. Section order `150` sits after `tianma:behavioral-guidelines` (100) and before `PLAN_POLICY` (500).
 
-The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. Each department has its own directory — `department/business-tools` for 商务部 and `department/tech-tools` for 技术部. The directory reaches the model only as the `DSH_DEPARTMENT_TOOLS` variable — no rule text, log line, or shell command names the path.
+The toolbox is published by copying the packaged scripts and comparing bytes first, so a repeated mount rewrites nothing; the registration itself goes through `ctx.effect`, so the variable unwinds with the plugin fiber. Each department has its own directory — `department/business-tools` for 商务部 and `department/tech-tools` for 技术部. The directory reaches the model only as the `DSH_DEPARTMENT_<DEPARTMENT>_TOOLS` variable — no rule text, log line, or shell command names the path. Every shipped preset mounts eagerly into one host, and `ctx.shellEnv` is a single host-plane registry that rejects a duplicate contributor or key, so the per-department variable and contributor names are what keep all four modes mountable at once.
 
 The 公文 skill is published the same way into `<harness home>/department/skills/official-doc`, and its provider registers into the calling row's context, so the catalog entry exists for exactly the modes that mount this row. The loaded body reports that directory as its resource base, and the skill's own relative paths resolve against it. The 模板源码抓取 skill publishes into `<harness home>/department/skills/bootstrapmb-template-fetch` through its own provider, which every department row registers. The demo-video skill is published the same way into `<harness home>/department/skills/demo-video`, but only the 技术部 row registers it, so sharing this row across presets does not hand it to other modes. The UI-confirmation skill publishes into `<harness home>/department/skills/ui-confirmation-doc` through its own provider, which the 技术部 row alone registers. The 实施方案 skill publishes into `<harness home>/department/skills/proposal-doc` through its own provider, which only the 商务部 and 招投标专员 rows register.
 
@@ -65,7 +65,7 @@ The 公文 skill is published the same way into `<harness home>/department/skill
 | [`src/prompts/business.ts`](src/prompts/business.ts) | The 商务部 rules, compiled in |
 | [`src/prompts/bid.ts`](src/prompts/bid.ts) | The 招投标专员 rules, compiled in |
 | [`src/prompts/tester.ts`](src/prompts/tester.ts) | The 测试员 rules, compiled in |
-| [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_TOOLS` contributor |
+| [`src/toolbox.ts`](src/toolbox.ts) | Script publication and the `DSH_DEPARTMENT_<DEPARTMENT>_TOOLS` contributor |
 | [`src/skill.ts`](src/skill.ts) | Skill publication and the bundled `official-doc`, `bootstrapmb-template-fetch`, `demo-video`, `ui-confirmation-doc`, and `proposal-doc` providers |
 | [`assets/business/`](assets/business) | The packaged document scripts: `gen_doc.py`, `gen_quote.py`, `gen_workorder.py`, `add_watermark.py`, `to_pdf.py`, `open_folder.py` |
 | [`assets/tech/`](assets/tech) | The packaged disposition scripts: `read_workorder.py` (reads a work order into JSON) and `build_disposition.py` (writes the item-for-item disposition table and composes each before/after comparison) |

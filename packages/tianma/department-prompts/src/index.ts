@@ -3,9 +3,9 @@
  *
  * A department mode is a preset that mounts this row with the department it
  * speaks for. The rules travel as compiled text — never as a skill, a
- * markdown file, or a path the model could read or cite — and the 商务部
+ * markdown file, or a path the model could read or cite — and a department's
  * toolbox scripts are published to a private directory whose location reaches
- * the model only as the `DSH_DEPARTMENT_TOOLS` variable.
+ * the model only as that department's `DSH_DEPARTMENT_*_TOOLS` variable.
  *
  * Every department mode also carries the bundled 公文 and 模板源码抓取 skills:
  * the row is the only thing the department presets mount, so registering their
@@ -69,13 +69,15 @@ export {
 } from './skill.ts'
 export {
   BUSINESS_TOOL_FILES,
+  BUSINESS_TOOLS_CONTRIBUTOR_NAME,
+  BUSINESS_TOOLS_VARIABLE,
   installBusinessToolbox,
   installTechToolbox,
   materializeBusinessTools,
   materializeTechTools,
   TECH_TOOL_FILES,
-  TOOLS_CONTRIBUTOR_NAME,
-  TOOLS_DIR_VARIABLE,
+  TECH_TOOLS_CONTRIBUTOR_NAME,
+  TECH_TOOLS_VARIABLE,
   type BusinessToolboxOptions,
 } from './toolbox.ts'
 

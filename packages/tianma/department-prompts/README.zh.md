@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为每种部门模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的演示视频技能与 UI 界面确认单技能、为商务部与招投标专员发布随包的实施方案技能，并把随包的文档生成脚本与工单处置脚本以 `DSH_DEPARTMENT_TOOLS` 暴露给模型。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有部门模式携带它们，其中技术部专属的技能只到技术部。
+`dsh-department-prompts` 把一条 preset 行变成一种部门模式。`apply` 把所选部门的规则注册为一条字面系统提示词节——`tianma:department`，排在 Tianma 行为规范之后、计划策略之前；为每种部门模式发布随包的公文技能与模板源码抓取技能、为技术部额外发布随包的演示视频技能与 UI 界面确认单技能、为商务部与招投标专员发布随包的实施方案技能，并把随包的文档生成脚本与工单处置脚本以 `DSH_DEPARTMENT_<部门>_TOOLS` 暴露给模型。规则不经过技能系统加载、不会解析成模型可读的文件，而是以编译进插件的文本形式到达模型；技能是另一项贡献，只有部门模式携带它们，其中技术部专属的技能只到技术部。
 
 ## 目录
 
@@ -52,7 +52,7 @@ kind: "package-reference"
 
 `apply` 注入 `systemPrompt` 并注册一条 `interpolate: false` 的节，因此规则里引用的 JSON 示例中的花括号会保持字面量，不会被当作提示词变量。节序 `150` 位于 `tianma:behavioral-guidelines`（100）之后、`PLAN_POLICY`（500）之前。
 
-两个部门各有一个工具箱目录：商务部是 `<harness home>/department/business-tools`，技术部是 `<harness home>/department/tech-tools`。工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。
+两个部门各有一个工具箱目录：商务部是 `<harness home>/department/business-tools`，技术部是 `<harness home>/department/tech-tools`。工具箱通过拷贝随包脚本发布，拷贝前先做字节比对，因此重复挂载不会重写任何文件；注册本身走 `ctx.effect`，变量随插件 fiber 一同回退。目录只以 `DSH_DEPARTMENT_<部门>_TOOLS` 变量形式到达模型——规则文本、日志与 shell 命令中都不出现该路径。每个随包预设都在同一宿主里被立即挂载，而 `ctx.shellEnv` 是唯一的宿主平面注册表，重复的贡献者名或变量键会被拒绝；按部门区分变量名与贡献者名，才能让四个模式同时可挂载。
 
 公文技能以同样方式发布到 `<harness home>/department/skills/official-doc`，其提供方注册进调用方的上下文，因此这条目录项只存在于挂载本行的模式里。加载后的正文把该目录报告为资源基准，技能自身的相对路径都相对它解析。模板源码抓取技能通过自己的提供方发布到 `<harness home>/department/skills/bootstrapmb-template-fetch`，每个部门行都会注册它。演示视频技能同样发布到 `<harness home>/department/skills/demo-video`，但它只由技术部那一行注册，因此即便各预设共用本行，其他模式也拿不到它。UI 界面确认单技能通过自己的提供方发布到 `<harness home>/department/skills/ui-confirmation-doc`，只有技术部那一行注册它。实施方案技能通过自己的提供方发布到 `<harness home>/department/skills/proposal-doc`，只有商务部与招投标专员这两行注册它。
 
@@ -65,7 +65,7 @@ kind: "package-reference"
 | [`src/prompts/business.ts`](src/prompts/business.ts) | 商务部规则，编译内置 |
 | [`src/prompts/bid.ts`](src/prompts/bid.ts) | 招投标专员规则，编译内置 |
 | [`src/prompts/tester.ts`](src/prompts/tester.ts) | 测试员规则，编译内置 |
-| [`src/toolbox.ts`](src/toolbox.ts) | 脚本发布与 `DSH_DEPARTMENT_TOOLS` 贡献者 |
+| [`src/toolbox.ts`](src/toolbox.ts) | 脚本发布与 `DSH_DEPARTMENT_<部门>_TOOLS` 贡献者 |
 | [`src/skill.ts`](src/skill.ts) | 技能发布与随包 `official-doc`、`bootstrapmb-template-fetch`、`demo-video`、`ui-confirmation-doc`、`proposal-doc` 提供方 |
 | [`assets/business/`](assets/business) | 随包交付的文档脚本：`gen_doc.py`、`gen_quote.py`、`gen_workorder.py`、`add_watermark.py`、`to_pdf.py`、`open_folder.py` |
 | [`assets/tech/`](assets/tech) | 随包交付的工单处置脚本：`read_workorder.py`（读工单成 JSON）、`build_disposition.py`（出逐项对上的处置表，并把改前/改后截图合成对比图） |

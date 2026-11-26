@@ -148,7 +148,7 @@ describe('@tianma/dsh-department-prompts template-fetch skill', () => {
     const script = readFileSync(join(SKILL_ASSET_ROOT, 'scripts', 'download-bootstrapmb.ps1'), 'utf8')
     expect(raw.startsWith('---\nname: bootstrapmb-template-fetch\n')).toBe(true)
     for (const forbidden of ['zcode-file-citation', '::zcode', 'document-skills', '<本技能目录>',
-      'DSH_DEPARTMENT_TOOLS', 'assets/business']) {
+      plugin.BUSINESS_TOOLS_VARIABLE, plugin.TECH_TOOLS_VARIABLE, 'assets/business']) {
       expect(raw).not.toContain(forbidden)
     }
     for (const content of [raw, script]) expect(content).not.toContain('D:\\AI教培')

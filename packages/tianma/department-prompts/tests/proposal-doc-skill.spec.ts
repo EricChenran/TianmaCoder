@@ -146,7 +146,7 @@ describe('@tianma/dsh-department-prompts proposal-doc skill', () => {
     const raw = readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')
     expect(raw.startsWith('---\nname: proposal-doc\n')).toBe(true)
     for (const forbidden of ['zcode-file-citation', '::zcode', 'document-skills', '<本技能目录>',
-      'DSH_DEPARTMENT_TOOLS', 'assets/business']) {
+      plugin.BUSINESS_TOOLS_VARIABLE, plugin.TECH_TOOLS_VARIABLE, 'assets/business']) {
       expect(raw).not.toContain(forbidden)
     }
     expect(raw).not.toMatch(/[A-Za-z]:\\/u)

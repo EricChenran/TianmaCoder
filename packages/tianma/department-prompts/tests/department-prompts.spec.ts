@@ -79,7 +79,7 @@ describe('@tianma/dsh-department-prompts', () => {
     const rendered = renderPrompt(await ctx.systemPrompt.assemble())
     expect(rendered).toContain('"system_name": "必填：系统名"')
     expect(rendered).toContain('"actor": "客户", "action": "选择规格与数量", "rule": "库存不足时禁止下单"')
-    expect(rendered).toContain('DSH_DEPARTMENT_TOOLS')
+    expect(rendered).toContain(plugin.BUSINESS_TOOLS_VARIABLE)
   })
 
   it('requires complete business workflows as text beside the generated diagram', () => {
@@ -175,8 +175,8 @@ describe('@tianma/dsh-department-prompts', () => {
           .toBe(readFileSync(join(TECH_ASSET_ROOT, filename), 'utf8'))
       }
       const ctx = await setup('tech', { withShellEnv: true, assetRoot: TECH_ASSET_ROOT, toolsDir })
-      const declared = ctx.shellEnv.list().find(variable => variable.key === plugin.TOOLS_DIR_VARIABLE)
-      expect(declared?.contributor).toBe(plugin.TOOLS_CONTRIBUTOR_NAME)
+      const declared = ctx.shellEnv.list().find(variable => variable.key === plugin.TECH_TOOLS_VARIABLE)
+      expect(declared?.contributor).toBe(plugin.TECH_TOOLS_CONTRIBUTOR_NAME)
     } finally {
       if (previous === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = previous
@@ -236,9 +236,34 @@ describe('@tianma/dsh-department-prompts', () => {
   it('advertises the toolbox directory as a managed shell variable', async () => {
     const toolsDir = join(temporaryDirectory(), 'tools')
     const ctx = await setup('business', { withShellEnv: true, assetRoot: ASSET_ROOT, toolsDir })
-    const declared = ctx.shellEnv.list().find(variable => variable.key === plugin.TOOLS_DIR_VARIABLE)
-    expect(declared?.contributor).toBe(plugin.TOOLS_CONTRIBUTOR_NAME)
+    const declared = ctx.shellEnv.list().find(variable => variable.key === plugin.BUSINESS_TOOLS_VARIABLE)
+    expect(declared?.contributor).toBe(plugin.BUSINESS_TOOLS_CONTRIBUTOR_NAME)
     expect(declared?.description.length).toBeGreaterThan(0)
+  })
+
+  it('keeps both department toolboxes registered side by side', async () => {
+    // Every shipped preset mounts eagerly into one host, so both departments
+    // reach the SAME host-plane shellEnv registry. A shared variable or
+    // contributor name rejected the second mount, and a preset that fails to
+    // mount disappears from the mode picker.
+    const businessDir = join(temporaryDirectory(), 'business-tools')
+    const techDir = join(temporaryDirectory(), 'tech-tools')
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { personaPrefix: PERSONA })
+    await ctx.plugin(ShellEnv, {})
+    const tech = ctx.extend({})
+    await tech.plugin(plugin, { department: 'tech', assetRoot: TECH_ASSET_ROOT, toolsDir: techDir })
+    const business = ctx.extend({})
+    await business.plugin(plugin, { department: 'business', assetRoot: ASSET_ROOT, toolsDir: businessDir })
+    const declared = ctx.shellEnv.list()
+    expect(declared.find(variable => variable.key === plugin.TECH_TOOLS_VARIABLE)?.contributor)
+      .toBe(plugin.TECH_TOOLS_CONTRIBUTOR_NAME)
+    expect(declared.find(variable => variable.key === plugin.BUSINESS_TOOLS_VARIABLE)?.contributor)
+      .toBe(plugin.BUSINESS_TOOLS_CONTRIBUTOR_NAME)
+    expect(plugin.TECH_TOOLS_CONTRIBUTOR_NAME).not.toBe(plugin.BUSINESS_TOOLS_CONTRIBUTOR_NAME)
+    expect(plugin.TECH_TOOLS_VARIABLE).not.toBe(plugin.BUSINESS_TOOLS_VARIABLE)
+    expect(readdirSync(techDir).sort()).toEqual([...plugin.TECH_TOOL_FILES].sort())
+    expect(readdirSync(businessDir).sort()).toEqual([...plugin.BUSINESS_TOOL_FILES].sort())
   })
 
   it('resolves the toolbox variable to the directory it published', () => {
@@ -252,9 +277,9 @@ describe('@tianma/dsh-department-prompts', () => {
       },
     } as never)
     expect(plugin.installBusinessToolbox(ctx, { assetRoot: ASSET_ROOT, toolsDir })).toBe(true)
-    expect(captured[0]?.name).toBe(plugin.TOOLS_CONTRIBUTOR_NAME)
-    expect(captured[0]?.variables).toHaveProperty(plugin.TOOLS_DIR_VARIABLE)
-    expect(captured[0]?.resolve()).toEqual({ [plugin.TOOLS_DIR_VARIABLE]: toolsDir })
+    expect(captured[0]?.name).toBe(plugin.BUSINESS_TOOLS_CONTRIBUTOR_NAME)
+    expect(captured[0]?.variables).toHaveProperty(plugin.BUSINESS_TOOLS_VARIABLE)
+    expect(captured[0]?.resolve()).toEqual({ [plugin.BUSINESS_TOOLS_VARIABLE]: toolsDir })
   })
 
   it.each(plugin.DEPARTMENTS)('keeps %s free of the source documents mechanism vocabulary', (department) => {
@@ -466,7 +491,7 @@ describe('@tianma/dsh-department-prompts', () => {
     const raw = readFileSync(join(SKILL_ASSET_ROOT, 'SKILL.md'), 'utf8')
     expect(raw.startsWith('---\nname: official-doc\n')).toBe(true)
     for (const forbidden of ['zcode-file-citation', '::zcode', 'document-skills', '<本技能目录>',
-      'DSH_DEPARTMENT_TOOLS', 'assets/business']) {
+      plugin.BUSINESS_TOOLS_VARIABLE, plugin.TECH_TOOLS_VARIABLE, 'assets/business']) {
       expect(raw).not.toContain(forbidden)
     }
     expect(raw).not.toMatch(/[A-Za-z]:\\/u)
