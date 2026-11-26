@@ -24,6 +24,7 @@ const APPROVAL: OaApproval = {
   arrivalTime: '2小时前到达',
   status: 'pending',
   content: { start_date: '2026-11-24', end_date: '2026-11-25', reason: '家中有事' },
+  attachments: [],
   currentLevel: 1,
   totalLevels: 2,
   nodes: [{ id: 30, level: 1, state: 'pending', comment: null, approverName: '陈祖豪', approverAvatar: '', approvedAt: null }],
@@ -32,6 +33,7 @@ const APPROVAL: OaApproval = {
 
 const DETAIL: OaApprovalDetail = {
   ...APPROVAL,
+  attachments: [{ name: '发票.pdf', url: 'https://oa.test/uploads/invoice.pdf' }],
   canApprove: true,
   isCc: false,
   canCancel: false,
@@ -70,6 +72,9 @@ describe('the approvals module', () => {
     fireEvent.click(await screen.findByText('请假申请'))
     expect(await screen.findByText('2026-11-24')).toBeTruthy()
     expect(screen.getByText('陈祖豪')).toBeTruthy()
+    // The attachment is a link to the file, labelled with the name the applicant stored.
+    const attachment = screen.getByRole('link', { name: '发票.pdf' })
+    expect(attachment.getAttribute('href')).toBe('https://oa.test/uploads/invoice.pdf')
 
     fireEvent.click(screen.getByRole('button', { name: zh['reject'] }))
     expect(await screen.findByText(zh['rejectNeedsComment'])).toBeTruthy()

@@ -9,6 +9,7 @@ import { z as zod } from 'zod'
 import type {
   OaAccountErrorCode,
   OaApproval,
+  OaApprovalAttachment,
   OaApprovalAction,
   OaApprovalContent,
   OaApprovalContentValue,
@@ -731,6 +732,9 @@ export async function deleteTodo(
 /** Documented approval states; anything else reads as `unknown` rather than failing the list. */
 const APPROVAL_STATUSES = new Set<string>(['pending', 'approved', 'rejected', 'cancelled', 'draft'])
 
+/** Category keys that hold a file list; they surface as attachments, not content rows. */
+const ATTACHMENT_KEYS: readonly string[] = ['files', 'attachments']
+
 /** Documented node states; `transferred` exists on reads only. */
 const APPROVAL_NODE_STATES = new Set<string>(['pending', 'approved', 'rejected', 'cancelled', 'transferred'])
 
@@ -844,7 +848,7 @@ export async function fetchApprovals(
   const response = await send({ url: url.href, method: 'GET', token, timeoutMs, ...signal === undefined ? {} : { signal } })
   const parsed = wireApprovals.safeParse(unwrap(response))
   if (!parsed.success) throw new OaAccountError('protocol', `oa account approval list was not understood${issueSuffix(parsed.error)}`)
-  return parsed.data.approvals.map(toApproval)
+  return parsed.data.approvals.map(row => toApproval(row, base))
 }
 
 /**
@@ -868,7 +872,7 @@ export async function fetchApprovalDetail(
   const parsed = wireApprovalDetail.safeParse(unwrap(response))
   if (!parsed.success) throw new OaAccountError('protocol', `oa account approval detail was not understood${issueSuffix(parsed.error)}`)
   return {
-    ...toApproval(parsed.data),
+    ...toApproval(parsed.data, base),
     canApprove: parsed.data.can_approve ?? false,
     isCc: parsed.data.is_cc ?? false,
     canCancel: parsed.data.can_cancel ?? false,
@@ -962,7 +966,7 @@ export async function postApproval(
   })
   const parsed = wireApproval.safeParse(unwrap(response))
   if (!parsed.success) throw new OaAccountError('protocol', `oa account submitted approval was not understood${issueSuffix(parsed.error)}`)
-  return toApproval(parsed.data)
+  return toApproval(parsed.data, base)
 }
 
 /* ────────────────────────── 工作台：日程 ────────────────────────── */
@@ -1354,6 +1358,86 @@ function contentText(value: unknown): string {
 }
 
 /**
+ * Build the URL one stored attachment path opens.
+ *
+ * A site-rooted path keeps the API origin; a relative path keeps the API base;
+ * an absolute URL is already what the browser needs.
+ * @param path - the path the category stored.
+ * @param base - the API base the request used.
+ * @returns the openable URL.
+ */
+function attachmentUrl(path: string, base: URL): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(path)) {
+    try {
+      return new URL(path).href
+    } catch {
+      return path
+    }
+  }
+  try {
+    return new URL(path, path.startsWith('/') ? base.origin : base).href
+  } catch {
+    return path
+  }
+}
+
+/**
+ * Read the display name of one file entry.
+ * @param entry - the raw list entry, a string or an object.
+ * @param path - the entry's path, used as the fallback name.
+ * @returns the name to show.
+ */
+function attachmentName(entry: unknown, path: string): string {
+  if (typeof entry === 'object' && entry !== null) {
+    const record = entry as Record<string, unknown>
+    for (const key of ['name', 'file_name', 'filename', 'title']) {
+      const candidate = record[key]
+      if (typeof candidate === 'string' && candidate.trim() !== '') return candidate
+    }
+  }
+  const segment = path.split(/[\\/]/).pop()
+  return segment === undefined || segment === '' ? path : segment
+}
+
+/**
+ * Read the path one file entry carries.
+ * @param entry - the raw list entry, a string or an object.
+ * @returns the path, empty when the entry has none.
+ */
+function attachmentPath(entry: unknown): string {
+  if (typeof entry === 'string') return entry.trim()
+  if (typeof entry !== 'object' || entry === null) return ''
+  const record = entry as Record<string, unknown>
+  for (const key of ['path', 'url', 'href']) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate
+  }
+  return ''
+}
+
+/**
+ * Project a category's file list onto openable attachments.
+ * @param content - the raw content object.
+ * @param base - the API base the request used.
+ * @returns one entry per distinct file, in the order the category listed them.
+ */
+function toAttachments(content: Record<string, unknown> | undefined, base: URL): OaApprovalAttachment[] {
+  const files: OaApprovalAttachment[] = []
+  for (const key of ATTACHMENT_KEYS) {
+    const raw = content?.[key]
+    const entries = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]
+    for (const entry of entries) {
+      const path = attachmentPath(entry)
+      if (path === '') continue
+      const url = attachmentUrl(path, base)
+      if (files.some(file => file.url === url)) continue
+      files.push({ name: attachmentName(entry, path), url })
+    }
+  }
+  return files
+}
+
+/**
  * Project one category-defined content object onto the service vocabulary.
  * @param raw - the validated wire content, or undefined when absent.
  * @returns scalar fields unchanged and every other value as display text.
@@ -1361,6 +1445,9 @@ function contentText(value: unknown): string {
 function toContent(raw: Record<string, unknown> | undefined): OaApprovalContent {
   const content: Record<string, OaApprovalContentValue> = {}
   for (const [key, value] of Object.entries(raw ?? {})) {
+    // The file list is reported as `attachments`; a text row beside it would read as
+    // a duplicate.
+    if (ATTACHMENT_KEYS.includes(key)) continue
     if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       content[key] = value
       continue
@@ -1379,7 +1466,7 @@ function toContent(raw: Record<string, unknown> | undefined): OaApprovalContent 
  * @param raw - the validated wire approval.
  * @returns the approval with its status closed to the documented set.
  */
-function toApproval(raw: zod.infer<typeof wireApproval>): OaApproval {
+function toApproval(raw: zod.infer<typeof wireApproval>, base: URL): OaApproval {
   return {
     id: raw.id,
     title: raw.title,
@@ -1394,6 +1481,7 @@ function toApproval(raw: zod.infer<typeof wireApproval>): OaApproval {
     arrivalTime: raw.arrivalTime ?? raw.arrival_time ?? '',
     status: APPROVAL_STATUSES.has(raw.status) ? raw.status as OaApprovalStatus : 'unknown',
     content: toContent(raw.content),
+    attachments: toAttachments(raw.content, base),
     currentLevel: raw.current_level ?? 0,
     totalLevels: raw.total_levels ?? 0,
     nodes: (raw.nodes ?? []).map(toApprovalNode),

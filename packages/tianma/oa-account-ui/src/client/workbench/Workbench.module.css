@@ -464,6 +464,28 @@
   display: none;
 }
 
+/* Attachments listed under the request fields, each one a link to the file. */
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-state-business-primary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.attachment:hover {
+  text-decoration: underline;
+}
+
 .docTitle {
   margin: 0;
   font-size: 16px;

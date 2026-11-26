@@ -308,6 +308,14 @@ export interface OaApprovalCopy {
   createdAt: string
 }
 
+/** One file a category attached to an approval, openable from the detail. */
+export interface OaApprovalAttachment {
+  /** Name the category stored, or the file name taken from the path. */
+  name: string
+  /** Absolute URL a browser can open. */
+  url: string
+}
+
 /** One approval as the employee side lists and reads it. */
 export interface OaApproval {
   /** Approval id. */
@@ -334,6 +342,8 @@ export interface OaApproval {
   status: OaApprovalStatus
   /** Category-defined content. */
   content: OaApprovalContent
+  /** Files the category attached, in the order it listed them. */
+  attachments: readonly OaApprovalAttachment[]
   /** Level currently awaiting an approver. */
   currentLevel: number
   /** Number of levels this approval has. */

@@ -347,6 +347,15 @@ export function OaApprovalsModule({
               </Fragment>)}
             </dl>
 
+            {detail.attachments.length > 0 ? <>
+              <h3 className={css.sectionTitle}>{t('attachments')}</h3>
+              <ul className={css.attachments}>
+                {detail.attachments.map(file => <li key={file.url}>
+                  <a className={css.attachment} href={file.url} target="_blank" rel="noreferrer">{file.name}</a>
+                </li>)}
+              </ul>
+            </> : null}
+
             <h3 className={css.sectionTitle}>{t('nodes')}</h3>
             <ul className={css.list}>
               {detail.nodes.map(node => <li key={node.id} className={css.settingRow}>

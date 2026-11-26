@@ -502,7 +502,13 @@ describe('workbench: approvals', () => {
     expect(approval?.nodes[0]?.state).toBe('pending')
     expect(approval?.ccUsers[0]?.userName).toBe('王五')
     // Category content round-trips unchanged: the draft write needs the same object back.
-    expect(approval?.content).toEqual(WIRE_APPROVAL.content)
+    expect(approval?.content).toEqual({
+      start_date: '2026-11-24', reason: '事假', days: 2, special_comp_leave: false,
+    })
+    // A stored file list surfaces as an openable attachment, resolved against the API origin.
+    expect(approval?.attachments).toEqual([
+      { name: 'a.png', url: 'https://oa.example.test/uploads/a.png' },
+    ])
     expect(approval?.totalLevels).toBe(2)
   })
 
@@ -523,10 +529,14 @@ describe('workbench: approvals', () => {
       }],
     }))
     const [approval] = await service.approvals('pending')
-    // The list survives, and each file object reads as the name the user knows.
+    // The list survives, and each file object becomes an openable attachment.
     expect(approval?.content.reason).toBe('报销打车费')
     expect(approval?.content.amount).toBe(86)
-    expect(approval?.content.files).toEqual(['发票.pdf', '行程单.png'])
+    expect(approval?.content.files).toBeUndefined()
+    expect(approval?.attachments).toEqual([
+      { name: '发票.pdf', url: 'https://oa.example.test/uploads/invoice.pdf' },
+      { name: '行程单.png', url: 'https://oa.example.test/uploads/trip.png' },
+    ])
   })
 
   it('reads a row that omits its empty columns and spells the arrival column the documented way', async () => {
