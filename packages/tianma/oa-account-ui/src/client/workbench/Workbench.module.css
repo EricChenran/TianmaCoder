@@ -15,6 +15,10 @@
 }
 
 .page > * {
+  /* A scrolling column flex container shrinks its items to fit; left at the
+     default, a long module body squeezed the tab strip to nothing and the
+     first-level menu vanished. Items keep their own height and the page scrolls. */
+  flex: none;
   width: 100%;
   max-width: 960px;
   margin-left: auto;
