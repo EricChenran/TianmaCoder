@@ -22,13 +22,15 @@ The mode advertises the capability in its preset card and usage guide in both lo
 
 ### The 技术部 half of the loop
 
-The same workbook drives the other end. `assets/tech/read_workorder.py` reads a work order into JSON, and `build_disposition.py` writes a disposition table whose rows are checked against that workbook: a missing item, a duplicate, an out-of-range number, or an unresolvable image aborts the build with the offending row named, so "every requirement is covered" is enforced by the script rather than asserted in prose. Each row's proof cell carries a 改前/改后 comparison composed by the script — labels, a caption, and an environment line wrapped to the panel width — and a change with nothing to capture says so in the cell instead of shipping a blank one.
+The same workbook drives the other end. `assets/tech/read_workorder.py` reads a work order into JSON, and `build_disposition.py` writes a disposition table whose rows are checked against that workbook: a missing item, a duplicate, an out-of-range number, or an unresolvable image aborts the build with the offending row named, so "every requirement is covered" is enforced by the script rather than asserted in prose.
+
+Between reading and building sits a research gate: one read-only subagent per item reports the current behavior, the expected behavior, and the change surface with file-and-line evidence; the main agent consolidates that three-part report and asks the user to confirm, and no file changes before the confirmation. Implementation dispatch, per-item verification, and the disposition build follow unchanged. Each row's proof cell carries a 改前/改后 comparison composed by the script — labels, a caption, and an environment line wrapped to the panel width — and a change with nothing to capture says so in the cell instead of shipping a blank one.
 
 The 技术部 row publishes its own toolbox (`department/tech-tools`) through the same install path as 商务部's, so both departments reach their scripts as `DSH_DEPARTMENT_TOOLS` without a skill entry. Asking the user before dispatching parallel subagents is a rule in the prompt, and shared ports, build outputs, browser profiles, and databases still serialize.
 
 ## Testing
 
-`tests/department-prompts.spec.ts` pins the six-column contract, the toolbox command, the disk-only screenshot rule, the closed status vocabulary, and the generator's own header literals. The generator was exercised on a three-row sample — two stacked screenshots, one tall screenshot, one missing-screenshot note — rendered through the bundled LibreOffice for a layout check; a missing image and a missing required field each exit non-zero with the offending row named.
+`tests/department-prompts.spec.ts` pins the six-column contract, the toolbox command, the disk-only screenshot rule, the closed status vocabulary, the research-first order with its confirmation gate, and the generator's own header literals. The generator was exercised on a three-row sample — two stacked screenshots, one tall screenshot, one missing-screenshot note — rendered through the bundled LibreOffice for a layout check; a missing image and a missing required field each exit non-zero with the offending row named.
 
 ## Alternatives considered
 
@@ -45,7 +47,7 @@ The 技术部 row publishes its own toolbox (`department/tech-tools`) through th
 ## Consequences
 
 - 商务部 gains roughly 700 tokens of prompt (about 4,200 total, once per request) and the toolbox one more published script; unselected modes still pay nothing.
-- 技术部 gains roughly 620 tokens of prompt (about 7,400 total) and two published disposition scripts in its own toolbox directory.
+- 技术部 gains roughly 800 tokens of prompt (about 7,600 total) and two published disposition scripts in its own toolbox directory.
 - The workbook and the disposition table need an interpreter with `openpyxl` and `Pillow`; missing either, the generator exits with the install command instead of producing a partial sheet. The package README records that limit.
 - A customer request now has a fixed, reviewable intake table, and the mode refuses to mark it finished on the customer's behalf.
 - An incomplete pass fails the disposition build instead of shipping a table with silent gaps, so "every item covered" stops being a promise and becomes a precondition.

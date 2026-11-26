@@ -126,8 +126,14 @@ describe('@tianma/dsh-department-prompts', () => {
 
   it('makes the 技术部 turn a work order into a disposition table', () => {
     const text = plugin.departmentPrompt('tech')
-    // The loop the mode exists for: read, decompose, ask before parallel, dispose, deliver.
-    expect(text).toContain('# 工单处置（接单 → 拆解 → 并行派工 → 处置表）')
+    // The loop the mode exists for: read, research in parallel, report, confirm, implement, dispose.
+    expect(text).toContain('# 工单处置（接单 → 并行调研 → 汇报确认 → 派工实施 → 处置表）')
+    // Every item's research answers the same three questions, with evidence.
+    expect(text).toContain('**系统当前逻辑**')
+    expect(text).toContain('**客户期望改动后的逻辑**')
+    expect(text).toContain('**改动面**')
+    // No code changes before the user confirms the research report.
+    expect(text).toContain('没有得到明确确认前不进入第 4 步，不改任何代码')
     expect(text).toContain('read_workorder.py')
     expect(text).toContain('build_disposition.py')
     expect(text).toContain('改动任务处置表-<客户名>.xlsx')
